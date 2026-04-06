@@ -8,13 +8,15 @@
   --foam: #FAF6EE;
 }
 
-*, *::before, *::after {
+* {
   box-sizing: border-box;
   margin: 0;
   padding: 0;
 }
 
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   background: var(--ink);
@@ -22,20 +24,29 @@ body {
   overflow-x: hidden;
 }
 
+/* Marquee */
 @keyframes marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
-.animate-marquee { animation: marquee 22s linear infinite; }
+.animate-marquee {
+  animation: marquee 22s linear infinite;
+}
 
+/* Ring spin */
 @keyframes spin-slow {
   from { transform: translate(-50%, -50%) rotate(0deg); }
   to { transform: translate(-50%, -50%) rotate(360deg); }
 }
-.animate-spin-slow { animation: spin-slow 40s linear infinite; }
+.animate-spin-slow {
+  animation: spin-slow 40s linear infinite;
+}
 
+/* Live dot pulse */
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.3; }
 }
-.animate-pulse-dot { animation: pulse-dot 2s infinite; }
+.animate-pulse-dot {
+  animation: pulse-dot 2s infinite;
+}
