@@ -28,6 +28,10 @@ export const metadata: Metadata = {
   title: "Tarabaña — Fábrica de Cervezas Artesanales",
   description: "Cervecería artesanal independiente. Craft para todos. Taproom en Condesa CDMX, fábrica en Lerma Edo. Méx.",
   keywords: ["cerveza artesanal", "craft beer", "CDMX", "Condesa", "IPA", "Tarabaña"],
+  icons: {
+    icon: "/tarabana_caracol_4K.png",
+    apple: "/tarabana_caracol_4K.png",
+  },
   openGraph: {
     title: "Tarabaña — Craft para todos",
     description: "Cinco estilos lupulados hechos con obsesión en Lerma, servidos frescos en Condesa.",

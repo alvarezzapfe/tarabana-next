@@ -21,6 +21,7 @@ export default function Navbar() {
   const links = [
     { href: "/#cervezas", label: "Cervezas" },
     { href: "/taplist", label: "Tap List" },
+    { href: "/#medallero", label: "Medallero" },
     { href: "/taproom", label: "Taproom" },
     { href: "/fabrica", label: "Fábrica" },
     { href: "/contacto", label: "Contacto" },
@@ -28,12 +29,8 @@ export default function Navbar() {
 
   return (
     <nav style={{
-      position: "fixed",
-      top: 0, left: 0, right: 0,
-      zIndex: 100,
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+      display: "flex", alignItems: "center", justifyContent: "space-between",
       padding: "12px 48px",
       background: scrolled ? "rgba(253,248,240,0.97)" : "rgba(253,248,240,0.92)",
       backdropFilter: "blur(12px)",
@@ -41,47 +38,21 @@ export default function Navbar() {
       transition: "all 0.3s",
     }}>
       <Link href="/" onClick={() => setMenuOpen(false)}>
-        <Image
-          src="/tarabana_logo_negro.jpg"
-          alt="Tarabaña"
-          width={64}
-          height={64}
-          style={{
-            borderRadius: "50%",
-            border: "2px solid rgba(212,120,10,0.2)",
-            display: "block",
-          }}
-        />
+        <Image src="/tarabana_logo_negro.jpg" alt="Tarabaña" width={64} height={64}
+          style={{ borderRadius: "50%", border: "2px solid rgba(212,120,10,0.2)", display: "block" }} />
       </Link>
 
       <ul style={{ display: "flex", gap: 32, listStyle: "none", margin: 0, padding: 0 }} className="hidden md:flex">
         {links.map((l) => (
           <li key={l.href}>
-            <Link href={l.href} style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: 11,
-              letterSpacing: "0.1em",
-              textTransform: "uppercase",
-              color: "rgba(28,16,7,0.5)",
-              textDecoration: "none",
-            }}>
+            <Link href={l.href} style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(28,16,7,0.5)", textDecoration: "none" }}>
               {l.label}
             </Link>
           </li>
         ))}
       </ul>
 
-      <Link href="/shop" className="hidden md:inline-block" style={{
-        fontFamily: "var(--font-mono)",
-        fontSize: 11,
-        letterSpacing: "0.1em",
-        textTransform: "uppercase",
-        padding: "10px 24px",
-        background: "var(--amber)",
-        color: "white",
-        textDecoration: "none",
-        fontWeight: 500,
-      }}>
+      <Link href="/portal" className="hidden md:inline-block" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 24px", background: "var(--amber)", color: "white", textDecoration: "none", fontWeight: 500 }}>
         Comprar →
       </Link>
 
@@ -99,7 +70,7 @@ export default function Navbar() {
               {l.label}
             </Link>
           ))}
-          <Link href="/shop" onClick={() => setMenuOpen(false)} style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", padding: "14px 40px", background: "var(--amber)", color: "white", textDecoration: "none", marginTop: 16 }}>
+          <Link href="/portal" onClick={() => setMenuOpen(false)} style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", padding: "14px 40px", background: "var(--amber)", color: "white", textDecoration: "none", marginTop: 16 }}>
             Comprar →
           </Link>
         </div>
