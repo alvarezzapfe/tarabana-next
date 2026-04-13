@@ -117,7 +117,7 @@ export default async function Home() {
           <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 370, height: 370, borderRadius: "50%", border: "1px solid rgba(200,114,10,0.18)", zIndex: 1, pointerEvents: "none" }} />
           <div className="ring-spin" />
           <div style={{ position: "relative", zIndex: 2, width: 300, height: 300, borderRadius: "50%", background: "#fff", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", }}>
-            <Image src="/concha_nueva.png" alt="Tarabaña" width={300} height={300} priority className="caracol-img"
+            <Image src="/tarabana_caracol_4K.png" alt="Tarabaña" width={300} height={300} priority className="caracol-img"
               style={{ objectFit: "contain", padding: "20px", filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.15))" }} />
           </div>
         </div>
