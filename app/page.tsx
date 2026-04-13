@@ -118,7 +118,7 @@ export default async function Home() {
           <div className="ring-spin" />
           <div style={{ position: "relative", zIndex: 2, width: 300, height: 300, borderRadius: "50%", background: "#fff", overflow: "hidden", display: "flex", alignItems: "center", justifyContent: "center", }}>
             <Image src="/concha_nueva.png" alt="Tarabaña" width={300} height={300} priority className="caracol-img"
-              style={{ objectFit: "contain", filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.3))" }} />
+              style={{ objectFit: "contain", padding: "20px", filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.15))" }} />
           </div>
         </div>
 
