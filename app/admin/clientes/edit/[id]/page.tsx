@@ -125,7 +125,7 @@ export default function EditClientePage() {
         {inp('Marca / Negocio', 'marca_negocio', 'El Caracol, Bar La Paloma...')}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        {inp('Email', 'email', '', 'email', true)}
+        {inp('Email', 'email', '', 'email', false)}
         <div>
           <label style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular</label>
           <div style={{ display: 'flex' }}>
