@@ -9,7 +9,7 @@ export default async function PedidosPage() {
 
   const { data: pedidos } = await supabase
     .from('pedidos')
-    .select('*, profiles!pedidos_cliente_id_fkey(full_name, email), pedido_items(cantidad, precio_unitario, productos(nombre))')
+    .select('*, profiles!pedidos_cliente_id_fkey(full_name, email), pedido_items(cantidad, precio_unitario, productos(nombre, estilo, imagen_url))')
     .order('created_at', { ascending: false })
 
   return <PedidosClient pedidos={pedidos || []} canEdit={canEdit} />

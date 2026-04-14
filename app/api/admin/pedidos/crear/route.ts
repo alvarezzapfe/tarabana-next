@@ -19,7 +19,10 @@ export async function POST(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
   const pedidoItems = items.map((item: any) => {
-    const [producto_id] = item.producto_id.split('-')
+    // producto_id format: "uuid-unidad", UUID has hyphens so we extract last segment as unidad
+    const parts = item.producto_id.split('-')
+    const unidad = parts[parts.length - 1]
+    const producto_id = parts.slice(0, -1).join('-')
     return { pedido_id: pedido.id, producto_id, cantidad: item.cantidad, precio_unitario: item.precio }
   })
 
