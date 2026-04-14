@@ -27,15 +27,19 @@ export default function NuevoPedidoPage() {
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
   const [clienteSearch, setClienteSearch] = useState('')
+  const [vendedores, setVendedores] = useState<any[]>([])
+  const [vendedorId, setVendedorId] = useState('')
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: cl }, { data: pr }] = await Promise.all([
+      const [{ data: cl }, { data: pr }, { data: vend }] = await Promise.all([
         supabase.from('profiles').select('id, full_name, email, tipo_consumidor').eq('role', 'comprador').order('full_name'),
-        supabase.from('productos').select('*').eq('activo', true).order('nombre')
+        supabase.from('productos').select('*').eq('activo', true).order('nombre'),
+        supabase.from('vendedores').select('id, nombre, comision_pct').eq('activo', true).order('nombre')
       ])
       setClientes(cl || [])
       setProductos(pr || [])
+      setVendedores(vend || [])
     }
     load()
   }, [])
@@ -85,7 +89,7 @@ export default function NuevoPedidoPage() {
     const res = await fetch('/api/admin/pedidos/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cliente_id: clienteId, tipo_precio: tipoPrecio, items, notas, total })
+      body: JSON.stringify({ cliente_id: clienteId, tipo_precio: tipoPrecio, items, notas, total, vendedor_id: vendedorId || null })
     })
     if (res.ok) { router.push('/admin/pedidos'); router.refresh() }
     else { alert('Error al crear pedido'); setLoading(false) }
@@ -239,6 +243,18 @@ export default function NuevoPedidoPage() {
               <p style={{ margin: 0, color: '#888', fontSize: 13 }}>Total</p>
               <p style={{ margin: 0, color: '#fff', fontSize: 20, fontWeight: 700 }}>${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
             </div>
+          </div>
+
+          {/* Vendedor */}
+          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Vendedor asignado</p>
+            <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
+              style={{ width: '100%', padding: '9px 13px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 7, color: vendedorId ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
+              <option value="">— Sin vendedor asignado —</option>
+              {vendedores.map(v => (
+                <option key={v.id} value={v.id}>{v.nombre} ({v.comision_pct}%)</option>
+              ))}
+            </select>
           </div>
 
           <div style={{ marginBottom: 14 }}>
