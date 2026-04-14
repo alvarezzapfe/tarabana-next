@@ -149,7 +149,7 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
             <input type="date" value={rangoHasta} onChange={e => setRangoHasta(e.target.value)} style={{ ...selStyle, fontFamily: 'system-ui' }} />
           </div>
         )}
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 20' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: 20 }}>
           <span style={{ color: '#555', fontSize: 12 }}>{pedidosFiltrados.length} pedidos en periodo</span>
         </div>
       </div>
