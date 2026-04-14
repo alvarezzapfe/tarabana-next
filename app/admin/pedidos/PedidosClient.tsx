@@ -73,7 +73,7 @@ export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], ca
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
-              {['#', 'Cliente', 'Productos', 'Total', 'Entrega', 'Pago', canEdit ? 'Acciones' : ''].map((h, i) => (
+              {['#', 'Cliente', 'Productos', 'Total', 'Entrega', 'Pago', canEdit ? 'Pago' : '', canEdit ? 'Entrega' : '', canEdit ? 'Editar' : '', canEdit ? 'Eliminar' : ''].filter(h => h !== '' || !canEdit).map((h, i) => (
                 <th key={i} style={{ color: '#888', fontSize: 10.5, textAlign: 'left', padding: '10px 16px', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
