@@ -23,6 +23,12 @@ export default function LoginPage() {
   return (
     <div style={{ minHeight: '100vh', display: 'flex', fontFamily: 'system-ui, sans-serif', position: 'relative', overflow: 'hidden' }}>
       
+      {/* Botón Home */}
+      <a href="/" style={{ position: 'absolute', top: 20, left: 24, zIndex: 10, display: 'flex', alignItems: 'center', gap: 8, fontFamily: 'system-ui', fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'rgba(255,255,255,0.6)', textDecoration: 'none', background: 'rgba(0,0,0,0.3)', padding: '8px 14px', borderRadius: 8, backdropFilter: 'blur(8px)', border: '1px solid rgba(255,255,255,0.1)' }}>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+        Inicio
+      </a>
+
       {/* Fondo CDMX estilo cuadro */}
       <div style={{
         position: 'absolute', inset: 0, zIndex: 0,

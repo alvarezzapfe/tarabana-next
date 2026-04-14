@@ -52,9 +52,14 @@ export default function Navbar() {
         ))}
       </ul>
 
-      <Link href="/portal" className="hidden md:inline-block" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 24px", background: "var(--amber)", color: "white", textDecoration: "none", fontWeight: 500 }}>
-        Comprar →
-      </Link>
+      <div className="hidden md:flex" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <Link href="/login" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 20px", background: "transparent", color: "rgba(28,16,7,0.55)", textDecoration: "none", border: "1px solid rgba(28,16,7,0.15)", borderRadius: 4 }}>
+          Iniciar sesión
+        </Link>
+        <Link href="/portal" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 24px", background: "var(--amber)", color: "white", textDecoration: "none", fontWeight: 500 }}>
+          Comprar →
+        </Link>
+      </div>
 
       <button className="md:hidden" onClick={() => setMenuOpen(!menuOpen)}
         style={{ background: "none", border: "none", cursor: "pointer", padding: 8 }} aria-label="Menú">
