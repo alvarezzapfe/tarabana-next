@@ -32,7 +32,7 @@ export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], ca
     setDeletingId(null)
   }
 
-  const totalVentas = data.filter(p => p.status === 'entregado' && p.pagado).reduce((s, p) => s + (p.total || 0), 0)
+  const totalVentas = data.filter(p => p.pagado).reduce((s, p) => s + (p.total || 0), 0)
   const porCobrar = data.filter(p => !p.pagado && p.status !== 'cancelado').reduce((s, p) => s + (p.total || 0), 0)
 
   return (
