@@ -132,7 +132,7 @@ export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], ca
                           </button>
                           <a href={`/admin/pedidos/${p.id}/edit`} style={{ padding: '5px 8px', background: '#1a1a2a', border: '1px solid #3b82f640', borderRadius: 6, color: '#3b82f6', fontSize: 11.5, cursor: 'pointer', width: '100%', textDecoration: 'none', textAlign: 'center', display: 'block', boxSizing: 'border-box' }}>
                             ✏️ Editar
-                          </button>
+                          </a>
                           <button onClick={() => eliminarPedido(p.id)} disabled={deletingId === p.id}
                             style={{ padding: '5px 8px', background: '#1a0a0a', border: '1px solid #ef444430', borderRadius: 6, color: '#ef4444', fontSize: 11.5, cursor: 'pointer', width: '100%', opacity: deletingId === p.id ? 0.5 : 1 }}>
                             {deletingId === p.id ? 'Eliminando...' : '🗑 Eliminar'}
