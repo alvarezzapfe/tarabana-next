@@ -121,24 +121,30 @@ export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], ca
                       </span>
                     </td>
                     {canEdit && (
-                      <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      <>
+                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
+                          <button onClick={() => togglePago(p.id, !p.pagado)} style={{ padding: '6px 10px', background: p.pagado ? '#2a1010' : '#102a10', border: `1px solid ${p.pagado ? '#ef444440' : '#10b98140'}`, borderRadius: 6, color: p.pagado ? '#ef4444' : '#10b981', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap' }}>
+                            {p.pagado ? 'Sin pagar' : 'Marcar pagado'}
+                          </button>
+                        </td>
+                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
                           <select value={p.status} onChange={e => updateStatus(p.id, e.target.value)}
-                            style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6, color: '#ccc', fontSize: 11.5, padding: '5px 8px', cursor: 'pointer', width: '100%' }}>
+                            style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 6, color: '#ccc', fontSize: 11.5, padding: '6px 8px', cursor: 'pointer' }}>
                             {Object.entries(statusConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
                           </select>
-                          <button onClick={() => togglePago(p.id, !p.pagado)} style={{ padding: '5px 8px', background: p.pagado ? '#2a1010' : '#102a10', border: `1px solid ${p.pagado ? '#ef444440' : '#10b98140'}`, borderRadius: 6, color: p.pagado ? '#ef4444' : '#10b981', fontSize: 11.5, cursor: 'pointer', width: '100%' }}>
-                            {p.pagado ? 'Marcar sin pagar' : 'Marcar pagado'}
-                          </button>
-                          <a href={`/admin/pedidos/${p.id}/edit`} style={{ padding: '5px 8px', background: '#1a1a2a', border: '1px solid #3b82f640', borderRadius: 6, color: '#3b82f6', fontSize: 11.5, cursor: 'pointer', width: '100%', textDecoration: 'none', textAlign: 'center', display: 'block', boxSizing: 'border-box' }}>
+                        </td>
+                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
+                          <a href={`/admin/pedidos/${p.id}/edit`} style={{ padding: '6px 14px', background: '#1a1a2a', border: '1px solid #3b82f640', borderRadius: 6, color: '#3b82f6', fontSize: 11.5, textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-block' }}>
                             ✏️ Editar
                           </a>
+                        </td>
+                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
                           <button onClick={() => eliminarPedido(p.id)} disabled={deletingId === p.id}
-                            style={{ padding: '5px 8px', background: '#1a0a0a', border: '1px solid #ef444430', borderRadius: 6, color: '#ef4444', fontSize: 11.5, cursor: 'pointer', width: '100%', opacity: deletingId === p.id ? 0.5 : 1 }}>
-                            {deletingId === p.id ? 'Eliminando...' : '🗑 Eliminar'}
+                            style={{ padding: '6px 14px', background: '#1a0a0a', border: '1px solid #ef444430', borderRadius: 6, color: '#ef4444', fontSize: 11.5, cursor: 'pointer', whiteSpace: 'nowrap', opacity: deletingId === p.id ? 0.5 : 1 }}>
+                            {deletingId === p.id ? '...' : '🗑 Eliminar'}
                           </button>
-                        </div>
-                      </td>
+                        </td>
+                      </>
                     )}
                   </tr>
                   {/* Fila expandida con detalle */}
