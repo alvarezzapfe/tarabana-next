@@ -248,8 +248,8 @@ export default function EditProductoPage() {
               {[
                 { label: 'Cajas 12', key: 'stock_caja12' },
                 { label: 'Cajas 24', key: 'stock_caja24' },
-                { label: 'Bbl PET', key: 'stock_barril_pet' },
-                { label: 'Bbl Acero', key: 'stock_barril_acero' },
+                { label: 'Bbl 20L PET', key: 'stock_barril_pet' },
+                { label: 'Bbl 20L Acero', key: 'stock_barril_acero' },
               ].map(s => (
                 <div key={s.key}>
                   <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 4 }}>{s.label}</label>

@@ -205,8 +205,8 @@ export default function NuevoProductoPage() {
               {[
                 { label: 'Cajas 12', key: 'stock_caja12' },
                 { label: 'Cajas 24', key: 'stock_caja24' },
-                { label: 'Bbl PET', key: 'stock_barril_pet' },
-                { label: 'Bbl Acero', key: 'stock_barril_acero' },
+                { label: 'Bbl 20L PET', key: 'stock_barril_pet' },
+                { label: 'Bbl 20L Acero', key: 'stock_barril_acero' },
                 { label: 'Bbl 10L PET', key: 'stock_barril10_pet' },
                 { label: 'Bbl 10L Acero', key: 'stock_barril10_acero' },
               ].map(s => (

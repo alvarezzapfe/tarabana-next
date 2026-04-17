@@ -157,8 +157,8 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
         {[
           { label: 'Latas en stock', value: kpis.totalLatas.toLocaleString(), unit: 'latas', color: '#E8531D' },
-          { label: 'Barriles PET', value: kpis.totalBblPet.toString(), unit: 'uds', color: '#f59e0b' },
-          { label: 'Barriles Acero', value: kpis.totalBblAcero.toString(), unit: 'uds', color: '#10b981' },
+          { label: 'Barriles 20L PET', value: kpis.totalBblPet.toString(), unit: 'uds', color: '#f59e0b' },
+          { label: 'Barriles 20L Acero', value: kpis.totalBblAcero.toString(), unit: 'uds', color: '#10b981' },
           { label: 'Valor total', value: '$' + Math.round(kpis.valorTotal).toLocaleString('es-MX'), unit: 'MXN', color: '#3b82f6' },
         ].map(s => (
           <div key={s.label} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 10, padding: '18px 22px' }}>
@@ -211,7 +211,7 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
               <th style={{ padding: '10px 14px', textAlign: 'left', width: 36 }}>
                 <input ref={headerCheckRef} type="checkbox" checked={allFilteredSelected} onChange={toggleAll} />
               </th>
-              {['Producto', 'ABV', 'Caja 12', 'Caja 24', 'BblPET', 'BblAcero', 'Precio', 'Estado', ''].map(h => (
+              {['Producto', 'ABV', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Precio', 'Estado', ''].map(h => (
                 <th key={h} style={{ color: '#444', fontSize: 10.5, textAlign: 'left', padding: '10px 14px', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
