@@ -4,7 +4,7 @@ import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 
 export default function ContactoPage() {
-  const [form, setForm] = useState({ nombre: "", email: "", asunto: "general", mensaje: "" });
+  const [form, setForm] = useState({ nombre: "", email: "", mensaje: "" });
   const [status, setStatus] = useState<"idle"|"sending"|"sent"|"error">("idle");
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
@@ -82,7 +82,7 @@ export default function ContactoPage() {
               <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, fontStyle: "italic", color: "#F0A030", marginBottom: 8 }}>¡Salud!</h3>
               <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, color: "rgba(245,240,232,0.45)", fontWeight: 300, marginBottom: 8 }}>Tu mensaje llegó a nuestro correo.</p>
               <p style={{ fontFamily: "var(--font-sans)", fontSize: 13, color: "rgba(245,240,232,0.3)", fontWeight: 300 }}>También te abrimos WhatsApp para seguir la conversación.</p>
-              <button onClick={() => { setStatus("idle"); setForm({ nombre: "", email: "", asunto: "general", mensaje: "" }); }} style={{ marginTop: 24, fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "12px 28px", background: "transparent", color: "#C8720A", border: "1px solid #C8720A", cursor: "pointer" }}>
+              <button onClick={() => { setStatus("idle"); setForm({ nombre: "", email: "", mensaje: "" }); }} style={{ marginTop: 24, fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "12px 28px", background: "transparent", color: "#C8720A", border: "1px solid #C8720A", cursor: "pointer" }}>
                 Enviar otro mensaje
               </button>
             </div>
@@ -95,16 +95,6 @@ export default function ContactoPage() {
               <div>
                 <label style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(245,240,232,0.25)", display: "block", marginBottom: 8 }}>Email</label>
                 <input type="email" value={form.email} onChange={e => set("email", e.target.value)} placeholder="tu@email.com" style={inputStyle} />
-              </div>
-              <div>
-                <label style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(245,240,232,0.25)", display: "block", marginBottom: 8 }}>Asunto</label>
-                <select value={form.asunto} onChange={e => set("asunto", e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
-                  <option value="general">Consulta general</option>
-                  <option value="distribución">Distribución / mayoreo</option>
-                  <option value="eventos">Eventos y colaboraciones</option>
-                  <option value="taproom">Reservación taproom</option>
-                  <option value="prensa">Prensa y medios</option>
-                </select>
               </div>
               <div>
                 <label style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "rgba(245,240,232,0.25)", display: "block", marginBottom: 8 }}>Mensaje *</label>

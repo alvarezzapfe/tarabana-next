@@ -64,30 +64,58 @@ export default async function TaproomPage() {
         </div>
       </section>
 
+      {/* GALERÍA — EL ESPACIO */}
+      <section style={{ background: "#FAF6EE", color: "#1A1108", padding: "80px 80px" }}>
+        <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase", color: "#C8720A", display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <span style={{ display: "block", width: 28, height: 1, background: "#C8720A" }} />El espacio
+        </div>
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(28px, 3vw, 44px)", fontWeight: 900, letterSpacing: "-1.5px", marginBottom: 12 }}>
+          El Caracol<br /><em style={{ fontStyle: "italic", color: "#C8720A" }}>en vivo.</em>
+        </h2>
+        <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, fontWeight: 300, color: "rgba(26,17,8,0.5)", lineHeight: 1.6, marginBottom: 40, maxWidth: 420 }}>
+          Ocho taps, buen diseño y cero pretensiones. Así se ve una noche en Tamaulipas 224.
+        </p>
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gridTemplateRows: "300px 300px", gap: 12 }}>
+          <div style={{ gridRow: "1 / 3", position: "relative", overflow: "hidden", borderRadius: 8 }}>
+            <Image src="/tapmain.jpg" alt="Interior El Caracol Taproom" fill sizes="(max-width: 768px) 100vw, 66vw" style={{ objectFit: "cover", transition: "transform 0.4s ease" }} />
+          </div>
+          <div style={{ position: "relative", overflow: "hidden", borderRadius: 8 }}>
+            <Image src="/tapfuera.jpg" alt="Terraza El Caracol" fill sizes="(max-width: 768px) 100vw, 33vw" style={{ objectFit: "cover", transition: "transform 0.4s ease" }} />
+          </div>
+          <div style={{ position: "relative", overflow: "hidden", borderRadius: 8, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 8 }}>
+              <Image src="/cervezatap.jpg" alt="Cerveza de barril" fill sizes="(max-width: 768px) 50vw, 16vw" style={{ objectFit: "cover", transition: "transform 0.4s ease" }} />
+            </div>
+            <div style={{ position: "relative", overflow: "hidden", borderRadius: 8 }}>
+              <Image src="/tapdenoche.jpg" alt="El Caracol de noche" fill sizes="(max-width: 768px) 50vw, 16vw" style={{ objectFit: "cover", transition: "transform 0.4s ease" }} />
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* UNTAPPD LIVE TAP LIST */}
       <section style={{ background: "#120D06", padding: "80px 80px", borderTop: "1px solid rgba(200,114,10,0.1)" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 40, flexWrap: "wrap", gap: 16 }}>
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50" }} />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(245,240,232,0.3)" }}>Untappd Live</span>
-            </div>
-            <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(28px, 3vw, 44px)", fontWeight: 900, letterSpacing: "-1.5px", color: "#F5F0E8", margin: 0 }}>
-              8 taps en vivo.
-            </h2>
-          </div>
-          <a href="https://untappd.com/v/el-caracol-tarabana/174935" target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "12px 24px", border: "1px solid rgba(245,240,232,0.15)", color: "rgba(245,240,232,0.4)", textDecoration: "none" }}>
-            Ver en Untappd →
-          </a>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#4CAF50" }} />
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "rgba(245,240,232,0.3)" }}>Untappd Live</span>
         </div>
-        {/* Untappd embed */}
-        <div style={{ background: "#1A1108", border: "1px solid rgba(200,114,10,0.12)", padding: 24 }}>
-          <iframe
-            src="https://untappd.com/venue/174935/embedded"
-            style={{ width: "100%", minHeight: 600, border: "none", display: "block" }}
-            title="Tap List en vivo — El Caracol Tarabaña"
-            allowFullScreen
-          />
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(28px, 3vw, 44px)", fontWeight: 900, letterSpacing: "-1.5px", color: "#F5F0E8", margin: 0, marginBottom: 40 }}>
+          Siempre hay algo nuevo.
+        </h2>
+        <div style={{ background: "#1A1108", border: "1px solid rgba(200,114,10,0.12)", padding: "60px 40px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
+          <div style={{ width: 80, height: 80, borderRadius: "50%", background: "rgba(200,114,10,0.12)", border: "1px solid rgba(200,114,10,0.3)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <span style={{ fontFamily: "var(--font-serif)", fontSize: 36, fontWeight: 900, color: "#C8720A" }}>8</span>
+          </div>
+          <p style={{ fontFamily: "var(--font-serif)", fontSize: 22, fontWeight: 700, fontStyle: "italic", color: "#F5F0E8", margin: 0, maxWidth: 440 }}>
+            Consulta la carta actualizada al minuto en Untappd
+          </p>
+          <p style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: "rgba(245,240,232,0.35)", margin: 0, maxWidth: 400, lineHeight: 1.6, letterSpacing: "0.03em" }}>
+            Nuestros taps rotan cada semana. Mantenemos todo sincronizado en nuestro venue oficial.
+          </p>
+          <a href="https://untappd.com/v/el-caracol-tarabana/174935" target="_blank" rel="noopener noreferrer" style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", padding: "18px 40px", background: "#C8720A", color: "#1A1108", textDecoration: "none", fontWeight: 600, marginTop: 8 }}>
+            Ver tap list en Untappd ↗
+          </a>
+          <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "rgba(245,240,232,0.2)", letterSpacing: "0.08em" }}>Actualizamos en tiempo real</span>
         </div>
       </section>
 
