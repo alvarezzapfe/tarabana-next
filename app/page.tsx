@@ -49,12 +49,12 @@ export default async function Home() {
         minHeight: "100vh", display: "flex", flexDirection: "column",
         alignItems: "center", justifyContent: "center", textAlign: "center",
         position: "relative", overflow: "hidden",
-        padding: "clamp(60px,10vh,120px) clamp(20px,5vw,48px) clamp(80px,12vh,140px)",
+        padding: "clamp(140px,18vh,200px) clamp(20px,5vw,48px) clamp(80px,12vh,140px)",
         background: `radial-gradient(ellipse 70% 50% at 50% 35%, rgba(var(--amber-rgb),0.12) 0%, transparent 70%), var(--ink)`,
       }}>
         <div style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", color: "var(--amber)", marginBottom: 48, display: "flex", alignItems: "center", gap: 16 }}>
           <span style={{ display: "block", width: 40, height: 1, background: "var(--amber)", opacity: 0.6 }} />
-          Cervecería artesanal · Condesa CDMX
+          Fábrica de cervezas Tarabaña
           <span style={{ display: "block", width: 40, height: 1, background: "var(--amber)", opacity: 0.6 }} />
         </div>
 
@@ -68,6 +68,9 @@ export default async function Home() {
           </div>
         </div>
 
+        <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(28px, 4vw, 52px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-1px", textTransform: "uppercase", color: "var(--cream)", marginBottom: 24 }}>
+          Fábrica de cervezas Tarabaña
+        </h2>
         <h1 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(48px, 6vw, 80px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-2px", color: "var(--cream)", marginBottom: 20 }}>
           Una cerveza para <em style={{ fontStyle: "italic", color: "var(--amber-light)" }}>todos.</em>
         </h1>

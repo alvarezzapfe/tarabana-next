@@ -49,7 +49,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="es" className={`${playfair.variable} ${dmMono.variable} ${dmSans.variable}`}>
-      <body className="font-sans antialiased">
+      <body className="font-sans antialiased" style={{ background: "var(--ink)" }}>
         {children}
       </body>
     </html>

@@ -22,6 +22,7 @@ export default function Navbar() {
     { href: "/#cervezas", label: "Cervezas" },
     { href: "/taplist", label: "Tap List" },
     { href: "/#medallero", label: "Medallero" },
+    { href: "/encuentranos", label: "Encuéntranos" },
     { href: "/taproom", label: "Taproom" },
     { href: "/fabrica", label: "Fábrica" },
     { href: "/contacto", label: "Contacto" },
