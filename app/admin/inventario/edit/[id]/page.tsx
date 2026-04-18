@@ -22,7 +22,10 @@ export default function EditProductoPage() {
     precio_caja24_publico: '', precio_caja24_taproom: '',
     precio_barril_pet_publico: '', precio_barril_pet_taproom: '',
     precio_barril_acero_publico: '', precio_barril_acero_taproom: '',
+    precio_barril10_pet_publico: '', precio_barril10_pet_taproom: '',
+    precio_barril10_acero_publico: '', precio_barril10_acero_taproom: '',
     stock_caja12: '0', stock_caja24: '0', stock_barril_pet: '0', stock_barril_acero: '0',
+    stock_barril10_pet: '0', stock_barril10_acero: '0',
     activo: true, imagen_url: '',
   })
 
@@ -51,10 +54,16 @@ export default function EditProductoPage() {
         precio_barril_pet_taproom: p.precio_barril_pet_taproom?.toString() || '',
         precio_barril_acero_publico: p.precio_barril_acero_publico?.toString() || '',
         precio_barril_acero_taproom: p.precio_barril_acero_taproom?.toString() || '',
+        precio_barril10_pet_publico: p.precio_barril10_pet_publico?.toString() || '',
+        precio_barril10_pet_taproom: p.precio_barril10_pet_taproom?.toString() || '',
+        precio_barril10_acero_publico: p.precio_barril10_acero_publico?.toString() || '',
+        precio_barril10_acero_taproom: p.precio_barril10_acero_taproom?.toString() || '',
         stock_caja12: p.stock_caja12?.toString() || '0',
         stock_caja24: p.stock_caja24?.toString() || '0',
         stock_barril_pet: p.stock_barril_pet?.toString() || '0',
         stock_barril_acero: p.stock_barril_acero?.toString() || '0',
+        stock_barril10_pet: p.stock_barril10_pet?.toString() || '0',
+        stock_barril10_acero: p.stock_barril10_acero?.toString() || '0',
         activo: p.activo ?? true, imagen_url: p.imagen_url || '',
       })
       setLoading(false)
@@ -91,6 +100,8 @@ export default function EditProductoPage() {
       stock_caja24: parseInt(form.stock_caja24) || 0,
       stock_barril_pet: parseInt(form.stock_barril_pet) || 0,
       stock_barril_acero: parseInt(form.stock_barril_acero) || 0,
+      stock_barril10_pet: parseInt(form.stock_barril10_pet) || 0,
+      stock_barril10_acero: parseInt(form.stock_barril10_acero) || 0,
       stock_latas: (parseInt(form.stock_caja12) || 0) * 12 + (parseInt(form.stock_caja24) || 0) * 24,
       stock_barriles: (parseInt(form.stock_barril_pet) || 0) + (parseInt(form.stock_barril_acero) || 0),
     }
@@ -112,6 +123,10 @@ export default function EditProductoPage() {
         precio_barril_pet_taproom: parseFloat(form.precio_barril_pet_taproom) || null,
         precio_barril_acero_publico: parseFloat(form.precio_barril_acero_publico) || null,
         precio_barril_acero_taproom: parseFloat(form.precio_barril_acero_taproom) || null,
+        precio_barril10_pet_publico: parseFloat(form.precio_barril10_pet_publico) || null,
+        precio_barril10_pet_taproom: parseFloat(form.precio_barril10_pet_taproom) || null,
+        precio_barril10_acero_publico: parseFloat(form.precio_barril10_acero_publico) || null,
+        precio_barril10_acero_taproom: parseFloat(form.precio_barril10_acero_taproom) || null,
         activo: form.activo,
       })
     }
@@ -237,6 +252,8 @@ export default function EditProductoPage() {
               {priceRow('Caja 24 latas', 'precio_caja24_publico', 'precio_caja24_taproom', !isSuperAdmin)}
               {priceRow('Barril 20L PET', 'precio_barril_pet_publico', 'precio_barril_pet_taproom', !isSuperAdmin)}
               {priceRow('Barril 20L Acero', 'precio_barril_acero_publico', 'precio_barril_acero_taproom', !isSuperAdmin)}
+              {priceRow('Barril 10L PET', 'precio_barril10_pet_publico', 'precio_barril10_pet_taproom', !isSuperAdmin)}
+              {priceRow('Barril 10L Acero', 'precio_barril10_acero_publico', 'precio_barril10_acero_taproom', !isSuperAdmin)}
             </div>
           </div>
 
@@ -244,12 +261,14 @@ export default function EditProductoPage() {
             <p style={{ color: '#fff', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
               Stock {isProduccion && <span style={{ color: '#f59e0b', fontWeight: 400 }}>— editable</span>}
             </p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
               {[
                 { label: 'Cajas 12', key: 'stock_caja12' },
                 { label: 'Cajas 24', key: 'stock_caja24' },
                 { label: 'Bbl 20L PET', key: 'stock_barril_pet' },
                 { label: 'Bbl 20L Acero', key: 'stock_barril_acero' },
+                { label: 'Bbl 10L PET', key: 'stock_barril10_pet' },
+                { label: 'Bbl 10L Acero', key: 'stock_barril10_acero' },
               ].map(s => (
                 <div key={s.key}>
                   <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 4 }}>{s.label}</label>

@@ -31,7 +31,7 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
         if (!p.nombre?.toLowerCase().includes(q) && !p.estilo?.toLowerCase().includes(q)) return false
       }
       if (soloConStock) {
-        const total = (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0)
+        const total = (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
         if (total === 0) return false
       }
       if (estiloFilter !== 'todos' && p.estilo !== estiloFilter) return false
@@ -40,22 +40,28 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
   }, [productos, search, soloConStock, estiloFilter])
 
   const kpis = useMemo(() => {
-    let totalLatas = 0, totalBblPet = 0, totalBblAcero = 0, valorTotal = 0
+    let totalLatas = 0, totalBblPet = 0, totalBblAcero = 0, totalBblPet10 = 0, totalBblAcero10 = 0, valorTotal = 0
     const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
     productos.forEach(p => {
       const c12 = p.stock_caja12 || 0
       const c24 = p.stock_caja24 || 0
       const bp = p.stock_barril_pet || 0
       const ba = p.stock_barril_acero || 0
+      const bp10 = p.stock_barril10_pet || 0
+      const ba10 = p.stock_barril10_acero || 0
       totalLatas += c12 * 12 + c24 * 24
       totalBblPet += bp
       totalBblAcero += ba
+      totalBblPet10 += bp10
+      totalBblAcero10 += ba10
       valorTotal += c12 * (p[`precio_caja12_${pk}`] || p[`precio_${pk === 'publico' ? 'publico' : 'taproom'}`] || 0)
       valorTotal += c24 * (p[`precio_caja24_${pk}`] || 0)
       valorTotal += bp * (p[`precio_barril_pet_${pk}`] || 0)
       valorTotal += ba * (p[`precio_barril_acero_${pk}`] || 0)
+      valorTotal += bp10 * (p[`precio_barril10_pet_${pk}`] || 0)
+      valorTotal += ba10 * (p[`precio_barril10_acero_${pk}`] || 0)
     })
-    return { totalLatas, totalBblPet, totalBblAcero, valorTotal }
+    return { totalLatas, totalBblPet, totalBblAcero, totalBblPet10, totalBblAcero10, valorTotal }
   }, [productos, tipoPrecio])
 
   // Sync header checkbox indeterminate state
@@ -102,7 +108,7 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
     return price ? '$' + Math.round(price).toLocaleString('es-MX') : '—'
   }
 
-  const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0)
+  const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
 
   const pillActive = { background: '#E8531D', color: '#fff', border: '1px solid #E8531D' }
   const pillInactive = { background: 'transparent', color: '#777', border: '1px solid #2a2a2a' }
@@ -154,11 +160,13 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
       </div>
 
       {/* KPI GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
         {[
           { label: 'Latas en stock', value: kpis.totalLatas.toLocaleString(), unit: 'latas', color: '#E8531D' },
           { label: 'Barriles 20L PET', value: kpis.totalBblPet.toString(), unit: 'uds', color: '#f59e0b' },
           { label: 'Barriles 20L Acero', value: kpis.totalBblAcero.toString(), unit: 'uds', color: '#10b981' },
+          { label: 'Barriles 10L PET', value: kpis.totalBblPet10.toString(), unit: 'uds', color: '#eab308' },
+          { label: 'Barriles 10L Acero', value: kpis.totalBblAcero10.toString(), unit: 'uds', color: '#06b6d4' },
           { label: 'Valor total', value: '$' + Math.round(kpis.valorTotal).toLocaleString('es-MX'), unit: 'MXN', color: '#3b82f6' },
         ].map(s => (
           <div key={s.label} style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 10, padding: '18px 22px' }}>
@@ -211,7 +219,7 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
               <th style={{ padding: '10px 14px', textAlign: 'left', width: 36 }}>
                 <input ref={headerCheckRef} type="checkbox" checked={allFilteredSelected} onChange={toggleAll} />
               </th>
-              {['Producto', 'ABV', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Precio', 'Estado', ''].map(h => (
+              {['Producto', 'ABV', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Bbl 10L PET', 'Bbl 10L Acero', 'Precio', 'Estado', ''].map(h => (
                 <th key={h} style={{ color: '#444', fontSize: 10.5, textAlign: 'left', padding: '10px 14px', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -246,6 +254,8 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
                   <td style={{ color: (p.stock_caja24 || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_caja24 || 0}</td>
                   <td style={{ color: (p.stock_barril_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_pet || 0}</td>
                   <td style={{ color: (p.stock_barril_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_acero || 0}</td>
+                  <td style={{ color: (p.stock_barril10_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_pet || 0}</td>
+                  <td style={{ color: (p.stock_barril10_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_acero || 0}</td>
                   <td style={{ color: '#E8531D', padding: '12px 14px', fontSize: 13 }}>{getPrice(p)}</td>
                   <td style={{ padding: '12px 14px' }}>
                     <span style={{
@@ -269,7 +279,7 @@ export default function InventarioClient({ productos, isSuperAdmin }: Props) {
                 </tr>
               )
             }) : (
-              <tr><td colSpan={10} style={{ color: '#444', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
+              <tr><td colSpan={12} style={{ color: '#444', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
             )}
           </tbody>
         </table>

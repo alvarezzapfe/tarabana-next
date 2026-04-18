@@ -16,6 +16,12 @@ export interface ProductoPrompt {
   precio_barril_pet_taproom: number | null
   precio_barril_acero_publico: number | null
   precio_barril_acero_taproom: number | null
+  stock_barril10_pet: number | null
+  stock_barril10_acero: number | null
+  precio_barril10_pet_publico: number | null
+  precio_barril10_pet_taproom: number | null
+  precio_barril10_acero_publico: number | null
+  precio_barril10_acero_taproom: number | null
   precio_publico: number | null
   precio_taproom: number | null
 }
@@ -36,7 +42,7 @@ function today(): string {
 }
 
 function totalStock(p: ProductoPrompt): number {
-  return (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0)
+  return (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
 }
 
 function buildProductBlock(p: ProductoPrompt, tipoPrecio: TipoPrecio, single: boolean): string {
@@ -52,28 +58,36 @@ function buildProductBlock(p: ProductoPrompt, tipoPrecio: TipoPrecio, single: bo
 
   // Prices — only units with stock > 0 AND price defined
   const priceKey = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
-  const priceParts: string[] = []
 
   const c12Price = (p as any)[`precio_caja12_${priceKey}`] || (tipoPrecio === 'mayorista' ? p.precio_publico : p.precio_taproom)
   const c24Price = (p as any)[`precio_caja24_${priceKey}`]
   const bpPrice = (p as any)[`precio_barril_pet_${priceKey}`]
   const baPrice = (p as any)[`precio_barril_acero_${priceKey}`]
+  const bp10Price = (p as any)[`precio_barril10_pet_${priceKey}`]
+  const ba10Price = (p as any)[`precio_barril10_acero_${priceKey}`]
 
-  if ((p.stock_caja12 || 0) > 0 && c12Price) priceParts.push(`Caja 12: ${fmt(c12Price)}`)
-  if ((p.stock_caja24 || 0) > 0 && c24Price) priceParts.push(`Caja 24: ${fmt(c24Price)}`)
-  if ((p.stock_barril_pet || 0) > 0 && bpPrice) priceParts.push(`Barril PET 20L: ${fmt(bpPrice)}`)
-  if ((p.stock_barril_acero || 0) > 0 && baPrice) priceParts.push(`Barril Acero 20L: ${fmt(baPrice)}`)
+  // Line 1: cajas + PET
+  const line1: string[] = []
+  if ((p.stock_caja12 || 0) > 0 && c12Price) line1.push(`Caja 12: ${fmt(c12Price)}`)
+  if ((p.stock_caja24 || 0) > 0 && c24Price) line1.push(`Caja 24: ${fmt(c24Price)}`)
+  if ((p.stock_barril10_pet || 0) > 0 && bp10Price) line1.push(`Barril PET 10L: ${fmt(bp10Price)}`)
+  if ((p.stock_barril_pet || 0) > 0 && bpPrice) line1.push(`Barril PET 20L: ${fmt(bpPrice)}`)
+  if (line1.length > 0) lines.push(line1.join(' · '))
 
-  if (priceParts.length > 0) {
-    lines.push(priceParts.join(' · '))
-  }
+  // Line 2: Acero (only if there are acero items)
+  const line2: string[] = []
+  if ((p.stock_barril10_acero || 0) > 0 && ba10Price) line2.push(`Barril Acero 10L: ${fmt(ba10Price)}`)
+  if ((p.stock_barril_acero || 0) > 0 && baPrice) line2.push(`Barril Acero 20L: ${fmt(baPrice)}`)
+  if (line2.length > 0) lines.push(line2.join(' · '))
 
   // Stock
   const stockParts: string[] = []
   if ((p.stock_caja12 || 0) > 0) stockParts.push(`${p.stock_caja12} cajas 12`)
   if ((p.stock_caja24 || 0) > 0) stockParts.push(`${p.stock_caja24} cajas 24`)
-  if ((p.stock_barril_pet || 0) > 0) stockParts.push(`${p.stock_barril_pet} barriles PET`)
-  if ((p.stock_barril_acero || 0) > 0) stockParts.push(`${p.stock_barril_acero} barriles acero`)
+  if ((p.stock_barril_pet || 0) > 0) stockParts.push(`${p.stock_barril_pet} barriles 20L PET`)
+  if ((p.stock_barril10_pet || 0) > 0) stockParts.push(`${p.stock_barril10_pet} barriles 10L PET`)
+  if ((p.stock_barril_acero || 0) > 0) stockParts.push(`${p.stock_barril_acero} barriles 20L acero`)
+  if ((p.stock_barril10_acero || 0) > 0) stockParts.push(`${p.stock_barril10_acero} barriles 10L acero`)
 
   if (stockParts.length > 0) {
     lines.push(`Disponible: ${stockParts.join(', ')}`)
