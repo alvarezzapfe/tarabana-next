@@ -5,14 +5,16 @@ import Footer from "./components/Footer";
 import { createServerSupabaseClient } from "../src/lib/supabase-server";
 
 const lineup = [
-  { name: "Brisa", style: "Session IPA", abv: "4.5%", ibu: 32, notes: "Ligera · fresca · aromática", img: "/brisalata.png", accent: "#78A040" },
-  { name: "Chula Vista", style: "West Coast IPA", abv: "6.8%", ibu: 62, notes: "Pino · grapefruit · seca", img: "/chulavistalata.png", accent: "#D4882A" },
-  { name: "Caliza", style: "Hazy IPA", abv: "6.3%", ibu: 38, notes: "Tropical · juicy · suave", img: "/calizalata.png", accent: "#E8C060" },
-  { name: "Sílice", style: "Czech Pils", abv: "5.0%", ibu: 36, notes: "Crisp · noble hops · precisa", img: "/silicelata.png", accent: "#88B8D0" },
-  { name: "Magma", style: "Doble IPA", abv: "8.5%", ibu: 75, notes: "Intensa · lupulada · peligrosa", img: "/magmalata.png", accent: "#C05030" },
+  { name: "Brisa", style: "Session IPA", abv: "4.7%", tagline: "Del aroma a cítrico y bosque.", img: "/latas/brisa.webp", accent: "#78A040" },
+  { name: "Caliza", style: "New England IPA", abv: "6.3%", tagline: "De recuerdo tropical.", img: "/latas/caliza.webp", accent: "#E8C060" },
+  { name: "Chula Vista", style: "West Coast IPA", abv: "6.5%", tagline: "Estilo clásico de la costa.", img: "/latas/chula-vista.webp", accent: "#D4882A" },
+  { name: "Magma", style: "Double IPA", abv: "8.3%", tagline: "Peligrosamente fácil de beber.", img: "/latas/magma.webp", accent: "#C05030" },
+  { name: "Oleaje", style: "Lager Mexicana", abv: "4.5%", tagline: "Del maíz mexicano.", img: "/latas/oleaje.webp", accent: "#2E8B57" },
+  { name: "Sílice", style: "Czech Pale Lager", abv: "5.1%", tagline: "El recuerdo a hierba y pan.", img: "/latas/silice.webp", accent: "#88B8D0" },
+  { name: "Terragrana", style: "Red IPA", abv: "7.1%", tagline: "De la tierra mojada.", img: "/latas/terragrana.webp", accent: "#A0522D" },
 ];
 
-const marqueeText = "Una cerveza para todos · Condesa CDMX · Lerma Edo. Méx · Best IPA Copa Pacífico 2024 · Tap List en vivo · Session · West Coast · Hazy · Czech Pils · Doble IPA · ";
+const marqueeText = "Una cerveza para todos · Condesa CDMX · Lerma Edo. Méx · Best IPA Copa Pacífico 2024 · Tap List en vivo · Session IPA · New England IPA · West Coast IPA · Double IPA · Lager Mexicana · Czech Pale Lager · Red IPA · ";
 
 const competenciaLogos: Record<string, string> = {
   "Copa Cervecera del Pacífico": "/cocepa_2025.png",
@@ -75,14 +77,14 @@ export default async function Home() {
           Una cerveza para <em style={{ fontStyle: "italic", color: "var(--amber-light)" }}>todos.</em>
         </h1>
         <p style={{ fontFamily: "var(--font-sans)", fontSize: 16, fontWeight: 300, color: `rgba(var(--cream-rgb),0.6)`, lineHeight: 1.7, maxWidth: 480, marginBottom: 40 }}>
-          Lupulada, balanceada y sin pretensiones. Cinco estilos hechos con obsesión en Lerma, servidos frescos en Condesa.
+          Lupulada, balanceada y sin pretensiones. Siete estilos hechos con obsesión en Lerma, servidos frescos en Condesa.
         </p>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", justifyContent: "center", marginBottom: 64 }}>
           <Link href="/taplist" style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", padding: "16px 40px", background: "var(--amber)", color: "var(--ink)", textDecoration: "none", fontWeight: 500, border: "2px solid var(--amber)" }}>Ver Tap List →</Link>
           <Link href="#cervezas" style={{ fontFamily: "var(--font-mono)", fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase", padding: "16px 40px", background: "transparent", color: "var(--cream)", textDecoration: "none", border: `1px solid rgba(var(--cream-rgb),0.2)` }}>Nuestras cervezas</Link>
         </div>
         <div style={{ display: "flex", gap: 60, paddingTop: 40, borderTop: `1px solid rgba(var(--cream-rgb),0.08)`, flexWrap: "wrap", justifyContent: "center" }}>
-          {[{ num: "5", lab: "Estilos" }, { num: "Best IPA", lab: "Copa Pacífico 2024" }, { num: "10k L", lab: "Cap. mensual" }].map((s) => (
+          {[{ num: "7", lab: "Estilos" }, { num: "Best IPA", lab: "Copa Pacífico 2024" }, { num: "10k L", lab: "Cap. mensual" }].map((s) => (
             <div key={s.lab} style={{ textAlign: "center" }}>
               <div style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, color: "var(--amber-light)", lineHeight: 1 }}>{s.num}</div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", color: `rgba(var(--cream-rgb),0.6)`, marginTop: 6 }}>{s.lab}</div>
@@ -106,7 +108,7 @@ export default async function Home() {
           <span style={{ display: "block", width: 28, height: 1, background: "var(--amber)" }} />Lineup de línea
         </div>
         <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 56 }}>
-          Cinco cervezas.<br /><em style={{ fontStyle: "italic", color: "var(--amber)" }}>Una obsesión.</em>
+          Siete cervezas.<br /><em style={{ fontStyle: "italic", color: "var(--amber)" }}>Una obsesión.</em>
         </h2>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 2 }}>
           {lineup.map((b) => (
@@ -117,20 +119,10 @@ export default async function Home() {
               </div>
               <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: `rgba(var(--cream-rgb),0.6)` }}>{b.style}</div>
               <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 26, fontWeight: 700, fontStyle: "italic", color: "var(--cream)", lineHeight: 1.1, margin: 0 }}>{b.name}</h3>
-              <div style={{ fontFamily: "var(--font-sans)", fontSize: 12, color: `rgba(var(--cream-rgb),0.6)`, lineHeight: 1.5, fontWeight: 300 }}>{b.notes}</div>
-              <div
-                role="progressbar"
-                aria-valuenow={b.ibu}
-                aria-valuemin={0}
-                aria-valuemax={80}
-                aria-label={`${b.name}: ${b.ibu} IBU`}
-                style={{ height: 2, background: `rgba(var(--cream-rgb),0.08)`, position: "relative" }}
-              >
-                <div style={{ position: "absolute", top: 0, left: 0, height: "100%", width: `${Math.min(100, (b.ibu / 80) * 100)}%`, background: b.accent }} />
-              </div>
+              <div style={{ fontFamily: "var(--font-sans)", fontSize: 12, color: `rgba(var(--cream-rgb),0.6)`, lineHeight: 1.5, fontWeight: 300, fontStyle: "italic" }}>{b.tagline}</div>
               <div style={{ display: "flex", gap: 8, marginTop: "auto", paddingTop: 14, borderTop: `1px solid rgba(var(--cream-rgb),0.07)` }}>
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 8px", border: `1px solid rgba(var(--cream-rgb),0.15)`, color: `rgba(var(--cream-rgb),0.6)` }}>{b.abv} ABV</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 8px", border: `1px solid rgba(var(--cream-rgb),0.15)`, color: `rgba(var(--cream-rgb),0.6)` }}>{b.ibu} IBU</span>
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 8px", border: `1px solid rgba(var(--cream-rgb),0.15)`, color: `rgba(var(--cream-rgb),0.6)` }}>355 ml</span>
               </div>
             </article>
           ))}

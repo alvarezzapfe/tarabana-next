@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
 
-const estilos = ['IPA', 'Double IPA', 'Session IPA', 'Lager', 'Stout', 'Porter', 'Wheat', 'Sour', 'Pale Ale', 'Amber Ale', 'Otro']
+const estilos = ['IPA', 'Double IPA', 'Session IPA', 'New England IPA', 'West Coast IPA', 'Red IPA', 'Lager', 'Lager Mexicana', 'Czech Pale Lager', 'Stout', 'Porter', 'Wheat', 'Sour', 'Pale Ale', 'Amber Ale', 'Otro']
 
 export default function NuevoProductoPage() {
   const router = useRouter()
