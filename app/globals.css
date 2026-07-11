@@ -84,6 +84,44 @@ a:focus-visible, button:focus-visible {
 .carousel-track { animation: scroll-carousel 20s linear infinite; }
 .carousel-track:hover { animation-play-state: paused; }
 
+/* ── Beer carousel ────────────────────────────────── */
+.beer-slide {
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1),
+              filter 0.5s ease;
+}
+.beer-slide-info {
+  animation: fade-up 0.35s ease-out;
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.carousel-arrow {
+  transition: background 0.2s, transform 0.2s;
+}
+.carousel-arrow:hover {
+  background: rgba(var(--amber-rgb),0.25) !important;
+  transform: translateY(-70%) scale(1.1);
+}
+.carousel-dot {
+  transition: width 0.3s ease, background 0.3s ease;
+}
+.modal-img {
+  transition: transform 0.15s ease-out;
+}
+@media (max-width: 640px) {
+  .modal-inner {
+    flex-direction: column !important;
+  }
+  .modal-info {
+    text-align: center;
+  }
+  .modal-info > div:last-child {
+    justify-content: center;
+  }
+}
+
 /* ── Hover utilities ───────────────────────────────── */
 .medalla-card {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
@@ -110,4 +148,9 @@ a:focus-visible, button:focus-visible {
   .caracol-img:hover { animation: none !important; }
   .medalla-card:hover { transform: none; }
   .comp-logo-box:hover { transform: none; }
+  .beer-slide { transition: none !important; }
+  .beer-slide-info { animation: none !important; }
+  .carousel-arrow { transition: none !important; }
+  .carousel-dot { transition: none !important; }
+  .modal-img { transition: none !important; }
 }

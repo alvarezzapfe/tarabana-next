@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
+import BeerCarousel from "./components/BeerCarousel";
 import { createServerSupabaseClient } from "../src/lib/supabase-server";
 
 const lineup = [
@@ -110,26 +111,7 @@ export default async function Home() {
         <h2 style={{ fontFamily: "var(--font-serif)", fontSize: "clamp(32px, 4vw, 52px)", fontWeight: 900, lineHeight: 1.05, letterSpacing: "-1.5px", marginBottom: 56 }}>
           Siete cervezas.<br /><em style={{ fontStyle: "italic", color: "var(--amber)" }}>Una obsesión.</em>
         </h2>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 2 }}>
-          {lineup.map((b) => (
-            <article key={b.name} style={{ background: "var(--ink)", color: "var(--cream)", padding: "32px 20px", display: "flex", flexDirection: "column", gap: 14, position: "relative", overflow: "hidden" }}>
-              <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: b.accent }} />
-              <div style={{ display: "flex", justifyContent: "center", marginBottom: 8, marginTop: 8 }}>
-                <Image src={b.img} alt={b.name} width={90} height={140} style={{ objectFit: "contain", filter: "drop-shadow(0 8px 24px rgba(0,0,0,0.4))" }} />
-              </div>
-              <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: `rgba(var(--cream-rgb),0.6)` }}>{b.style}</div>
-              <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 26, fontWeight: 700, fontStyle: "italic", color: "var(--cream)", lineHeight: 1.1, margin: 0 }}>{b.name}</h3>
-              <div style={{ fontFamily: "var(--font-sans)", fontSize: 12, color: `rgba(var(--cream-rgb),0.6)`, lineHeight: 1.5, fontWeight: 300, fontStyle: "italic" }}>{b.tagline}</div>
-              <div style={{ display: "flex", gap: 8, marginTop: "auto", paddingTop: 14, borderTop: `1px solid rgba(var(--cream-rgb),0.07)` }}>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 8px", border: `1px solid rgba(var(--cream-rgb),0.15)`, color: `rgba(var(--cream-rgb),0.6)` }}>{b.abv} ABV</span>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, padding: "3px 8px", border: `1px solid rgba(var(--cream-rgb),0.15)`, color: `rgba(var(--cream-rgb),0.6)` }}>355 ml</span>
-              </div>
-            </article>
-          ))}
-        </div>
-        <div style={{ textAlign: "center", marginTop: 64 }}>
-          <Image src="/todaslatas.png" alt="Todas las latas Tarabaña" width={900} height={320} style={{ maxWidth: "100%", height: "auto", objectFit: "contain" }} />
-        </div>
+        <BeerCarousel beers={lineup} />
       </section>
 
       {/* ── INVENTARIO CARRUSEL ───────────────────────────── */}
