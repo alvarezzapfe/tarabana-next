@@ -14,7 +14,12 @@ export const createServerSupabaseClient = async () => {
             cookiesToSet.forEach(({ name, value, options }) =>
               cookieStore.set(name, value, options)
             )
-          } catch {}
+          } catch {
+            // setAll is called from Server Components where cookies are read-only.
+            // This is expected — the proxy (proxy.ts) handles writing refreshed
+            // session cookies back to the browser. This catch only suppresses the
+            // "cookies can only be modified in a Server Action or Route Handler" error.
+          }
         },
       },
     }

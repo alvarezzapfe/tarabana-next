@@ -1,7 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -28,13 +28,17 @@ export async function middleware(request: NextRequest) {
   // Rutas admin protegidas
   const adminPaths = ['/admin', '/produccion', '/ventas', '/mi-cuenta']
   if (adminPaths.some(p => path.startsWith(p)) && !user) {
-    return NextResponse.redirect(new URL('/login', request.url))
+    const url = request.nextUrl.clone()
+    url.pathname = '/login'
+    return NextResponse.redirect(url)
   }
 
   // Rutas portal protegidas (NO incluir /portal exacto ni /portal/onboarding)
   const portalProtegido = ['/portal/catalogo', '/portal/pedidos', '/portal/puntos', '/portal/cuenta']
   if (portalProtegido.some(p => path.startsWith(p)) && !user) {
-    return NextResponse.redirect(new URL('/portal', request.url))
+    const url = request.nextUrl.clone()
+    url.pathname = '/portal'
+    return NextResponse.redirect(url)
   }
 
   return supabaseResponse
