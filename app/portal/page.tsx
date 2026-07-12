@@ -242,9 +242,8 @@ export default function PortalLogin() {
         )}
 
         <div style={{ marginTop: 24, paddingTop: 20, borderTop: '1px solid #f0f0f0', textAlign: 'center' }}>
-          <p style={{ color: '#ccc', fontSize: 12, marginBottom: 8 }}>¿Eres del equipo interno?</p>
-          <a href="/tierra-mojada" style={{ color: '#bbb', fontSize: 13, textDecoration: 'none', borderBottom: '1px solid #e8e8e8' }}>
-            Acceso administración →
+          <a href="/" style={{ color: '#bbb', fontSize: 13, textDecoration: 'none' }}>
+            ← Volver al inicio
           </a>
         </div>
       </div>

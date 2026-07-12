@@ -37,7 +37,7 @@ export default function PuntoVentaCard({ punto }: { punto: PuntoVenta }) {
           <div style={{
             width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontSize: 40, opacity: 0.3,
-          }}>📍</div>
+          }}><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></div>
         )}
         {/* Tipo tag */}
         <span style={{

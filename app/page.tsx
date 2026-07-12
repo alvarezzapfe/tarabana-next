@@ -138,7 +138,7 @@ export default async function Home() {
                       {p.imagen_url
                         ? <img src={p.imagen_url} alt={p.nombre} style={{ height: 90, objectFit: "contain", filter: "drop-shadow(0 4px 12px rgba(0,0,0,0.5))" }} />
                         : <div style={{ width: 60, height: 90, background: "#2a2a2a", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center" }}>
-                            <span style={{ fontSize: 24 }}>🍺</span>
+                            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="rgba(var(--cream-rgb),0.3)" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 11h1a3 3 0 010 6h-1M9 12v6M13 12v6M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4L18 8z"/></svg>
                           </div>
                       }
                     </div>
@@ -203,7 +203,7 @@ export default async function Home() {
           {/* Medallas */}
           {(!medallero || medallero.length === 0) ? (
             <div style={{ textAlign: "center", padding: "60px 0", fontFamily: "var(--font-mono)", fontSize: 12, color: `rgba(var(--cream-rgb),0.6)`, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-              Próximamente — medallas en camino 🏆
+              Proximamente — medallas en camino
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
@@ -216,7 +216,7 @@ export default async function Home() {
                     {/* Badge medalla */}
                     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase", padding: "4px 12px", background: `${mc.color}20`, color: mc.color, border: `1px solid ${mc.color}50` }}>
-                        🏅 {mc.label}
+                        {mc.label}
                       </span>
                       <span style={{ fontFamily: "var(--font-mono)", fontSize: 11, color: `rgba(var(--cream-rgb),0.6)` }}>{m.año}</span>
                     </div>
