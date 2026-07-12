@@ -25,13 +25,19 @@ const roleLabel: Record<string, string> = {
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect('/tierra-mojada')
 
   const { data: profile } = await supabase
     .from('profiles').select('role, full_name').eq('id', user.id).single()
 
   if (!profile || !['super_admin','admin','ventas','produccion','contabilidad'].includes(profile.role))
-    redirect('/login')
+    redirect('/tierra-mojada')
+
+  // Gate AAL2: roles internos requieren 2FA verificado
+  const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+  if (aal?.currentLevel !== 'aal2') {
+    redirect('/tierra-mojada/verificar')
+  }
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0a0a', fontFamily: 'system-ui, sans-serif', margin: 0 }}>

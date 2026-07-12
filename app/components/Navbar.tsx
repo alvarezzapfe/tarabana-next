@@ -54,9 +54,6 @@ export default function Navbar() {
       </ul>
 
       <div className="hidden md:flex" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <Link href="/login" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 20px", background: "transparent", color: "rgba(28,16,7,0.55)", textDecoration: "none", border: "1px solid rgba(28,16,7,0.15)", borderRadius: 4 }}>
-          Iniciar sesión
-        </Link>
         <Link href="/portal" style={{ fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "10px 24px", background: "var(--amber)", color: "white", textDecoration: "none", fontWeight: 500 }}>
           Comprar →
         </Link>

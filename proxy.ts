@@ -25,11 +25,11 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname
 
-  // Rutas admin protegidas
-  const adminPaths = ['/admin', '/produccion', '/ventas', '/mi-cuenta']
+  // Rutas admin protegidas (incluye /tierra-mojada/verificar que requiere sesión)
+  const adminPaths = ['/admin', '/produccion', '/ventas', '/mi-cuenta', '/tierra-mojada/verificar']
   if (adminPaths.some(p => path.startsWith(p)) && !user) {
     const url = request.nextUrl.clone()
-    url.pathname = '/login'
+    url.pathname = '/tierra-mojada'
     return NextResponse.redirect(url)
   }
 

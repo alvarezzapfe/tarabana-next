@@ -4,7 +4,7 @@ import { redirect } from 'next/navigation'
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  if (!user) redirect('/tierra-mojada')
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -13,7 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     .single()
 
   const allowedRoles = ['super_admin', 'ventas', 'produccion', 'taproom']
-  if (!profile || !allowedRoles.includes(profile.role)) redirect('/login')
+  if (!profile || !allowedRoles.includes(profile.role)) redirect('/tierra-mojada')
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0a0a', fontFamily: 'system-ui, sans-serif' }}>

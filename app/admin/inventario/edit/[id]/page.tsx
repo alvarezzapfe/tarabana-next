@@ -33,7 +33,7 @@ export default function EditProductoPage() {
     const load = async () => {
       setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/login'); return }
+      if (!user) { router.push('/tierra-mojada'); return }
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
       setUserRole(profile?.role || '')
       if (!['super_admin', 'produccion'].includes(profile?.role || '')) { router.push('/admin/inventario'); return }
