@@ -44,6 +44,7 @@ export default function VerificarMFAPage() {
     const { data, error } = await supabase.auth.mfa.enroll({
       factorType: 'totp',
       friendlyName: 'Tarabaña TOTP',
+      issuer: 'Tarabaña',
     })
     if (error) {
       setError('Error al configurar 2FA: ' + error.message)
