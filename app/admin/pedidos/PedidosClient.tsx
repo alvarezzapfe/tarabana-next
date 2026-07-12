@@ -100,14 +100,21 @@ export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], ca
                         {p.tipo_precio === 'taproom' ? 'Taproom' : 'Público'}
                       </span>
                     </td>
-                    <td style={{ padding: '14px 16px', maxWidth: 220 }}>
+                    <td style={{ padding: '14px 16px', maxWidth: 260 }}>
                       {items?.length > 0 ? items.map((item: any, i: number) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
                           <span style={{ color: '#E8531D', fontSize: 13, fontWeight: 700, minWidth: 20 }}>{item.cantidad}×</span>
-                          <span style={{ color: '#1a1a1a', fontSize: 13 }}>{item.productos?.nombre}</span>
+                          {item.unidad === 'mix24' ? (
+                            <span style={{ color: '#1a1a1a', fontSize: 13 }}>
+                              <span style={{ background: '#ede9fe', color: '#7c3aed', fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 99, marginRight: 4 }}>MIX</span>
+                              {item.metadata?.estilos?.map((e: any) => e.nombre).join(', ') || item.productos?.nombre}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#1a1a1a', fontSize: 13 }}>{item.productos?.nombre}</span>
+                          )}
                           <span style={{ color: '#6b7280', fontSize: 10 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</span>
                         </div>
-                      )) : <span style={{ color: '#6b7280', fontSize: 11 }}>Sin productos</span>}
+                      )) : <span style={{ color: '#6b7280', fontSize: 13 }}>Sin productos</span>}
                     </td>
                     <td style={{ padding: '14px 16px', color: '#E8531D', fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap' }}>
                       ${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 })}

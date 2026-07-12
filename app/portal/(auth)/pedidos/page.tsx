@@ -31,7 +31,7 @@ export default function MisPedidosPage() {
       if (!user) return
       const { data } = await supabase
         .from('pedidos')
-        .select('*, pedido_items(cantidad, precio_unitario, productos(nombre, estilo, imagen_url))')
+        .select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
         .eq('cliente_id', user.id)
         .order('created_at', { ascending: false })
       setPedidos(data || [])
@@ -110,8 +110,15 @@ export default function MisPedidosPage() {
                               </div>
                           }
                           <div style={{ flex: 1 }}>
-                            <p style={{ margin: 0, color: '#111', fontSize: 14, fontWeight: 600 }}>{item.productos?.nombre || '—'}</p>
-                            <p style={{ margin: '1px 0 0', color: '#aaa', fontSize: 12 }}>{item.productos?.estilo}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {item.unidad === 'mix24' && <span style={{ background: '#ede9fe', color: '#7c3aed', fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 99 }}>MIX</span>}
+                              <p style={{ margin: 0, color: '#111', fontSize: 14, fontWeight: 600 }}>
+                                {item.unidad === 'mix24' && item.metadata?.estilos
+                                  ? item.metadata.estilos.map((e: any) => e.nombre).join(', ')
+                                  : item.productos?.nombre || '—'}
+                              </p>
+                            </div>
+                            <p style={{ margin: '1px 0 0', color: '#aaa', fontSize: 12 }}>{item.unidad === 'mix24' ? '4 estilos × 6 latas' : 'Caja 24 latas'}</p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <p style={{ margin: 0, color: '#111', fontSize: 13, fontWeight: 600 }}>{item.cantidad}× ${item.precio_unitario?.toLocaleString('es-MX')}</p>
