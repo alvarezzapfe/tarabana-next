@@ -104,19 +104,19 @@ export default function NuevoPedidoPage() {
     <div style={{ padding: '36px 40px', display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, maxWidth: 1100 }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <a href="/admin/pedidos" style={{ color: '#444', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+          <a href="/admin/pedidos" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
             Pedidos
           </a>
           <span style={{ color: '#2a2a2a' }}>/</span>
-          <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Nuevo pedido</h1>
+          <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>Nuevo pedido</h1>
         </div>
 
         {/* Selección cliente */}
-        <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Cliente *</p>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Cliente *</p>
           <input value={clienteSearch} onChange={e => setClienteSearch(e.target.value)} placeholder="Buscar cliente..."
-            style={{ width: '100%', padding: '9px 13px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 7, color: '#fff', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', marginBottom: 10 }} />
+            style={{ width: '100%', padding: '9px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', marginBottom: 10 }} />
           <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
             {filteredClientes.map(c => (
               <button key={c.id} onClick={() => { setClienteId(c.id); setClienteSearch('') }} style={{
@@ -125,27 +125,27 @@ export default function NuevoPedidoPage() {
                 border: `1px solid ${clienteId === c.id ? '#E8531D' : 'transparent'}`,
                 borderRadius: 7, cursor: 'pointer', textAlign: 'left', width: '100%'
               }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#2a2a2a', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8531D', fontSize: 11, fontWeight: 700 }}>
+                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>
                   {(c.full_name || c.email)[0].toUpperCase()}
                 </div>
                 <div>
-                  <p style={{ margin: 0, color: '#ddd', fontSize: 13 }}>{c.full_name || c.email}</p>
-                  <p style={{ margin: 0, color: '#555', fontSize: 11 }}>{c.email}</p>
+                  <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13 }}>{c.full_name || c.email}</p>
+                  <p style={{ margin: 0, color: '#6b7280', fontSize: 11 }}>{c.email}</p>
                 </div>
               </button>
             ))}
           </div>
           {clienteSeleccionado && (
-            <div style={{ marginTop: 10, padding: '8px 12px', background: '#1a1a1a', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, color: '#10b981', fontSize: 12.5 }}>✓ {clienteSeleccionado.full_name}</p>
-              {esTap && <span style={{ background: '#f59e0b18', color: '#f59e0b', fontSize: 11, padding: '2px 8px', borderRadius: 99 }}>Tap/Bar</span>}
+            <div style={{ marginTop: 10, padding: '8px 12px', background: '#f3f4f6', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <p style={{ margin: 0, color: '#10b981', fontSize: 14 }}>✓ {clienteSeleccionado.full_name}</p>
+              {esTap && <span style={{ background: '#fef3c7', color: '#f59e0b', fontSize: 13, padding: '2px 8px', borderRadius: 99 }}>Tap/Bar</span>}
             </div>
           )}
         </div>
 
         {/* Tipo precio */}
-        <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Tipo de precio</p>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Tipo de precio</p>
           <div style={{ display: 'flex', gap: 8 }}>
             {(['publico', 'taproom'] as const).map(t => (
               <button key={t} onClick={() => setTipoPrecio(t)} style={{
@@ -160,24 +160,24 @@ export default function NuevoPedidoPage() {
         </div>
 
         {/* Productos */}
-        <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 16 }}>
-          <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Productos</p>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
+          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Productos</p>
           {productos.length === 0 ? (
-            <p style={{ color: '#444', fontSize: 13, textAlign: 'center', padding: 20 }}>No hay productos en inventario</p>
+            <p style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', padding: 20 }}>No hay productos en inventario</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {productos.map(p => (
-                <div key={p.id} style={{ background: '#0f0f0f', border: '1px solid #1a1a1a', borderRadius: 10, padding: '12px 14px' }}>
+                <div key={p.id} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
                     {p.imagen_url
                       ? <img src={p.imagen_url} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />
-                      : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#1a1a1a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 11h1a3 3 0 010 6h-1"/><path d="M9 12v6"/><path d="M13 12v6"/><path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5"/><path d="M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4l.6-12z"/></svg>
                   </div>
                     }
                     <div>
-                      <p style={{ margin: 0, color: '#ddd', fontSize: 13.5, fontWeight: 600 }}>{p.nombre}</p>
-                      <p style={{ margin: 0, color: '#555', fontSize: 11.5 }}>{p.estilo}</p>
+                      <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13.5, fontWeight: 600 }}>{p.nombre}</p>
+                      <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>{p.estilo}</p>
                     </div>
                   </div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
@@ -187,24 +187,24 @@ export default function NuevoPedidoPage() {
                       const itemKey = `${p.id}-${u.key}`
                       const itemInCart = items.find(i => i.producto_id === itemKey)
                       if (!precio || stock === 0) return (
-                        <div key={u.key} style={{ padding: '7px 8px', background: '#141414', borderRadius: 7, textAlign: 'center', opacity: 0.4 }}>
-                          <p style={{ margin: 0, color: '#444', fontSize: 10.5 }}>{u.label}</p>
-                          <p style={{ margin: '2px 0 0', color: '#333', fontSize: 10 }}>{!precio ? 'Sin precio' : 'Sin stock'}</p>
+                        <div key={u.key} style={{ padding: '7px 8px', background: '#fff', borderRadius: 7, textAlign: 'center', opacity: 0.4 }}>
+                          <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>{u.label}</p>
+                          <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 10 }}>{!precio ? 'Sin precio' : 'Sin stock'}</p>
                         </div>
                       )
                       return (
-                        <div key={u.key} style={{ padding: '7px 8px', background: '#141414', border: `1px solid ${itemInCart ? '#E8531D40' : '#1a1a1a'}`, borderRadius: 7, textAlign: 'center' }}>
-                          <p style={{ margin: 0, color: '#888', fontSize: 10 }}>{u.label}</p>
-                          <p style={{ margin: '2px 0 4px', color: '#E8531D', fontSize: 12, fontWeight: 600 }}>${precio?.toLocaleString()}</p>
-                          <p style={{ margin: '0 0 6px', color: '#444', fontSize: 10 }}>Stock: {stock}</p>
+                        <div key={u.key} style={{ padding: '7px 8px', background: '#fff', border: `1px solid ${itemInCart ? '#E8531D40' : '#1a1a1a'}`, borderRadius: 7, textAlign: 'center' }}>
+                          <p style={{ margin: 0, color: '#6b7280', fontSize: 10 }}>{u.label}</p>
+                          <p style={{ margin: '2px 0 4px', color: '#E8531D', fontSize: 13, fontWeight: 600 }}>${precio?.toLocaleString()}</p>
+                          <p style={{ margin: '0 0 6px', color: '#9ca3af', fontSize: 10 }}>Stock: {stock}</p>
                           {itemInCart ? (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                              <button onClick={() => updateCantidad(itemKey, -1)} style={{ width: 22, height: 22, borderRadius: '50%', background: '#2a2a2a', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                              <span style={{ color: '#fff', fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: 'center' }}>{itemInCart.cantidad}</span>
-                              <button onClick={() => updateCantidad(itemKey, 1)} style={{ width: 22, height: 22, borderRadius: '50%', background: '#E8531D', border: 'none', color: '#fff', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                              <button onClick={() => updateCantidad(itemKey, -1)} style={{ width: 22, height: 22, borderRadius: '50%', background: '#e5e7eb', border: 'none', color: '#1a1a1a', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                              <span style={{ color: '#1a1a1a', fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: 'center' }}>{itemInCart.cantidad}</span>
+                              <button onClick={() => updateCantidad(itemKey, 1)} style={{ width: 22, height: 22, borderRadius: '50%', background: '#E8531D', border: 'none', color: '#1a1a1a', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
                             </div>
                           ) : (
-                            <button onClick={() => addItem(p, u.key)} style={{ width: '100%', padding: '4px', background: '#1e1e1e', border: 'none', borderRadius: 5, color: '#888', fontSize: 11, cursor: 'pointer' }}>+ Agregar</button>
+                            <button onClick={() => addItem(p, u.key)} style={{ width: '100%', padding: '4px', background: '#f3f4f6', border: 'none', borderRadius: 5, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>+ Agregar</button>
                           )}
                         </div>
                       )
@@ -219,18 +219,18 @@ export default function NuevoPedidoPage() {
 
       {/* Panel derecho — resumen */}
       <div style={{ position: 'sticky', top: 24 }}>
-        <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 20 }}>
-          <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Resumen del pedido</p>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
+          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Resumen del pedido</p>
 
           {items.length === 0 ? (
-            <p style={{ color: '#333', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Agrega productos al pedido</p>
+            <p style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Agrega productos al pedido</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
               {items.map(item => (
                 <div key={item.producto_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                   <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, color: '#ccc', fontSize: 12.5 }}>{item.nombre}</p>
-                    <p style={{ margin: '1px 0 0', color: '#555', fontSize: 11.5 }}>{item.cantidad} × ${item.precio.toLocaleString()}</p>
+                    <p style={{ margin: 0, color: '#374151', fontSize: 14 }}>{item.nombre}</p>
+                    <p style={{ margin: '1px 0 0', color: '#6b7280', fontSize: 13 }}>{item.cantidad} × ${item.precio.toLocaleString()}</p>
                   </div>
                   <p style={{ margin: 0, color: '#E8531D', fontSize: 13, fontWeight: 600 }}>${(item.precio * item.cantidad).toLocaleString()}</p>
                 </div>
@@ -240,16 +240,16 @@ export default function NuevoPedidoPage() {
 
           <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 12, marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, color: '#888', fontSize: 13 }}>Total</p>
-              <p style={{ margin: 0, color: '#fff', fontSize: 20, fontWeight: 700 }}>${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Total</p>
+              <p style={{ margin: 0, color: '#1a1a1a', fontSize: 20, fontWeight: 700 }}>${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
             </div>
           </div>
 
           {/* Vendedor */}
-          <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Vendedor asignado</p>
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Vendedor asignado</p>
             <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
-              style={{ width: '100%', padding: '9px 13px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 7, color: vendedorId ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
+              style={{ width: '100%', padding: '9px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: vendedorId ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
               <option value="">— Sin vendedor asignado —</option>
               {vendedores.map(v => (
                 <option key={v.id} value={v.id}>{v.nombre} ({v.comision_pct}%)</option>
@@ -258,9 +258,9 @@ export default function NuevoPedidoPage() {
           </div>
 
           <div style={{ marginBottom: 14 }}>
-            <label style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Notas del pedido</label>
+            <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Notas del pedido</label>
             <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="Instrucciones de entrega, comentarios..."
-              style={{ width: '100%', padding: '9px 12px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 7, color: '#fff', fontSize: 13, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
+              style={{ width: '100%', padding: '9px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
           </div>
 
           <button onClick={handleConfirmar} disabled={loading || !clienteId || items.length === 0} style={{

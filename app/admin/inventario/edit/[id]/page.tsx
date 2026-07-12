@@ -139,29 +139,29 @@ export default function EditProductoPage() {
 
   const inp = (label: string, key: string, placeholder = '', type = 'text', disabled = false) => (
     <div>
-      <label style={{ color: '#666', fontSize: 11.5, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
+      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
       <input type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)}
         placeholder={placeholder} disabled={disabled}
-        style={{ width: '100%', padding: '10px 12px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 7, color: disabled ? '#444' : '#fff', fontSize: 13.5, boxSizing: 'border-box' as const }}
+        style={{ width: '100%', padding: '10px 12px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #d1d5db', borderRadius: 7, color: disabled ? '#444' : '#fff', fontSize: 13.5, boxSizing: 'border-box' as const }}
       />
     </div>
   )
 
   const priceRow = (label: string, pubKey: string, tapKey: string, disabled = false) => (
     <div>
-      <p style={{ color: '#555', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{label}</p>
+      <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 8 }}>{label}</p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <div>
-          <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 4 }}>Precio público</label>
+          <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>Precio público</label>
           <input type="number" value={(form as any)[pubKey]} onChange={e => set(pubKey, e.target.value)}
             disabled={disabled}
-            style={{ width: '100%', padding: '9px 12px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 7, color: disabled ? '#444' : '#fff', fontSize: 13.5, boxSizing: 'border-box' as const }} />
+            style={{ width: '100%', padding: '9px 12px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #d1d5db', borderRadius: 7, color: disabled ? '#444' : '#fff', fontSize: 13.5, boxSizing: 'border-box' as const }} />
         </div>
         <div>
-          <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 4 }}>Precio taproom</label>
+          <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>Precio taproom</label>
           <input type="number" value={(form as any)[tapKey]} onChange={e => set(tapKey, e.target.value)}
             disabled={disabled}
-            style={{ width: '100%', padding: '9px 12px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 7, color: disabled ? '#444' : '#f59e0b', fontSize: 13.5, boxSizing: 'border-box' as const }} />
+            style={{ width: '100%', padding: '9px 12px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #d1d5db', borderRadius: 7, color: disabled ? '#444' : '#f59e0b', fontSize: 13.5, boxSizing: 'border-box' as const }} />
         </div>
       </div>
     </div>
@@ -170,34 +170,34 @@ export default function EditProductoPage() {
   const isSuperAdmin = userRole === 'super_admin'
   const isProduccion = userRole === 'produccion'
 
-  if (loading) return <div style={{ padding: 60, color: '#555', textAlign: 'center' }}>Cargando...</div>
+  if (loading) return <div style={{ padding: 60, color: '#6b7280', textAlign: 'center' }}>Cargando...</div>
 
   return (
     <div style={{ padding: '36px 40px', maxWidth: 860 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
-        <a href="/admin/inventario" style={{ color: '#555', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <a href="/admin/inventario" style={{ color: '#6b7280', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Inventario
         </a>
-        <h1 style={{ color: '#fff', fontSize: 20, fontWeight: 700, margin: 0 }}>Editar producto</h1>
+        <h1 style={{ color: '#1a1a1a', fontSize: 20, fontWeight: 700, margin: 0 }}>Editar producto</h1>
         {isProduccion && (
-          <span style={{ background: '#f59e0b22', color: '#f59e0b', fontSize: 11, padding: '3px 10px', borderRadius: 99 }}>Solo puedes editar stock</span>
+          <span style={{ background: '#f59e0b22', color: '#f59e0b', fontSize: 13, padding: '3px 10px', borderRadius: 99 }}>Solo puedes editar stock</span>
         )}
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 24 }}>
         {/* Columna izq */}
         <div>
-          <label style={{ color: '#666', fontSize: 11.5, display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Foto</label>
+          <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Foto</label>
           <div onClick={() => isSuperAdmin && document.getElementById('img-upload')?.click()}
             style={{
-              width: '100%', aspectRatio: '1', background: '#111', border: '2px dashed #2a2a2a',
+              width: '100%', aspectRatio: '1', background: '#fff', border: '2px dashed #2a2a2a',
               borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center',
               cursor: isSuperAdmin ? 'pointer' : 'default', overflow: 'hidden'
             }}>
             {imgPreview
               ? <img src={imgPreview} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <p style={{ color: '#444', fontSize: 12 }}>Sin foto</p>
+              : <p style={{ color: '#9ca3af', fontSize: 12 }}>Sin foto</p>
             }
           </div>
           {isSuperAdmin && <input id="img-upload" type="file" accept="image/*" onChange={handleImage} style={{ display: 'none' }} />}
@@ -209,7 +209,7 @@ export default function EditProductoPage() {
 
           {isSuperAdmin && (
             <div style={{ marginTop: 12 }}>
-              <label style={{ color: '#666', fontSize: 11.5, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Status</label>
+              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Status</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <button onClick={() => set('activo', !form.activo)} style={{
                   width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
@@ -228,9 +228,9 @@ export default function EditProductoPage() {
           {inp('Nombre', 'nombre', '', 'text', !isSuperAdmin)}
 
           <div>
-            <label style={{ color: '#666', fontSize: 11.5, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Estilo</label>
+            <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Estilo</label>
             <select value={form.estilo} onChange={e => set('estilo', e.target.value)} disabled={!isSuperAdmin}
-              style={{ width: '100%', padding: '10px 12px', background: !isSuperAdmin ? '#141414' : '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 7, color: form.estilo ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const }}>
+              style={{ width: '100%', padding: '10px 12px', background: !isSuperAdmin ? '#141414' : '#1a1a1a', border: '1px solid #d1d5db', borderRadius: 7, color: form.estilo ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const }}>
               {estilos.map(e => <option key={e} value={e}>{e}</option>)}
             </select>
           </div>
@@ -239,14 +239,14 @@ export default function EditProductoPage() {
           
           {isSuperAdmin && (
             <div>
-              <label style={{ color: '#666', fontSize: 11.5, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Descripción larga</label>
+              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Descripción larga</label>
               <textarea value={form.descripcion_larga} onChange={e => set('descripcion_larga', e.target.value)} rows={3}
-                style={{ width: '100%', padding: '10px 12px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 7, color: '#fff', fontSize: 13.5, boxSizing: 'border-box' as const, resize: 'vertical' }} />
+                style={{ width: '100%', padding: '10px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13.5, boxSizing: 'border-box' as const, resize: 'vertical' }} />
             </div>
           )}
 
           <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 14 }}>
-            <p style={{ color: '#E8531D', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios</p>
+            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               {priceRow('Caja 12 latas', 'precio_caja12_publico', 'precio_caja12_taproom', !isSuperAdmin)}
               {priceRow('Caja 24 latas', 'precio_caja24_publico', 'precio_caja24_taproom', !isSuperAdmin)}
@@ -258,7 +258,7 @@ export default function EditProductoPage() {
           </div>
 
           <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 14 }}>
-            <p style={{ color: '#fff', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
+            <p style={{ color: '#1a1a1a', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>
               Stock {isProduccion && <span style={{ color: '#f59e0b', fontWeight: 400 }}>— editable</span>}
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
@@ -271,9 +271,9 @@ export default function EditProductoPage() {
                 { label: 'Bbl 10L Acero', key: 'stock_barril10_acero' },
               ].map(s => (
                 <div key={s.key}>
-                  <label style={{ color: '#666', fontSize: 11, display: 'block', marginBottom: 4 }}>{s.label}</label>
+                  <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>{s.label}</label>
                   <input type="number" value={(form as any)[s.key]} onChange={e => set(s.key, e.target.value)}
-                    style={{ width: '100%', padding: '9px 10px', background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 7, color: '#10b981', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const }} />
+                    style={{ width: '100%', padding: '9px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#10b981', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const }} />
                 </div>
               ))}
             </div>
@@ -282,10 +282,10 @@ export default function EditProductoPage() {
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginTop: 28, paddingTop: 20, borderTop: '1px solid #1a1a1a' }}>
-        <a href="/admin/inventario" style={{ padding: '11px 20px', background: '#1a1a1a', color: '#666', borderRadius: 7, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
+        <a href="/admin/inventario" style={{ padding: '11px 20px', background: '#f3f4f6', color: '#6b7280', borderRadius: 7, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
         <button onClick={handleSave} disabled={saving} style={{
           padding: '11px 28px', background: '#E8531D', border: 'none', borderRadius: 7,
-          color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1
+          color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1
         }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
       </div>
     </div>

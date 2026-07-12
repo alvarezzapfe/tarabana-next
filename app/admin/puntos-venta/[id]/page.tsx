@@ -42,7 +42,7 @@ export default function EditPuntoVentaPage() {
 
   const inp = (label: string, key: string, opts?: { type?: string; placeholder?: string; required?: boolean }) => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-      <label style={{ color: '#888', fontSize: 12, fontWeight: 500 }}>{label}{opts?.required && ' *'}</label>
+      <label style={{ color: '#6b7280', fontSize: 13, fontWeight: 500 }}>{label}{opts?.required && ' *'}</label>
       <input
         type={opts?.type || 'text'}
         value={(form as any)[key]}
@@ -50,8 +50,8 @@ export default function EditPuntoVentaPage() {
         placeholder={opts?.placeholder}
         required={opts?.required}
         style={{
-          background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8,
-          padding: '10px 14px', color: '#fff', fontSize: 14, outline: 'none',
+          background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8,
+          padding: '10px 14px', color: '#1a1a1a', fontSize: 14, outline: 'none',
         }}
       />
     </div>
@@ -95,11 +95,11 @@ export default function EditPuntoVentaPage() {
     else { const json = await res.json(); setError(json.error || 'Error al eliminar') }
   }
 
-  if (loading) return <div style={{ color: '#555', padding: 40 }}>Cargando...</div>
+  if (loading) return <div style={{ color: '#6b7280', padding: 40 }}>Cargando...</div>
 
   return (
     <div style={{ maxWidth: 600 }}>
-      <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700, marginBottom: 24 }}>Editar punto de venta</h1>
+      <h1 style={{ color: '#1a1a1a', fontSize: 24, fontWeight: 700, marginBottom: 24 }}>Editar punto de venta</h1>
 
       {error && <div style={{ background: '#3a1515', border: '1px solid #E8531D', borderRadius: 8, padding: '12px 16px', color: '#ff6b6b', fontSize: 13, marginBottom: 20 }}>{error}</div>}
 
@@ -107,10 +107,10 @@ export default function EditPuntoVentaPage() {
         {inp('Nombre', 'nombre', { required: true })}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#888', fontSize: 12, fontWeight: 500 }}>Tipo *</label>
+          <label style={{ color: '#6b7280', fontSize: 13, fontWeight: 500 }}>Tipo *</label>
           <select value={form.tipo} onChange={e => set('tipo', e.target.value)} style={{
-            background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8,
-            padding: '10px 14px', color: '#fff', fontSize: 14, outline: 'none',
+            background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8,
+            padding: '10px 14px', color: '#1a1a1a', fontSize: 14, outline: 'none',
           }}>
             {Object.entries(TIPO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
@@ -133,14 +133,14 @@ export default function EditPuntoVentaPage() {
         {inp('Horario', 'horario', { placeholder: 'Lun–Sáb 13:00–23:00' })}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#888', fontSize: 12, fontWeight: 500 }}>Notas</label>
+          <label style={{ color: '#6b7280', fontSize: 13, fontWeight: 500 }}>Notas</label>
           <textarea
             value={form.notas}
             onChange={e => set('notas', e.target.value)}
             rows={3}
             style={{
-              background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 8,
-              padding: '10px 14px', color: '#fff', fontSize: 14, outline: 'none', resize: 'vertical',
+              background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8,
+              padding: '10px 14px', color: '#1a1a1a', fontSize: 14, outline: 'none', resize: 'vertical',
             }}
           />
         </div>
@@ -155,36 +155,36 @@ export default function EditPuntoVentaPage() {
         {inp('Orden', 'orden', { type: 'number' })}
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <label style={{ color: '#888', fontSize: 12, fontWeight: 500 }}>Imagen</label>
+          <label style={{ color: '#6b7280', fontSize: 13, fontWeight: 500 }}>Imagen</label>
           {form.imagen_url && (
             <img src={form.imagen_url} alt="Imagen actual" style={{
               width: 120, height: 80, objectFit: 'cover', borderRadius: 8,
-              border: '1px solid #2a2a2a', marginBottom: 8,
+              border: '1px solid #d1d5db', marginBottom: 8,
             }} />
           )}
           <input
             type="file"
             accept="image/*"
             onChange={e => setImagen(e.target.files?.[0] || null)}
-            style={{ color: '#888', fontSize: 13 }}
+            style={{ color: '#6b7280', fontSize: 13 }}
           />
-          {form.imagen_url && <p style={{ color: '#555', fontSize: 11, margin: 0 }}>Sube una nueva imagen para reemplazar la actual</p>}
+          {form.imagen_url && <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Sube una nueva imagen para reemplazar la actual</p>}
         </div>
 
         <div style={{ display: 'flex', gap: 12, marginTop: 8, justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', gap: 12 }}>
             <button type="submit" disabled={saving} style={{
-              background: '#E8531D', color: '#fff', border: 'none', padding: '12px 28px',
+              background: '#E8531D', color: '#1a1a1a', border: 'none', padding: '12px 28px',
               borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? 'wait' : 'pointer',
               opacity: saving ? 0.6 : 1,
             }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
             <a href="/admin/puntos-venta" style={{
-              color: '#666', padding: '12px 20px', fontSize: 14, textDecoration: 'none',
+              color: '#6b7280', padding: '12px 20px', fontSize: 14, textDecoration: 'none',
               display: 'flex', alignItems: 'center',
             }}>Cancelar</a>
           </div>
           <button type="button" onClick={handleDelete} style={{
-            background: 'transparent', color: '#ef4444', border: '1px solid #ef444440',
+            background: 'transparent', color: '#ef4444', border: '1px solid #fca5a5',
             padding: '12px 20px', borderRadius: 8, fontSize: 13, fontWeight: 500,
             cursor: 'pointer',
           }}>Eliminar</button>

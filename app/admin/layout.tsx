@@ -40,44 +40,44 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: '#0a0a0a', fontFamily: 'system-ui, sans-serif', margin: 0 }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif', margin: 0 }}>
       <style>{`
-        .nav-link { display:flex; align-items:center; gap:10px; color:#666; text-decoration:none; padding:8px 10px; border-radius:7px; font-size:13.5px; font-weight:450; transition:all 0.15s; }
-        .nav-link:hover { background:#1a1a1a !important; color:#e0e0e0 !important; }
-        body { background: #0a0a0a !important; }
+        .nav-link { display:flex; align-items:center; gap:10px; color:#27500A; text-decoration:none; padding:9px 12px; border-radius:8px; font-size:14px; font-weight:450; transition:all 0.15s; }
+        .nav-link:hover { background:rgba(59,109,17,0.1) !important; color:#3B6D11 !important; }
+        body { background: #fafafa !important; }
       `}</style>
       <aside style={{
-        width: 230, background: '#0f0f0f', borderRight: '1px solid #1a1a1a',
+        width: 240, background: '#EAF3DE', borderRight: '1px solid #C0DD97',
         display: 'flex', flexDirection: 'column', padding: '20px 12px',
         position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 50
       }}>
-        <div style={{ padding: '0 8px', marginBottom: 28 }}>
-          <img src="/tarabanalogo.png" alt="Tarabaña" style={{ height: 32, objectFit: 'contain', objectPosition: 'left' }} />
+        <div style={{ padding: '0 10px', marginBottom: 28 }}>
+          <img src="/tarabanalogo.png" alt="Tarabaña" style={{ height: 34, objectFit: 'contain', objectPosition: 'left' }} />
         </div>
-        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 1 }}>
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, overflowY: 'auto' }}>
           {navItems.map(item => (
             <a key={item.href} href={item.href} className="nav-link">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d={item.icon} />
               </svg>
               {item.label}
             </a>
           ))}
         </nav>
-        <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 14 }}>
-          <p style={{ color: '#444', fontSize: 11.5, marginBottom: 2, padding: '0 10px' }}>{profile.full_name || user.email}</p>
-          <p style={{ color: '#E8531D', fontSize: 10.5, marginBottom: 14, padding: '0 10px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
+        <div style={{ borderTop: '1px solid #C0DD97', paddingTop: 14 }}>
+          <p style={{ color: '#27500A', fontSize: 13, fontWeight: 500, marginBottom: 2, padding: '0 12px' }}>{profile.full_name || user.email}</p>
+          <p style={{ color: '#3B6D11', fontSize: 11, marginBottom: 14, padding: '0 12px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
             {roleLabel[profile.role] || profile.role}
           </p>
-          <a href="/api/auth/logout" className="nav-link" style={{ color: '#444' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <a href="/api/auth/logout" className="nav-link" style={{ color: '#27500A', opacity: 0.7 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
             </svg>
             Cerrar sesión
           </a>
         </div>
       </aside>
-      <main style={{ flex: 1, marginLeft: 230, padding: '36px 40px', background: '#0a0a0a', minHeight: '100vh' }}>
+      <main style={{ flex: 1, marginLeft: 240, padding: '36px 44px', background: '#fafafa', minHeight: '100vh' }}>
         {children}
       </main>
     </div>

@@ -10,32 +10,32 @@ export default async function ProduccionPage() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ color: '#fff', fontSize: 24, fontWeight: 700 }}>Producción</h1>
+        <h1 style={{ color: '#1a1a1a', fontSize: 24, fontWeight: 700 }}>Producción</h1>
         <a href="/admin/produccion/nuevo" style={{
-          background: '#E8531D', color: '#fff', padding: '10px 20px',
+          background: '#E8531D', color: '#1a1a1a', padding: '10px 20px',
           borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600
         }}>+ Nuevo lote</a>
       </div>
       {!lotes?.length ? (
-        <div style={{ color: '#555', textAlign: 'center', padding: 60 }}>No hay lotes registrados</div>
+        <div style={{ color: '#6b7280', textAlign: 'center', padding: 60 }}>No hay lotes registrados</div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #1e1e1e' }}>
+            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
               {['Lote', 'Producto', 'Volumen', 'Latas', 'Barriles', 'Fecha'].map(h => (
-                <th key={h} style={{ color: '#555', fontSize: 12, textAlign: 'left', padding: '8px 12px', textTransform: 'uppercase' }}>{h}</th>
+                <th key={h} style={{ color: '#6b7280', fontSize: 13, textAlign: 'left', padding: '8px 12px', textTransform: 'uppercase' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {lotes.map(l => (
-              <tr key={l.id} style={{ borderBottom: '1px solid #111' }}>
-                <td style={{ color: '#ccc', padding: '12px', fontSize: 14 }}>{l.nombre_lote}</td>
-                <td style={{ color: '#ccc', padding: '12px', fontSize: 14 }}>{(l.productos as any)?.nombre || '—'}</td>
-                <td style={{ color: '#ccc', padding: '12px', fontSize: 14 }}>{l.volumen_litros}L</td>
-                <td style={{ color: '#ccc', padding: '12px', fontSize: 14 }}>{l.latas_producidas}</td>
-                <td style={{ color: '#ccc', padding: '12px', fontSize: 14 }}>{l.barriles_producidos}</td>
-                <td style={{ color: '#555', padding: '12px', fontSize: 13 }}>{l.fecha_produccion}</td>
+              <tr key={l.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.nombre_lote}</td>
+                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{(l.productos as any)?.nombre || '—'}</td>
+                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.volumen_litros}L</td>
+                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.latas_producidas}</td>
+                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.barriles_producidos}</td>
+                <td style={{ color: '#6b7280', padding: '12px', fontSize: 13 }}>{l.fecha_produccion}</td>
               </tr>
             ))}
           </tbody>

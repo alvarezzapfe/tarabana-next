@@ -99,11 +99,11 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
     a.click()
   }
 
-  const cardStyle = { background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: '20px 24px' }
-  const titleStyle = { color: '#555', fontSize: 10, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 12 }
-  const selStyle = { padding: '8px 14px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 8, color: '#ddd', fontSize: 13, outline: 'none', cursor: 'pointer' }
+  const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '20px 24px' }
+  const titleStyle = { color: '#6b7280', fontSize: 13, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 12 }
+  const selStyle = { padding: '8px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 13, outline: 'none', cursor: 'pointer' }
   const btnVista = (v: 'mes' | 'año' | 'rango', label: string) => (
-    <button onClick={() => setVista(v)} style={{ padding: '8px 18px', borderRadius: 8, border: `1px solid ${vista === v ? '#E8531D' : '#1e1e1e'}`, background: vista === v ? '#E8531D' : '#111', color: vista === v ? '#fff' : '#555', fontSize: 12, cursor: 'pointer', fontWeight: vista === v ? 600 : 400 }}>{label}</button>
+    <button onClick={() => setVista(v)} style={{ padding: '8px 18px', borderRadius: 8, border: `1px solid ${vista === v ? '#E8531D' : '#1e1e1e'}`, background: vista === v ? '#E8531D' : '#111', color: vista === v ? '#fff' : '#555', fontSize: 13, cursor: 'pointer', fontWeight: vista === v ? 600 : 400 }}>{label}</button>
   )
 
   const periodoLabel = vista === 'mes' ? `${meses[mesSel]} ${añoSel}` : vista === 'año' ? `Año ${añoSel}` : `${rangoDesde} → ${rangoHasta}`
@@ -113,10 +113,10 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Reportes de ventas</h1>
+          <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Reportes de ventas</h1>
           <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 500 }}>{periodoLabel}</p>
         </div>
-        <button onClick={handleExport} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #1e1e1e', background: '#1a1a1a', color: '#888', fontSize: 12, cursor: 'pointer' }}>↓ Exportar CSV</button>
+        <button onClick={handleExport} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f3f4f6', color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>↓ Exportar CSV</button>
       </div>
 
       {/* Selector de periodo */}
@@ -126,7 +126,7 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
           {btnVista('año', 'Por año')}
           {btnVista('rango', 'Rango')}
         </div>
-        <div style={{ width: 1, height: 32, background: '#1e1e1e' }} />
+        <div style={{ width: 1, height: 32, background: '#f3f4f6' }} />
         {vista === 'mes' && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <select value={añoSel} onChange={e => setAñoSel(+e.target.value)} style={selStyle}>
@@ -145,12 +145,12 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
         {vista === 'rango' && (
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <input type="date" value={rangoDesde} onChange={e => setRangoDesde(e.target.value)} style={{ ...selStyle, fontFamily: 'system-ui' }} />
-            <span style={{ color: '#555' }}>→</span>
+            <span style={{ color: '#6b7280' }}>→</span>
             <input type="date" value={rangoHasta} onChange={e => setRangoHasta(e.target.value)} style={{ ...selStyle, fontFamily: 'system-ui' }} />
           </div>
         )}
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 20 }}>
-          <span style={{ color: '#555', fontSize: 12 }}>{pedidosFiltrados.length} pedidos en periodo</span>
+          <span style={{ color: '#6b7280', fontSize: 12 }}>{pedidosFiltrados.length} pedidos en periodo</span>
         </div>
       </div>
 
@@ -178,8 +178,8 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
           <AreaChart data={ventasPorPeriodo}>
             <XAxis dataKey="periodo" stroke="#333" tick={{ fill: '#555', fontSize: 11 }} />
             <YAxis stroke="#333" tick={{ fill: '#555', fontSize: 11 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-            <Tooltip formatter={(v: any) => `$${v.toLocaleString('es-MX')}`} contentStyle={{ background: '#1a1a1a', border: '1px solid #2a2a2a', color: '#fff' }} />
-            <Legend wrapperStyle={{ color: '#555', fontSize: 11 }} />
+            <Tooltip formatter={(v: any) => `$${v.toLocaleString('es-MX')}`} contentStyle={{ background: '#f3f4f6', border: '1px solid #d1d5db', color: '#1a1a1a' }} />
+            <Legend wrapperStyle={{ color: '#6b7280', fontSize: 11 }} />
             <Area type="monotone" dataKey="ventas" stroke="#E8531D" fill="#E8531D22" name="Ventas" strokeWidth={2} />
             <Area type="monotone" dataKey="cobrado" stroke="#10b981" fill="#10b98122" name="Cobrado" strokeWidth={2} />
           </AreaChart>
@@ -190,14 +190,14 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
         {/* Top clientes */}
         <div style={cardStyle}>
           <p style={titleStyle}>Concentración de clientes</p>
-          {topClientes.length === 0 ? <p style={{ color: '#333', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
+          {topClientes.length === 0 ? <p style={{ color: '#9ca3af', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ borderBottom: '1px solid #1a1a1a' }}>{['Cliente','Pedidos','Total','Cobrado'].map((h,i) => <th key={i} style={{ color: '#333', fontSize: 10, textAlign: 'left', padding: '6px 8px', textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>{['Cliente','Pedidos','Total','Cobrado'].map((h,i) => <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '6px 8px', textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>{topClientes.map((c, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #0f0f0f' }}>
-                  <td style={{ padding: '8px', color: '#ddd', fontSize: 12 }}><div>{c.nombre}</div><div style={{ color: '#444', fontSize: 10 }}>{c.email}</div></td>
-                  <td style={{ padding: '8px', color: '#555', fontSize: 12 }}>{c.pedidos}</td>
-                  <td style={{ padding: '8px', color: '#E8531D', fontSize: 12, fontWeight: 600 }}>${c.total.toLocaleString('es-MX')}</td>
+                  <td style={{ padding: '8px', color: '#1a1a1a', fontSize: 12 }}><div>{c.nombre}</div><div style={{ color: '#9ca3af', fontSize: 10 }}>{c.email}</div></td>
+                  <td style={{ padding: '8px', color: '#6b7280', fontSize: 12 }}>{c.pedidos}</td>
+                  <td style={{ padding: '8px', color: '#E8531D', fontSize: 13, fontWeight: 600 }}>${c.total.toLocaleString('es-MX')}</td>
                   <td style={{ padding: '8px', color: '#10b981', fontSize: 12 }}>${c.pagado.toLocaleString('es-MX')}</td>
                 </tr>
               ))}</tbody>
@@ -208,14 +208,14 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
         {/* Top productos */}
         <div style={cardStyle}>
           <p style={titleStyle}>Productos más vendidos</p>
-          {topProductos.length === 0 ? <p style={{ color: '#333', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
+          {topProductos.length === 0 ? <p style={{ color: '#9ca3af', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ borderBottom: '1px solid #1a1a1a' }}>{['Producto','Unidades','Revenue'].map((h,i) => <th key={i} style={{ color: '#333', fontSize: 10, textAlign: 'left', padding: '6px 8px', textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>{['Producto','Unidades','Revenue'].map((h,i) => <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '6px 8px', textTransform: 'uppercase' }}>{h}</th>)}</tr></thead>
               <tbody>{topProductos.map((p, i) => (
                 <tr key={i} style={{ borderBottom: '1px solid #0f0f0f' }}>
-                  <td style={{ padding: '8px', color: '#ddd', fontSize: 12 }}><div>{p.nombre}</div><div style={{ color: '#444', fontSize: 10 }}>{p.estilo}</div></td>
-                  <td style={{ padding: '8px', color: '#555', fontSize: 12 }}>{p.cantidad}</td>
-                  <td style={{ padding: '8px', color: '#f59e0b', fontSize: 12, fontWeight: 600 }}>${p.revenue.toLocaleString('es-MX')}</td>
+                  <td style={{ padding: '8px', color: '#1a1a1a', fontSize: 12 }}><div>{p.nombre}</div><div style={{ color: '#9ca3af', fontSize: 10 }}>{p.estilo}</div></td>
+                  <td style={{ padding: '8px', color: '#6b7280', fontSize: 12 }}>{p.cantidad}</td>
+                  <td style={{ padding: '8px', color: '#f59e0b', fontSize: 13, fontWeight: 600 }}>${p.revenue.toLocaleString('es-MX')}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -226,21 +226,21 @@ export default function ReportesClient({ pedidos }: { pedidos: any[] }) {
       {/* Pedidos del periodo */}
       <div style={cardStyle}>
         <p style={titleStyle}>Detalle de pedidos — {periodoLabel}</p>
-        {pedidosFiltrados.length === 0 ? <p style={{ color: '#333', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
+        {pedidosFiltrados.length === 0 ? <p style={{ color: '#9ca3af', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr style={{ borderBottom: '1px solid #1a1a1a' }}>{['#','Fecha','Cliente','Total','Status','Pago'].map((h,i) => <th key={i} style={{ color: '#333', fontSize: 10, textAlign: 'left', padding: '8px 12px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>)}</tr></thead>
+            <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>{['#','Fecha','Cliente','Total','Status','Pago'].map((h,i) => <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 12px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>)}</tr></thead>
             <tbody>
               {pedidosFiltrados.map(p => (
-                <tr key={p.id} style={{ borderBottom: '1px solid #111' }}>
-                  <td style={{ padding: '10px 12px', color: '#444', fontSize: 11, fontFamily: 'monospace' }}>#{p.id.slice(-6).toUpperCase()}</td>
-                  <td style={{ padding: '10px 12px', color: '#555', fontSize: 11 }}>{new Date(p.created_at).toLocaleDateString('es-MX')}</td>
-                  <td style={{ padding: '10px 12px', color: '#ddd', fontSize: 12 }}>{p.profiles?.full_name || p.profiles?.email || '—'}</td>
+                <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '10px 12px', color: '#9ca3af', fontSize: 13, fontFamily: 'monospace' }}>#{p.id.slice(-6).toUpperCase()}</td>
+                  <td style={{ padding: '10px 12px', color: '#6b7280', fontSize: 11 }}>{new Date(p.created_at).toLocaleDateString('es-MX')}</td>
+                  <td style={{ padding: '10px 12px', color: '#1a1a1a', fontSize: 12 }}>{p.profiles?.full_name || p.profiles?.email || '—'}</td>
                   <td style={{ padding: '10px 12px', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>${(p.total || 0).toLocaleString('es-MX')}</td>
                   <td style={{ padding: '10px 12px' }}>
-                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: p.status === 'entregado' ? '#10b98118' : p.status === 'pendiente' ? '#f59e0b18' : '#3b82f618', color: p.status === 'entregado' ? '#10b981' : p.status === 'pendiente' ? '#f59e0b' : '#3b82f6' }}>{p.status}</span>
+                    <span style={{ fontSize: 13, padding: '2px 8px', borderRadius: 99, background: p.status === 'entregado' ? '#d1fae5' : p.status === 'pendiente' ? '#fef3c7' : '#dbeafe', color: p.status === 'entregado' ? '#10b981' : p.status === 'pendiente' ? '#f59e0b' : '#3b82f6' }}>{p.status}</span>
                   </td>
                   <td style={{ padding: '10px 12px' }}>
-                    <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 99, background: p.pagado ? '#10b98118' : '#ef444418', color: p.pagado ? '#10b981' : '#ef4444' }}>{p.pagado ? 'Pagado' : 'Pendiente'}</span>
+                    <span style={{ fontSize: 13, padding: '2px 8px', borderRadius: 99, background: p.pagado ? '#d1fae5' : '#fee2e2', color: p.pagado ? '#10b981' : '#ef4444' }}>{p.pagado ? 'Pagado' : 'Pendiente'}</span>
                   </td>
                 </tr>
               ))}

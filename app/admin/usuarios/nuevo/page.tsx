@@ -33,20 +33,20 @@ export default function NuevoUsuarioInternoPage() {
 
   const inp = (label: string, key: string, type = 'text', placeholder = '') => (
     <div>
-      <label style={{ color: '#555', fontSize: 11.5, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
+      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
       <input type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)} placeholder={placeholder}
-        style={{ width: '100%', padding: '11px 14px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none' }} />
+        style={{ width: '100%', padding: '11px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none' }} />
     </div>
   )
 
   if (success) return (
     <div style={{ padding: '36px 40px', display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400 }}>
       <div style={{ textAlign: 'center' }}>
-        <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#10b98118', border: '2px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+        <div style={{ width: 56, height: 56, borderRadius: '50%', background: '#d1fae5', border: '2px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
-        <p style={{ color: '#fff', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Invitación enviada</p>
-        <p style={{ color: '#555', fontSize: 14 }}>El usuario recibirá un email para activar su cuenta.</p>
+        <p style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, marginBottom: 6 }}>Invitación enviada</p>
+        <p style={{ color: '#6b7280', fontSize: 14 }}>El usuario recibirá un email para activar su cuenta.</p>
       </div>
     </div>
   )
@@ -54,12 +54,12 @@ export default function NuevoUsuarioInternoPage() {
   return (
     <div style={{ padding: '36px 40px', maxWidth: 680 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 32 }}>
-        <a href="/admin/usuarios" style={{ color: '#444', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
+        <a href="/admin/usuarios" style={{ color: '#9ca3af', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Usuarios
         </a>
         <span style={{ color: '#2a2a2a' }}>/</span>
-        <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Invitar usuario interno</h1>
+        <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>Invitar usuario interno</h1>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
@@ -68,19 +68,19 @@ export default function NuevoUsuarioInternoPage() {
       </div>
 
       <div style={{ marginBottom: 24 }}>
-        <label style={{ color: '#555', fontSize: 11.5, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular (opcional)</label>
+        <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular (opcional)</label>
         <div style={{ display: 'flex', gap: 0 }}>
-          <div style={{ background: '#141414', border: '1px solid #252525', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '11px 14px', color: '#555', fontSize: 14, whiteSpace: 'nowrap' }}>
+          <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '11px 14px', color: '#6b7280', fontSize: 14, whiteSpace: 'nowrap' }}>
             🇲🇽 +52
           </div>
           <input type="tel" value={form.cel} onChange={e => set('cel', e.target.value.replace(/\D/g, '').slice(0, 10))}
             placeholder="55 1234 5678"
-            style={{ flex: 1, padding: '11px 14px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: '0 8px 8px 0', color: '#fff', fontSize: 14, outline: 'none' }} />
+            style={{ flex: 1, padding: '11px 14px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '0 8px 8px 0', color: '#1a1a1a', fontSize: 14, outline: 'none' }} />
         </div>
       </div>
 
       <div style={{ marginBottom: 28 }}>
-        <label style={{ color: '#555', fontSize: 11.5, display: 'block', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Rol *</label>
+        <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Rol *</label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
           {roles.map(r => (
             <button key={r.value} onClick={() => set('rol', r.value)} style={{
@@ -95,8 +95,8 @@ export default function NuevoUsuarioInternoPage() {
                 </svg>
               </div>
               <div style={{ flex: 1 }}>
-                <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: '#ddd' }}>{r.label}</p>
-                <p style={{ margin: '2px 0 0', fontSize: 11, color: '#555', lineHeight: 1.4 }}>{r.desc}</p>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: '#1a1a1a' }}>{r.label}</p>
+                <p style={{ margin: '2px 0 0', fontSize: 13, color: '#6b7280', lineHeight: 1.4 }}>{r.desc}</p>
               </div>
               {form.rol === r.value && (
                 <div style={{ width: 18, height: 18, borderRadius: '50%', background: r.color, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -109,13 +109,13 @@ export default function NuevoUsuarioInternoPage() {
       </div>
 
       {error && (
-        <div style={{ background: '#2a1010', border: '1px solid #ef444440', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+        <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
           <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>{error}</p>
         </div>
       )}
 
       <div style={{ display: 'flex', gap: 10 }}>
-        <a href="/admin/usuarios" style={{ padding: '12px 20px', background: '#1a1a1a', color: '#555', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>Cancelar</a>
+        <a href="/admin/usuarios" style={{ padding: '12px 20px', background: '#f3f4f6', color: '#6b7280', borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 500 }}>Cancelar</a>
         <button onClick={handleSubmit} disabled={loading || !form.nombre || !form.email || !form.rol} style={{
           flex: 1, padding: '12px', background: form.nombre && form.email && form.rol ? '#E8531D' : '#1a1a1a',
           border: 'none', borderRadius: 8, color: form.nombre && form.email && form.rol ? '#fff' : '#444',

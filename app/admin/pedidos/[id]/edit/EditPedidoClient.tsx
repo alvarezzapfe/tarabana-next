@@ -41,62 +41,62 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
     router.refresh()
   }
 
-  const inputStyle = { width: '100%', padding: '10px 13px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 8, color: '#fff', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', fontFamily: 'system-ui' }
-  const labelStyle = { color: '#555', fontSize: 11, display: 'block' as const, marginBottom: 5, textTransform: 'uppercase' as const, letterSpacing: '0.07em' }
+  const inputStyle = { width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', fontFamily: 'system-ui' }
+  const labelStyle = { color: '#6b7280', fontSize: 13, display: 'block' as const, marginBottom: 5, textTransform: 'uppercase' as const, letterSpacing: '0.07em' }
   const Section = ({ title }: { title: string }) => (
-    <p style={{ color: '#E8531D', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '24px 0 12px', paddingBottom: 6, borderBottom: '1px solid #1a1a1a' }}>{title}</p>
+    <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '24px 0 12px', paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>{title}</p>
   )
 
   return (
     <div style={{ padding: '36px 40px', maxWidth: 800, fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-        <a href="/admin/pedidos" style={{ color: '#444', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <a href="/admin/pedidos" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Pedidos
         </a>
         <span style={{ color: '#2a2a2a' }}>/</span>
-        <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>
+        <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>
           Editar pedido <span style={{ color: '#E8531D', fontFamily: 'monospace' }}>#{pedido.id.slice(-6).toUpperCase()}</span>
         </h1>
       </div>
 
       {/* Info cliente (read-only) */}
-      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 10, padding: '14px 16px', marginBottom: 4 }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 4 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <p style={{ margin: 0, color: '#fff', fontSize: 14, fontWeight: 600 }}>{pedido.profiles?.full_name || '—'}</p>
-            <p style={{ margin: '2px 0 0', color: '#555', fontSize: 12 }}>{pedido.profiles?.email}</p>
+            <p style={{ margin: 0, color: '#1a1a1a', fontSize: 14, fontWeight: 600 }}>{pedido.profiles?.full_name || '—'}</p>
+            <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: 12 }}>{pedido.profiles?.email}</p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <p style={{ margin: 0, color: '#E8531D', fontSize: 20, fontWeight: 700 }}>${(pedido.total || 0).toLocaleString('es-MX')}</p>
-            <p style={{ margin: '2px 0 0', color: '#555', fontSize: 11 }}>{pedido.tipo_precio === 'taproom' ? 'Precio taproom' : 'Precio público'}</p>
+            <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: 11 }}>{pedido.tipo_precio === 'taproom' ? 'Precio taproom' : 'Precio público'}</p>
           </div>
         </div>
       </div>
 
       {/* Productos (read-only) */}
       <Section title="Productos del pedido" />
-      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 10, overflow: 'hidden', marginBottom: 4 }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', marginBottom: 4 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #1a1a1a' }}>
+            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
               {['Producto', 'Estilo', 'Cantidad', 'Precio unit.', 'Subtotal'].map((h, i) => (
-                <th key={i} style={{ color: '#444', fontSize: 10, textAlign: 'left', padding: '8px 14px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
+                <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 14px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {pedido.pedido_items?.length > 0 ? pedido.pedido_items.map((item: any, i: number) => (
-              <tr key={i} style={{ borderBottom: '1px solid #161616' }}>
-                <td style={{ padding: '10px 14px', color: '#fff', fontSize: 13 }}>{item.productos?.nombre || '—'}</td>
-                <td style={{ padding: '10px 14px', color: '#888', fontSize: 12 }}>{item.productos?.estilo || '—'}</td>
+              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ padding: '10px 14px', color: '#1a1a1a', fontSize: 13 }}>{item.productos?.nombre || '—'}</td>
+                <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>{item.productos?.estilo || '—'}</td>
                 <td style={{ padding: '10px 14px', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>{item.cantidad}</td>
-                <td style={{ padding: '10px 14px', color: '#ccc', fontSize: 12 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</td>
-                <td style={{ padding: '10px 14px', color: '#fff', fontSize: 13, fontWeight: 600 }}>${((item.cantidad || 0) * (item.precio_unitario || 0)).toLocaleString('es-MX')}</td>
+                <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</td>
+                <td style={{ padding: '10px 14px', color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>${((item.cantidad || 0) * (item.precio_unitario || 0)).toLocaleString('es-MX')}</td>
               </tr>
             )) : (
-              <tr><td colSpan={5} style={{ padding: '20px 14px', color: '#444', fontSize: 13 }}>Sin productos registrados</td></tr>
+              <tr><td colSpan={5} style={{ padding: '20px 14px', color: '#9ca3af', fontSize: 13 }}>Sin productos registrados</td></tr>
             )}
           </tbody>
         </table>
@@ -125,7 +125,7 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
         <div>
           <label style={labelStyle}>Fecha del pedido</label>
           <input type="datetime-local" value={fechaPedido} onChange={e => setFechaPedido(e.target.value)} style={{ ...inputStyle, colorScheme: 'dark' }} disabled />
-          <p style={{ color: '#444', fontSize: 11, marginTop: 4 }}>Solo lectura</p>
+          <p style={{ color: '#9ca3af', fontSize: 13, marginTop: 4 }}>Solo lectura</p>
         </div>
         <div>
           <label style={labelStyle}>Fecha de entrega prometida</label>
@@ -160,8 +160,8 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
 
       {/* Acciones */}
       <div style={{ display: 'flex', gap: 10 }}>
-        <a href="/admin/pedidos" style={{ padding: '11px 20px', background: '#1a1a1a', color: '#555', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
-        <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '11px', background: '#E8531D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
+        <a href="/admin/pedidos" style={{ padding: '11px 20px', background: '#f3f4f6', color: '#6b7280', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
+        <button onClick={handleSave} disabled={saving} style={{ flex: 1, padding: '11px', background: '#E8531D', border: 'none', borderRadius: 8, color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1 }}>
           {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
       </div>

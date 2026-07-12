@@ -39,20 +39,20 @@ export default function TaproomConfigClient({ config }: { config: any }) {
     setTimeout(() => setSaved(false), 3000)
   }
 
-  const inputStyle = { padding: '8px 10px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 6, color: '#fff', fontSize: 13, outline: 'none', fontFamily: 'system-ui' }
+  const inputStyle = { padding: '8px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#1a1a1a', fontSize: 13, outline: 'none', fontFamily: 'system-ui' }
 
   return (
     <div style={{ padding: '36px 40px', maxWidth: 760, fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ color: '#fff', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Taproom — Configuración</h1>
-      <p style={{ color: '#555', fontSize: 13, marginBottom: 32 }}>Horarios y mensajes que se muestran en tarabana.mx/taproom</p>
+      <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Taproom — Configuración</h1>
+      <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 32 }}>Horarios y mensajes que se muestran en tarabana.mx/taproom</p>
 
       {/* Horarios */}
-      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 24, marginBottom: 20 }}>
-        <p style={{ color: '#E8531D', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 20 }}>Horarios por día</p>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 20 }}>
+        <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 20 }}>Horarios por día</p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
           {horarios.map((h, i) => (
-            <div key={h.dia} style={{ display: 'grid', gridTemplateColumns: '120px 60px 1fr', gap: 16, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #141414' }}>
-              <span style={{ color: '#ddd', fontSize: 14 }}>{h.dia}</span>
+            <div key={h.dia} style={{ display: 'grid', gridTemplateColumns: '120px 60px 1fr', gap: 16, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f3f4f6' }}>
+              <span style={{ color: '#1a1a1a', fontSize: 14 }}>{h.dia}</span>
               <button onClick={() => toggleDia(i)} style={{
                 width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', transition: 'all 0.2s',
                 background: h.abierto ? '#E8531D' : '#2a2a2a',
@@ -62,11 +62,11 @@ export default function TaproomConfigClient({ config }: { config: any }) {
               {h.abierto ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                   <input type="time" value={h.apertura} onChange={e => setHora(i, 'apertura', e.target.value)} style={inputStyle} />
-                  <span style={{ color: '#555', fontSize: 12 }}>–</span>
+                  <span style={{ color: '#6b7280', fontSize: 12 }}>–</span>
                   <input type="time" value={h.cierre} onChange={e => setHora(i, 'cierre', e.target.value)} style={inputStyle} />
                 </div>
               ) : (
-                <span style={{ color: '#333', fontSize: 12, fontFamily: 'monospace' }}>Cerrado</span>
+                <span style={{ color: '#9ca3af', fontSize: 13, fontFamily: 'monospace' }}>Cerrado</span>
               )}
             </div>
           ))}
@@ -74,16 +74,16 @@ export default function TaproomConfigClient({ config }: { config: any }) {
       </div>
 
       {/* Mensaje especial */}
-      <div style={{ background: '#111', border: '1px solid #1a1a1a', borderRadius: 12, padding: 24, marginBottom: 24 }}>
-        <p style={{ color: '#E8531D', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Mensaje especial</p>
-        <p style={{ color: '#555', fontSize: 12, marginBottom: 14 }}>Aparece en banner naranja en la página. Déjalo vacío para no mostrar nada.</p>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 24 }}>
+        <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Mensaje especial</p>
+        <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 14 }}>Aparece en banner naranja en la página. Déjalo vacío para no mostrar nada.</p>
         <input value={mensaje} onChange={e => setMensaje(e.target.value)} placeholder="Ej: Cerrado el 25 de dic · Reabrimos el 2 de enero 🍺"
           style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' as const, padding: '12px 14px', fontSize: 14 }} />
       </div>
 
       <button onClick={handleSave} disabled={saving} style={{
         width: '100%', padding: '13px', background: '#E8531D', border: 'none', borderRadius: 8,
-        color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1,
+        color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1,
         transition: 'background 0.2s',
       }}>
         {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}

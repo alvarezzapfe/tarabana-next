@@ -96,27 +96,27 @@ export default function EditClientePage() {
 
   const inp = (label: string, key: string, placeholder = '', type = 'text', disabled = false) => (
     <div>
-      <label style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
+      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
       <input type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)} placeholder={placeholder} disabled={disabled}
-        style={{ width: '100%', padding: '10px 13px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #252525', borderRadius: 8, color: disabled ? '#555' : '#fff', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none' }} />
+        style={{ width: '100%', padding: '10px 13px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #d1d5db', borderRadius: 8, color: disabled ? '#555' : '#fff', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none' }} />
     </div>
   )
 
   const Section = ({ title }: { title: string }) => (
-    <p style={{ color: '#E8531D', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 10px', paddingBottom: 6, borderBottom: '1px solid #1a1a1a' }}>{title}</p>
+    <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 10px', paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>{title}</p>
   )
 
-  if (loading) return <div style={{ padding: 60, color: '#555', textAlign: 'center', fontFamily: 'system-ui' }}>Cargando...</div>
+  if (loading) return <div style={{ padding: 60, color: '#6b7280', textAlign: 'center', fontFamily: 'system-ui' }}>Cargando...</div>
 
   return (
     <div style={{ padding: '36px 40px', maxWidth: 720 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
-        <a href="/admin/clientes" style={{ color: '#444', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
+        <a href="/admin/clientes" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Clientes
         </a>
         <span style={{ color: '#2a2a2a' }}>/</span>
-        <h1 style={{ color: '#fff', fontSize: 18, fontWeight: 700, margin: 0 }}>Editar cliente</h1>
+        <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>Editar cliente</h1>
       </div>
 
       <Section title="Datos personales" />
@@ -127,11 +127,11 @@ export default function EditClientePage() {
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
         {inp('Email', 'email', '', 'email', false)}
         <div>
-          <label style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular</label>
+          <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular</label>
           <div style={{ display: 'flex' }}>
-            <div style={{ background: '#141414', border: '1px solid #252525', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '10px 12px', color: '#555', fontSize: 13 }}>🇲🇽 +52</div>
+            <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '10px 12px', color: '#6b7280', fontSize: 13 }}>🇲🇽 +52</div>
             <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="55 1234 5678"
-              style={{ flex: 1, padding: '10px 13px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: '0 8px 8px 0', color: '#fff', fontSize: 14, outline: 'none' }} />
+              style={{ flex: 1, padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '0 8px 8px 0', color: '#1a1a1a', fontSize: 14, outline: 'none' }} />
           </div>
         </div>
       </div>
@@ -145,17 +145,17 @@ export default function EditClientePage() {
             borderRadius: 8, cursor: 'pointer', textAlign: 'center'
           }}>
             <p style={{ margin: '0 0 3px', fontSize: 20 }}>{t.icon}</p>
-            <p style={{ margin: 0, color: form.tipo === t.value ? '#fff' : '#555', fontSize: 11, fontWeight: form.tipo === t.value ? 600 : 400 }}>{t.label}</p>
+            <p style={{ margin: 0, color: form.tipo === t.value ? '#fff' : '#555', fontSize: 13, fontWeight: form.tipo === t.value ? 600 : 400 }}>{t.label}</p>
           </button>
         ))}
       </div>
 
       <Section title="Facturación" />
-      <div style={{ background: '#111', border: '1px solid #1e1e1e', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
+      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.requiere_factura ? 16 : 0 }}>
           <div>
-            <p style={{ margin: 0, color: '#ddd', fontSize: 13.5, fontWeight: 500 }}>¿Requiere CFDI / factura?</p>
-            <p style={{ margin: '2px 0 0', color: '#555', fontSize: 12 }}>Activa para agregar datos fiscales</p>
+            <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13.5, fontWeight: 500 }}>¿Requiere CFDI / factura?</p>
+            <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: 12 }}>Activa para agregar datos fiscales</p>
           </div>
           <button onClick={() => set('requiere_factura', !form.requiere_factura)} style={{
             width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
@@ -171,9 +171,9 @@ export default function EditClientePage() {
               {inp('Razón Social *', 'razon_social', 'EMPRESA S.A. DE C.V.')}
             </div>
             <div>
-              <label style={{ color: '#555', fontSize: 11, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Uso de CFDI *</label>
+              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Uso de CFDI *</label>
               <select value={form.uso_cfdi} onChange={e => set('uso_cfdi', e.target.value)}
-                style={{ width: '100%', padding: '10px 13px', background: '#1a1a1a', border: '1px solid #252525', borderRadius: 8, color: form.uso_cfdi ? '#fff' : '#555', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
+                style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: form.uso_cfdi ? '#fff' : '#555', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
                 <option value="">— Selecciona uso —</option>
                 {usosCFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} – {u.desc}</option>)}
               </select>
@@ -189,15 +189,15 @@ export default function EditClientePage() {
         {inp('CP', 'cp', '06600')}
       </div>
 
-      {error && <div style={{ background: '#2a1010', border: '1px solid #ef444440', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
         <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>{error}</p>
       </div>}
 
       <div style={{ display: 'flex', gap: 10 }}>
-        <a href="/admin/clientes" style={{ padding: '11px 20px', background: '#1a1a1a', color: '#555', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
+        <a href="/admin/clientes" style={{ padding: '11px 20px', background: '#f3f4f6', color: '#6b7280', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
         <button onClick={handleSave} disabled={saving} style={{
           flex: 1, padding: '11px', background: '#E8531D', border: 'none', borderRadius: 8,
-          color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1
+          color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1
         }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
       </div>
     </div>
