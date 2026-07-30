@@ -64,22 +64,40 @@ export default function PortalLogin() {
     />
   )
 
-  const container = {
-    minHeight: '100vh', background: '#fff',
+  /* --login-overlay-alpha: ajusta opacidad del overlay crema sobre el patrón (0–1).
+     Subir → más crema, menos patrón. Bajar → más patrón visible.
+     Línea actual: ~línea 72 de app/portal/page.tsx */
+  const loginOverlayAlpha = 0.55
+
+  const container: React.CSSProperties = {
+    minHeight: '100vh',
+    backgroundImage: 'url(/pattern-brya.webp)',
+    backgroundRepeat: 'repeat',
+    backgroundSize: '300px',     /* tile a 300px — muestra suficiente detalle sin verse enorme */
+    backgroundPosition: 'center top',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
-    fontFamily: 'system-ui, sans-serif', padding: '20px'
+    fontFamily: 'system-ui, sans-serif', padding: '20px',
+    position: 'relative',
   }
 
-  const card = {
-    background: '#fff', border: '1px solid #ebebeb',
+  const overlay: React.CSSProperties = {
+    position: 'absolute', inset: 0,
+    background: `rgba(245, 240, 232, ${loginOverlayAlpha})`, /* crema de marca #F5F0E8 */
+    pointerEvents: 'none',
+  }
+
+  const card: React.CSSProperties = {
+    background: '#fff', border: '1px solid #e0dcd6',
     borderRadius: 18, padding: '44px 40px', width: '100%', maxWidth: 420,
-    boxShadow: '0 8px 40px rgba(0,0,0,0.07)'
+    boxShadow: '0 12px 48px rgba(0,0,0,0.13), 0 2px 8px rgba(0,0,0,0.06)',
+    position: 'relative', zIndex: 1,
   }
 
   // Email enviado
   if (emailSent) return (
     <div style={container}>
-      <div style={{ ...card, textAlign: 'center' }}>
+      <div style={overlay} />
+      <div style={{ ...card, textAlign: 'center' as const }}>
         <div style={{
           width: 64, height: 64, borderRadius: '50%', background: '#fff5f2',
           border: '2px solid #E8531D', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -116,7 +134,8 @@ export default function PortalLogin() {
   // Reset enviado
   if (resetSent) return (
     <div style={container}>
-      <div style={{ ...card, textAlign: 'center' }}>
+      <div style={overlay} />
+      <div style={{ ...card, textAlign: 'center' as const }}>
         <div style={{
           width: 64, height: 64, borderRadius: '50%', background: '#f0fdf4',
           border: '2px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -140,6 +159,7 @@ export default function PortalLogin() {
 
   return (
     <div style={container}>
+      <div style={overlay} />
       <div style={card}>
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 28 }}>
