@@ -12,7 +12,7 @@ const diasDefault = [
   { dia: 'Domingo', abierto: false, apertura: '', cierre: '' },
 ]
 
-export default function TaproomConfigClient({ config }: { config: any }) {
+export default function TaproomConfigClient({ config, canEdit }: { config: any; canEdit: boolean }) {
   const [horarios, setHorarios] = useState<any[]>(config?.horarios || diasDefault)
   const [mensaje, setMensaje] = useState(config?.mensaje_especial || '')
   const [saving, setSaving] = useState(false)
@@ -53,17 +53,17 @@ export default function TaproomConfigClient({ config }: { config: any }) {
           {horarios.map((h, i) => (
             <div key={h.dia} style={{ display: 'grid', gridTemplateColumns: '120px 60px 1fr', gap: 16, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid #f3f4f6' }}>
               <span style={{ color: '#1a1a1a', fontSize: 14 }}>{h.dia}</span>
-              <button onClick={() => toggleDia(i)} style={{
-                width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', position: 'relative', transition: 'all 0.2s',
-                background: h.abierto ? '#E8531D' : '#2a2a2a',
+              <button onClick={() => canEdit && toggleDia(i)} disabled={!canEdit} style={{
+                width: 44, height: 24, borderRadius: 12, border: 'none', cursor: canEdit ? 'pointer' : 'default', position: 'relative', transition: 'all 0.2s',
+                background: h.abierto ? '#E8531D' : '#2a2a2a', opacity: canEdit ? 1 : 0.6,
               }}>
                 <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: h.abierto ? 23 : 3, transition: 'all 0.2s' }} />
               </button>
               {h.abierto ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <input type="time" value={h.apertura} onChange={e => setHora(i, 'apertura', e.target.value)} style={inputStyle} />
+                  <input type="time" value={h.apertura} onChange={e => setHora(i, 'apertura', e.target.value)} disabled={!canEdit} style={inputStyle} />
                   <span style={{ color: '#6b7280', fontSize: 12 }}>–</span>
-                  <input type="time" value={h.cierre} onChange={e => setHora(i, 'cierre', e.target.value)} style={inputStyle} />
+                  <input type="time" value={h.cierre} onChange={e => setHora(i, 'cierre', e.target.value)} disabled={!canEdit} style={inputStyle} />
                 </div>
               ) : (
                 <span style={{ color: '#9ca3af', fontSize: 13, fontFamily: 'monospace' }}>Cerrado</span>
@@ -77,10 +77,11 @@ export default function TaproomConfigClient({ config }: { config: any }) {
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 24 }}>
         <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 6 }}>Mensaje especial</p>
         <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 14 }}>Aparece en banner naranja en la página. Déjalo vacío para no mostrar nada.</p>
-        <input value={mensaje} onChange={e => setMensaje(e.target.value)} placeholder="Ej: Cerrado el 25 de dic · Reabrimos el 2 de enero 🍺"
+        <input value={mensaje} onChange={e => setMensaje(e.target.value)} disabled={!canEdit} placeholder="Ej: Cerrado el 25 de dic · Reabrimos el 2 de enero 🍺"
           style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' as const, padding: '12px 14px', fontSize: 14 }} />
       </div>
 
+      {canEdit && (
       <button onClick={handleSave} disabled={saving} style={{
         width: '100%', padding: '13px', background: '#E8531D', border: 'none', borderRadius: 8,
         color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1,
@@ -88,6 +89,7 @@ export default function TaproomConfigClient({ config }: { config: any }) {
       }}>
         {saving ? 'Guardando...' : saved ? '✓ Guardado' : 'Guardar cambios'}
       </button>
+      )}
 
       {saved && (
         <p style={{ textAlign: 'center', color: '#10b981', fontSize: 13, marginTop: 12 }}>

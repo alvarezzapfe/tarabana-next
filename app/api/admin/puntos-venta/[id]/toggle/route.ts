@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '../../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { canManagePDV } from '../../../../../../src/lib/roles'
+import { canManageAsAdmin } from '../../../../../../src/lib/roles'
 
 export async function PATCH(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -9,7 +9,7 @@ export async function PATCH(_request: Request, { params }: { params: Promise<{ i
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canManagePDV(profile?.role))
+  if (!canManageAsAdmin(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const { data: pdv } = await supabase.from('puntos_venta').select('activo').eq('id', id).single()

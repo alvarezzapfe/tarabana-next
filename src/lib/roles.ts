@@ -34,11 +34,14 @@ export function isSuperAdmin(role?: string | null): boolean {
 //   admin = "Todo excepto usuarios"
 //   produccion = "Inventario y stock"
 //   ventas = "Pedidos y pagos"
+// Ventas y produccion no gestionan contenido de marca (medallero, taproom,
+// vendedores, comisiones, puntos de venta) ni catálogos comerciales.
 
-/** Puntos de venta management — admin-only, not ventas/produccion */
-export const PDV_ROLES = ['super_admin', 'admin'] as const
-export function canManagePDV(role?: string | null): boolean {
-  return !!role && (PDV_ROLES as readonly string[]).includes(role)
+/** Admin-only management — super_admin + admin. More restrictive than is_admin()
+ *  in SQL on purpose: ventas/produccion don't manage brand content. */
+export const ADMIN_ONLY_ROLES = ['super_admin', 'admin'] as const
+export function canManageAsAdmin(role?: string | null): boolean {
+  return !!role && (ADMIN_ONLY_ROLES as readonly string[]).includes(role)
 }
 
 /** Inventory management — admin + produccion, not ventas */

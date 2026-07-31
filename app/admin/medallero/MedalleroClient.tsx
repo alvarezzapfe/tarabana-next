@@ -8,7 +8,7 @@ const medallaColors: Record<string, string> = { oro: '#F0A030', plata: '#C0C8D0'
 
 const emptyForm = { competencia: '', cerveza: '', estilo: '', abv: '', ibu: '', medalla: 'oro', año: new Date().getFullYear() }
 
-export default function MedalleroClient({ medallas: init }: { medallas: any[] }) {
+export default function MedalleroClient({ medallas: init, canEdit }: { medallas: any[]; canEdit: boolean }) {
   const [data, setData] = useState(init)
   const [form, setForm] = useState<any>(emptyForm)
   const [editId, setEditId] = useState<string | null>(null)
@@ -69,6 +69,7 @@ export default function MedalleroClient({ medallas: init }: { medallas: any[] })
       <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 28 }}>Gestión de reconocimientos en competencias</p>
 
       {/* Formulario */}
+      {canEdit && (
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 32 }}>
         <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>{editId ? 'Editar medalla' : 'Nueva medalla'}</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
@@ -110,13 +111,14 @@ export default function MedalleroClient({ medallas: init }: { medallas: any[] })
           </button>
         </div>
       </div>
+      )}
 
       {/* Lista */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Medalla', 'Cerveza', 'Estilo', 'ABV / IBU', 'Competencia', 'Año', 'Acciones'].map((h, i) => (
+              {['Medalla', 'Cerveza', 'Estilo', 'ABV / IBU', 'Competencia', 'Año', ...(canEdit ? ['Acciones'] : [])].map((h, i) => (
                 <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 16px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
               ))}
             </tr>
@@ -136,6 +138,7 @@ export default function MedalleroClient({ medallas: init }: { medallas: any[] })
                 <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{m.abv ? `${m.abv}%` : '—'} / {m.ibu ? `${m.ibu} IBU` : '—'}</td>
                 <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>{m.competencia}</td>
                 <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{m.año}</td>
+                {canEdit && (
                 <td style={{ padding: '12px 16px' }}>
                   <div style={{ display: 'flex', gap: 6 }}>
                     <button onClick={() => handleEdit(m)} style={{ padding: '5px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Editar</button>
@@ -144,6 +147,7 @@ export default function MedalleroClient({ medallas: init }: { medallas: any[] })
                     </button>
                   </div>
                 </td>
+                )}
               </tr>
             ))}
           </tbody>

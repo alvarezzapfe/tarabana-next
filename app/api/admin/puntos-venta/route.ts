@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { canManagePDV } from '../../../../src/lib/roles'
+import { canManageAsAdmin } from '../../../../src/lib/roles'
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -8,7 +8,7 @@ export async function GET() {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canManagePDV(profile?.role))
+  if (!canManageAsAdmin(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const { data, error } = await supabase
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canManagePDV(profile?.role))
+  if (!canManageAsAdmin(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const body = await request.json()

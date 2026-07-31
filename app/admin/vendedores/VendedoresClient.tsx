@@ -5,7 +5,7 @@ import { createClient } from '../../../src/lib/supabase'
 const tipos = ['interno', 'externo', 'distribuidor']
 const emptyForm = { nombre: '', email: '', telefono: '', tipo: 'externo', comision_pct: 10, notas: '' }
 
-export default function VendedoresClient({ vendedores: init, comisiones, isSuperAdmin }: any) {
+export default function VendedoresClient({ vendedores: init, comisiones, canEdit }: any) {
   const [vendedores, setVendedores] = useState(init)
   const [form, setForm] = useState<any>(emptyForm)
   const [editId, setEditId] = useState<string | null>(null)
@@ -70,7 +70,7 @@ export default function VendedoresClient({ vendedores: init, comisiones, isSuper
       <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Vendedores</h1>
       <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 28 }}>Gestión de fuerza de ventas y distribuidores</p>
 
-      {isSuperAdmin && (
+      {canEdit && (
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24, marginBottom: 28 }}>
           <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 16 }}>{editId ? 'Editar vendedor' : 'Nuevo vendedor'}</p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
@@ -144,7 +144,7 @@ export default function VendedoresClient({ vendedores: init, comisiones, isSuper
 
               {v.notas && <div style={{ color: '#9ca3af', fontSize: 13, marginBottom: 12, fontStyle: 'italic' }}>{v.notas}</div>}
 
-              {isSuperAdmin && (
+              {canEdit && (
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button onClick={() => handleEdit(v)} style={{ flex: 1, padding: '7px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Editar</button>
                   <button onClick={() => handleToggle(v.id, v.activo)} style={{ flex: 1, padding: '7px', background: v.activo ? '#2a1010' : '#102a10', border: `1px solid ${v.activo ? '#ef444430' : '#10b98130'}`, borderRadius: 6, color: v.activo ? '#ef4444' : '#10b981', fontSize: 13, cursor: 'pointer' }}>

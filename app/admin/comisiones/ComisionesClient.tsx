@@ -2,7 +2,7 @@
 import { useState, useMemo } from 'react'
 import { createClient } from '../../../src/lib/supabase'
 
-export default function ComisionesClient({ comisiones: init, vendedores, isSuperAdmin }: any) {
+export default function ComisionesClient({ comisiones: init, vendedores, canEdit }: any) {
   const [comisiones, setComisiones] = useState(init)
   const [filtroVendedor, setFiltroVendedor] = useState('todos')
   const [filtroPagada, setFiltroPagada] = useState('todas')
@@ -106,7 +106,7 @@ export default function ComisionesClient({ comisiones: init, vendedores, isSuper
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['Pedido', 'Cliente', 'Vendedor', 'Monto pedido', '%', 'Comisión', 'Status', isSuperAdmin ? 'Acción' : ''].map((h, i) => (
+              {['Pedido', 'Cliente', 'Vendedor', 'Monto pedido', '%', 'Comisión', 'Status', canEdit ? 'Acción' : ''].map((h, i) => (
                 <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 12px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
               ))}
             </tr>
@@ -127,7 +127,7 @@ export default function ComisionesClient({ comisiones: init, vendedores, isSuper
                     {c.pagada ? `Pagada ${c.fecha_pago ? new Date(c.fecha_pago).toLocaleDateString('es-MX') : ''}` : 'Pendiente'}
                   </span>
                 </td>
-                {isSuperAdmin && (
+                {canEdit && (
                   <td style={{ padding: '10px 12px' }}>
                     <button onClick={() => marcarPagada(c.id, c.pagada)} disabled={procesandoId === c.id}
                       style={{ padding: '5px 12px', background: c.pagada ? '#2a1010' : '#102a10', border: `1px solid ${c.pagada ? '#ef444440' : '#10b98140'}`, borderRadius: 6, color: c.pagada ? '#ef4444' : '#10b981', fontSize: 13, cursor: 'pointer', opacity: procesandoId === c.id ? 0.5 : 1 }}>

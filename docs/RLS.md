@@ -58,6 +58,23 @@ GRANT UPDATE (full_name, phone, ..., onboarding_completo) ON profiles TO authent
 Las columnas `role`, `active`, `puntos` y `email` quedan fuera del grant.
 Solo `service_role` (que bypasea RLS) puede modificarlas.
 
+## Deuda: client components que escriben con anon key
+
+Los siguientes client components hacen INSERT/UPDATE/DELETE directamente contra
+Supabase con la anon key desde el browser:
+
+- `app/admin/medallero/MedalleroClient.tsx` — insert/update/delete en medallero
+- `app/admin/vendedores/VendedoresClient.tsx` — insert/update/delete en vendedores
+- `app/admin/comisiones/ComisionesClient.tsx` — update en comisiones
+- `app/admin/taproom/TaproomConfigClient.tsx` — update en taproom_config
+
+La UI esconde los botones con `canEdit`, pero RLS es el único gate real: las
+policies `*_write` usan `is_admin()`, que incluye ventas y produccion. Si esos
+roles inspeccionan el DOM o llaman a la API directamente, pueden escribir.
+
+**Solución pendiente:** mover estos writes a route handlers con `createServiceClient`
+y validación de rol server-side, como ya se hizo con pedidos y puntos de venta.
+
 ## Checkout y cancelar usan service_role
 
 `app/api/portal/pedidos/crear/route.ts` y `cancelar/route.ts` operan con
