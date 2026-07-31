@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
+import { canWrite } from '../../../src/lib/roles'
 
 const tipoLabel: Record<string, string> = {
   ocasional: 'Ocasional',
@@ -11,7 +12,7 @@ export default async function ClientesPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  const canEdit = ['super_admin', 'admin', 'ventas'].includes(myProfile?.role || '')
+  const canEdit = canWrite(myProfile?.role)
 
   const { data: clientes } = await supabase
     .from('profiles')

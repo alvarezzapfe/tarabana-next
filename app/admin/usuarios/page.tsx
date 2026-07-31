@@ -1,4 +1,5 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
+import { isSuperAdmin as checkSuperAdmin } from '../../../src/lib/roles'
 
 const roleConfig: Record<string, { label: string, color: string, bg: string }> = {
   super_admin: { label: 'Super Admin', color: '#E8531D', bg: '#fed7aa' },
@@ -20,7 +21,7 @@ export default async function UsuariosPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  const isSuperAdmin = myProfile?.role === 'super_admin'
+  const isSuperAdmin = checkSuperAdmin(myProfile?.role)
 
   const { data: usuarios } = await supabase
     .from('profiles')

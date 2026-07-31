@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
+import { canManageInventory, isSuperAdmin as checkSuperAdmin } from '../../../../../src/lib/roles'
 
 const estilos = ['IPA', 'Double IPA', 'Session IPA', 'New England IPA', 'West Coast IPA', 'Red IPA', 'Lager', 'Lager Mexicana', 'Czech Pale Lager', 'Stout', 'Porter', 'Wheat', 'Sour', 'Pale Ale', 'Amber Ale', 'Otro']
 
@@ -33,10 +34,10 @@ export default function EditProductoPage() {
     const load = async () => {
       setLoading(true)
       const { data: { user } } = await supabase.auth.getUser()
-      if (!user) { router.push('/tierra-mojada'); return }
+      if (!user) { router.push('/admin'); return }
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
       setUserRole(profile?.role || '')
-      if (!['super_admin', 'produccion'].includes(profile?.role || '')) { router.push('/admin/inventario'); return }
+      if (!canManageInventory(profile?.role)) { router.push('/admin/inventario'); return }
 
       const { data: p } = await supabase.from('productos').select('*').eq('id', id).single()
       if (!p) { router.push('/admin/inventario'); return }
@@ -93,7 +94,7 @@ export default function EditProductoPage() {
       imagen_url = publicUrl
     }
 
-    const isSuperAdmin = userRole === 'super_admin'
+    const isSuperAdmin = checkSuperAdmin(userRole)
 
     const updateData: any = {
       stock_caja12: parseInt(form.stock_caja12) || 0,

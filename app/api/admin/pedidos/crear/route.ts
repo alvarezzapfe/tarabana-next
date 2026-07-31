@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { canWrite } from '../../../../../src/lib/roles'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -7,7 +8,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!['super_admin', 'admin', 'ventas'].includes(profile?.role || ''))
+  if (!canWrite(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const { cliente_id, tipo_precio, items, notas, total, vendedor_id } = await request.json()

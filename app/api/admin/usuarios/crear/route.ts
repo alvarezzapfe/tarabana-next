@@ -1,6 +1,7 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
+import { isSuperAdmin, ASSIGNABLE_ROLES } from '../../../../../src/lib/roles'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -17,18 +18,18 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'super_admin') return NextResponse.json({ error: 'Solo super admin' }, { status: 403 })
+  if (!isSuperAdmin(profile?.role)) return NextResponse.json({ error: 'Solo super admin' }, { status: 403 })
 
   const { nombre, email, cel, rol } = await request.json()
-  const rolesPermitidos = ['admin', 'produccion', 'ventas', 'contabilidad']
-  if (!rolesPermitidos.includes(rol)) return NextResponse.json({ error: 'Rol inválido' }, { status: 400 })
+  if (!(ASSIGNABLE_ROLES as readonly string[]).includes(rol)) return NextResponse.json({ error: 'Rol inválido' }, { status: 400 })
 
   const serviceClient = createServiceClient()
 
-  // Crear invitación en DB
+  // Crear invitación en DB — expires_at calculado server-side (7 días)
+  const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: inv, error: invError } = await serviceClient
     .from('invitaciones')
-    .insert({ email, full_name: nombre, role: rol, created_by: user.id })
+    .insert({ email, full_name: nombre, role: rol, created_by: user.id, expires_at })
     .select('token')
     .single()
 
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
                 </td>
               </tr>
             </table>
-            <p style="margin:0;color:#555;font-size:12px;">Este link expira en 48 horas. Si no esperabas esta invitación, ignora este correo.</p>
+            <p style="margin:0;color:#555;font-size:12px;">Este link expira en 7 días. Si no esperabas esta invitación, ignora este correo.</p>
           </td>
         </tr>
         <tr>

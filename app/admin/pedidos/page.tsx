@@ -1,11 +1,12 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import PedidosClient from './PedidosClient'
+import { canWrite } from '../../../src/lib/roles'
 
 export default async function PedidosPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  const canEdit = ['super_admin', 'admin', 'ventas'].includes(myProfile?.role || '')
+  const canEdit = canWrite(myProfile?.role)
 
   const { data: pedidos } = await supabase
     .from('pedidos')

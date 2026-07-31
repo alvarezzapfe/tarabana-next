@@ -41,7 +41,7 @@ export default function ActivarPage() {
     if (!res.ok) { setError(data.error); setSaving(false); return }
 
     const { error: loginError } = await supabase.auth.signInWithPassword({ email: inv.email, password })
-    if (loginError) { router.push('/tierra-mojada'); return }
+    if (loginError) { router.push('/admin'); return }
     router.push('/admin')
   }
 

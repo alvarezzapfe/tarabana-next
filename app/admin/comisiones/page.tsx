@@ -1,11 +1,12 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
+import { isSuperAdmin } from '../../../src/lib/roles'
 import ComisionesClient from './ComisionesClient'
 
 export default async function ComisionesPage() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  const isSuperAdmin = profile?.role === 'super_admin'
+  const superAdmin = isSuperAdmin(profile?.role)
 
   const { data: comisiones } = await supabase
     .from('comisiones')
@@ -14,5 +15,5 @@ export default async function ComisionesPage() {
 
   const { data: vendedores } = await supabase.from('vendedores').select('*').eq('activo', true).order('nombre')
 
-  return <ComisionesClient comisiones={comisiones || []} vendedores={vendedores || []} isSuperAdmin={isSuperAdmin} />
+  return <ComisionesClient comisiones={comisiones || []} vendedores={vendedores || []} isSuperAdmin={superAdmin} />
 }

@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../../../src/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import EditPedidoClient from './EditPedidoClient'
+import { canWrite, isSuperAdmin } from '../../../../../src/lib/roles'
 
 export default async function EditPedidoPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -8,7 +9,7 @@ export default async function EditPedidoPage({ params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser()
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
 
-  if (!['super_admin', 'admin', 'ventas'].includes(profile?.role || '')) redirect('/admin/pedidos')
+  if (!canWrite(profile?.role)) redirect('/admin/pedidos')
 
   const { data: pedido } = await supabase
     .from('pedidos')
@@ -20,5 +21,5 @@ export default async function EditPedidoPage({ params }: { params: Promise<{ id:
 
   if (!pedido) redirect('/admin/pedidos')
 
-  return <EditPedidoClient pedido={pedido} vendedores={vendedores || []} isSuperAdmin={profile?.role === 'super_admin'} />
+  return <EditPedidoClient pedido={pedido} vendedores={vendedores || []} isSuperAdmin={isSuperAdmin(profile?.role)} />
 }

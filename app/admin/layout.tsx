@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '../../src/lib/supabase-server'
 import { redirect } from 'next/navigation'
+import { isStaff } from '../../src/lib/roles'
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
@@ -30,7 +31,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: profile } = await supabase
     .from('profiles').select('role, full_name').eq('id', user.id).single()
 
-  if (!profile || !['super_admin','admin','ventas','produccion','contabilidad'].includes(profile.role))
+  if (!profile || !isStaff(profile.role))
     redirect('/tierra-mojada')
 
   // Gate AAL2: roles internos requieren 2FA verificado

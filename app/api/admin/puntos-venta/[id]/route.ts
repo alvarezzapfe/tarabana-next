@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
+import { canManagePDV } from '../../../../../src/lib/roles'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -8,7 +9,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!['super_admin', 'admin'].includes(profile?.role || ''))
+  if (!canManagePDV(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const body = await request.json()
@@ -44,7 +45,7 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!['super_admin', 'admin'].includes(profile?.role || ''))
+  if (!canManagePDV(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   // Fetch the record to check for image
