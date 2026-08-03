@@ -55,7 +55,7 @@ export default async function ClientesPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Cliente', 'Contacto', 'Tipo', 'Dirección', 'Razón social', 'RFC', 'CFDI', 'Registrado', ''].map((h, i) => (
+              {['Cliente', 'Contacto', 'Tipo', 'Dirección', 'Razón social', 'RFC', 'Régimen', 'CFDI', 'CP fiscal', 'Registrado', ''].map((h, i) => (
                 <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 14px', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -84,13 +84,15 @@ export default async function ClientesPage() {
                   <p style={{ margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.razon_social || '—'}</p>
                 </td>
                 <td style={{ padding: '12px 14px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{c.rfc || '—'}</td>
+                <td style={{ padding: '12px 14px', color: '#6b7280', fontSize: 13 }}>{c.regimen_fiscal || '—'}</td>
                 <td style={{ padding: '12px 14px' }}>
                   <span style={{
                     background: c.requiere_factura ? '#fed7aa' : '#1a1a1a',
                     color: c.requiere_factura ? '#E8531D' : '#444',
                     padding: '3px 10px', borderRadius: 99, fontSize: 13, fontWeight: 500
-                  }}>{c.requiere_factura ? 'Sí' : 'No'}</span>
+                  }}>{c.uso_cfdi || '—'}</span>
                 </td>
+                <td style={{ padding: '12px 14px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{c.cp_fiscal || '—'}</td>
                 <td style={{ padding: '12px 14px', color: '#9ca3af', fontSize: 13, whiteSpace: 'nowrap' }}>
                   {new Date(c.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </td>
@@ -116,7 +118,7 @@ export default async function ClientesPage() {
                 )}
               </tr>
             )) : (
-              <tr><td colSpan={9} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
+              <tr><td colSpan={11} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
                 No hay clientes aún — agrega el primero
               </td></tr>
             )}

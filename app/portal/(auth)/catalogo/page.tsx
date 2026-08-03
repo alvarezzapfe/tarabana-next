@@ -209,7 +209,7 @@ export default function CatalogoPage() {
   )
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', position: 'relative' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif', position: 'relative', maxWidth: 1200, margin: '0 auto' }}>
 
       {/* HEADER */}
       <div style={{ padding: '40px 48px 0' }}>
@@ -457,8 +457,16 @@ export default function CatalogoPage() {
               <span style={{ color: '#E8531D', fontSize: 22, fontWeight: 800 }}>${total.toLocaleString('es-MX')}</span>
             </div>
             {stockError && <p style={{ color: '#dc2626', fontSize: 13, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{stockError}</p>}
+            {profile?.requiere_factura && !profile?.rfc && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+                <p style={{ margin: 0, color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>
+                  Tienes facturación activa pero faltan datos fiscales.{' '}
+                  <a href="/portal/cuenta" style={{ color: '#E8531D', fontWeight: 600 }}>Completar datos</a>
+                </p>
+              </div>
+            )}
             <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
-              <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>Tu pedido sera revisado por nuestro equipo. Te contactaremos para confirmar entrega y pago.</p>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>Tu pedido será revisado por nuestro equipo. Te contactaremos para confirmar entrega y pago.</p>
             </div>
             <button onClick={handleCheckout} disabled={checkingOut} style={{
               width: '100%', padding: '14px', background: '#E8531D', border: 'none', borderRadius: 10,
