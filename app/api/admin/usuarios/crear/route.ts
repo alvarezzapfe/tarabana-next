@@ -26,6 +26,30 @@ export async function POST(request: Request) {
 
   const serviceClient = createServiceClient()
 
+  // Validar duplicados antes de insertar
+  const { data: existingProfile } = await serviceClient.from('profiles').select('id').eq('email', email).single()
+  if (existingProfile) {
+    return NextResponse.json({ error: 'Ya existe un usuario con ese correo. Búscalo en la lista de usuarios.' }, { status: 409 })
+  }
+
+  const { data: existingInv } = await serviceClient
+    .from('invitaciones')
+    .select('id, used, expires_at')
+    .eq('email', email)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+
+  if (existingInv) {
+    if (!existingInv.used && new Date(existingInv.expires_at) > new Date()) {
+      return NextResponse.json({ error: 'Ya hay una invitación pendiente para ese correo. Reenvíala desde la lista en vez de crear una nueva.' }, { status: 409 })
+    }
+    // used=true but no profile → activación a medias, permitir nueva invitación
+    if (existingInv.used && !existingProfile) {
+      logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.invitar.override', entidad: 'invitaciones', detalle: { email, nota: 'Invitación previa marcada como used pero sin profile — se permite crear nueva' }, request })
+    }
+  }
+
   // Crear invitación en DB — expires_at calculado server-side (7 días)
   const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: inv, error: invError } = await serviceClient

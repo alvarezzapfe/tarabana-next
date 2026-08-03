@@ -14,19 +14,26 @@ export default function NuevoUsuarioInternoPage() {
   const [form, setForm] = useState({ nombre: '', email: '', cel: '', rol: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [emailError, setEmailError] = useState('')
   const [success, setSuccess] = useState(false)
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
+  const set = (k: string, v: string) => {
+    setForm(f => ({ ...f, [k]: v }))
+    if (k === 'email') setEmailError('')
+  }
 
   const handleSubmit = async () => {
     if (!form.nombre || !form.email || !form.rol) { setError('Nombre, email y rol son requeridos'); return }
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setEmailError('')
     const res = await fetch('/api/admin/usuarios/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ nombre: form.nombre, email: form.email, cel: form.cel, rol: form.rol })
     })
     const data = await res.json()
-    if (!res.ok) { setError(data.error || 'Error al crear usuario'); setLoading(false); return }
+    if (!res.ok) {
+      if (res.status === 409) { setEmailError(data.error); } else { setError(data.error || 'Error al crear usuario'); }
+      setLoading(false); return
+    }
     setSuccess(true)
     setTimeout(() => { router.push('/admin/usuarios'); router.refresh() }, 2000)
   }
@@ -64,7 +71,12 @@ export default function NuevoUsuarioInternoPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 20 }}>
         {inp('Nombre completo *', 'nombre', 'text', 'Ana García')}
-        {inp('Email *', 'email', 'email', 'ana@tarabana.mx')}
+        <div>
+          {inp('Email *', 'email', 'email', 'ana@tarabana.mx')}
+          {emailError && (
+            <p style={{ color: '#E8531D', fontSize: 12, margin: '6px 0 0', lineHeight: 1.4 }}>{emailError}</p>
+          )}
+        </div>
       </div>
 
       <div style={{ marginBottom: 24 }}>

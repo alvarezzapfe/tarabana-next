@@ -64,6 +64,11 @@ export default function UsuariosPage() {
   const [toggleLoading, setToggleLoading] = useState<string | null>(null)
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [userDeleteId, setUserDeleteId] = useState<string | null>(null)
+  const [userDeleteEmail, setUserDeleteEmail] = useState('')
+  const [userDeleteLoading, setUserDeleteLoading] = useState(false)
+  const [userDeleteError, setUserDeleteError] = useState('')
+  const [userDeleteSuggestDeactivate, setUserDeleteSuggestDeactivate] = useState(false)
 
   const supabase = createClient()
 
@@ -150,6 +155,23 @@ export default function UsuariosPage() {
     }
     setDeleteConfirmId(null)
     setDeleteLoading(false)
+  }
+
+  const handleDeleteUser = async (id: string) => {
+    setUserDeleteLoading(true)
+    setUserDeleteError('')
+    setUserDeleteSuggestDeactivate(false)
+    const res = await fetch(`/api/admin/usuarios/${id}/eliminar`, { method: 'DELETE' })
+    if (res.ok) {
+      setUserDeleteId(null)
+      setUserDeleteEmail('')
+      await loadData()
+    } else {
+      const err = await res.json().catch(() => ({}))
+      setUserDeleteError(err.error || 'Error al eliminar usuario')
+      setUserDeleteSuggestDeactivate(!!err.suggest_deactivate)
+    }
+    setUserDeleteLoading(false)
   }
 
   if (loading) {
@@ -345,6 +367,22 @@ export default function UsuariosPage() {
                           </button>
                         )
                       )}
+                      {/* Delete user */}
+                      {u.role !== 'super_admin' && (
+                        <button
+                          onClick={() => { setUserDeleteId(u.id); setUserDeleteEmail(''); setUserDeleteError(''); setUserDeleteSuggestDeactivate(false) }}
+                          style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4,
+                            padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                            border: 'none', cursor: 'pointer',
+                            background: 'transparent', color: '#d1d5db',
+                          }}
+                          title="Eliminar usuario permanentemente"
+                        >
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                          Eliminar
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -394,6 +432,84 @@ export default function UsuariosPage() {
           </div>
         </div>
       )}
+
+      {/* Delete user confirmation dialog */}
+      {userDeleteId && (() => {
+        const targetUser = usuarios.find(u => u.id === userDeleteId)
+        if (!targetUser) return null
+        const emailMatch = userDeleteEmail === targetUser.email
+        return (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+            background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 1000,
+          }} onClick={() => setUserDeleteId(null)}>
+            <div style={{
+              background: '#fff', borderRadius: 12, padding: '28px 32px', maxWidth: 440, width: '100%',
+              boxShadow: '0 8px 30px rgba(0,0,0,0.12)',
+            }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ color: '#ef4444', fontSize: 16, fontWeight: 700, margin: '0 0 8px' }}>Eliminar usuario</h3>
+              <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 4px', lineHeight: 1.5 }}>
+                Esta accion es permanente. Se eliminara la cuenta de <strong style={{ color: '#1a1a1a' }}>{targetUser.full_name || targetUser.email}</strong> y todos sus datos.
+              </p>
+              <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 16px', lineHeight: 1.5 }}>
+                Escribe el email del usuario para confirmar:
+              </p>
+              <input
+                type="email"
+                value={userDeleteEmail}
+                onChange={e => setUserDeleteEmail(e.target.value)}
+                placeholder={targetUser.email}
+                style={{
+                  width: '100%', padding: '10px 14px', background: '#f9fafb',
+                  border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14,
+                  color: '#1a1a1a', boxSizing: 'border-box', outline: 'none',
+                  marginBottom: 12, fontFamily: 'monospace',
+                }}
+              />
+              {userDeleteError && (
+                <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+                  <p style={{ color: '#ef4444', fontSize: 12, margin: 0, lineHeight: 1.5 }}>{userDeleteError}</p>
+                  {userDeleteSuggestDeactivate && (
+                    <button
+                      onClick={() => { setUserDeleteId(null); handleToggle(userDeleteId) }}
+                      style={{
+                        marginTop: 8, padding: '6px 14px', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                        border: 'none', cursor: 'pointer', background: '#fef3c7', color: '#f59e0b',
+                      }}
+                    >
+                      Desactivar en su lugar
+                    </button>
+                  )}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setUserDeleteId(null)}
+                  style={{
+                    padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                    border: '1px solid #e5e7eb', background: '#fff', color: '#6b7280', cursor: 'pointer',
+                  }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeleteUser(userDeleteId)}
+                  disabled={!emailMatch || userDeleteLoading}
+                  style={{
+                    padding: '8px 16px', borderRadius: 8, fontSize: 13, fontWeight: 600,
+                    border: 'none', color: '#fff', cursor: emailMatch ? 'pointer' : 'not-allowed',
+                    background: emailMatch ? '#ef4444' : '#e5e7eb',
+                    opacity: userDeleteLoading ? 0.5 : 1,
+                  }}
+                >
+                  {userDeleteLoading ? 'Eliminando...' : 'Eliminar permanentemente'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* SECTION B: Invitaciones pendientes */}
       {invitaciones.length > 0 && (
