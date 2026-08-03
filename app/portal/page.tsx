@@ -43,10 +43,10 @@ export default function PortalLogin() {
   const handleForgot = async () => {
     if (!email) { setError('Ingresa tu email'); return }
     setLoading(true); setError('')
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'https://tarabana-next.vercel.app/portal/reset-password'
+    // Always show success — don't reveal whether the email exists
+    await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://tarabana.mx'}/auth/confirm`
     })
-    if (error) { setError(error.message); setLoading(false); return }
     setResetSent(true)
     setLoading(false)
   }
@@ -145,9 +145,9 @@ export default function PortalLogin() {
             <path d="M20 6L9 17l-5-5"/>
           </svg>
         </div>
-        <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Link enviado</h2>
+        <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Revisa tu correo</h2>
         <p style={{ color: '#888', fontSize: 14, lineHeight: 1.7, marginBottom: 20 }}>
-          Revisa tu correo <strong style={{ color: '#111' }}>{email}</strong> para restablecer tu contraseña.
+          Si el correo está registrado, te enviamos un link para restablecer tu contraseña. Revisa tu bandeja de entrada y la carpeta de spam.
         </p>
         <button onClick={() => { setResetSent(false); setMode('login') }} style={{
           width: '100%', padding: '12px', background: '#0a0a0a',

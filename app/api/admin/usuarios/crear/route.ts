@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
   if (invError) return NextResponse.json({ error: invError.message }, { status: 400 })
 
-  const activationUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://tarabana-next.vercel.app'}/activar/${inv.token}`
+  const activationUrl = `${process.env.NEXT_PUBLIC_SITE_URL || 'https://tarabana.mx'}/activar/${inv.token}`
 
   // Mandar email bonito
   await resend.emails.send({
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       <table width="560" cellpadding="0" cellspacing="0" style="background:#141414;border-radius:16px;overflow:hidden;border:1px solid #1e1e1e;">
         <tr>
           <td style="background:#0a0a0a;padding:32px 40px;text-align:center;border-bottom:1px solid #1e1e1e;">
-            <img src="https://tarabana-next.vercel.app/tarabanalogo.png" alt="Tarabaña" height="56" style="display:block;margin:0 auto;filter:brightness(0) invert(1);">
+            <img src="https://tarabana.mx/tarabanalogo.png" alt="Tarabaña" height="56" style="display:block;margin:0 auto;filter:brightness(0) invert(1);">
           </td>
         </tr>
         <tr>
