@@ -25,9 +25,8 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname
 
-  // Rutas admin protegidas (incluye /tierra-mojada/verificar que requiere sesión)
-  // Redirect a /portal para no exponer la URL de login admin
-  const adminPaths = ['/admin', '/produccion', '/ventas', '/mi-cuenta', '/tierra-mojada/verificar']
+  // Rutas admin protegidas — redirect a /portal, nunca exponer la URL de login admin
+  const adminPaths = ['/admin', '/produccion', '/ventas', '/mi-cuenta']
   if (adminPaths.some(p => path.startsWith(p)) && !user) {
     const url = request.nextUrl.clone()
     url.pathname = '/portal'
