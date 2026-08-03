@@ -19,42 +19,44 @@ export default async function PortalAuthLayout({ children }: { children: React.R
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#fff', fontFamily: 'system-ui, sans-serif' }}>
       <style>{`
-        .portal-nav { display:flex; align-items:center; gap:8px; color:#888; text-decoration:none; padding:9px 12px; border-radius:8px; font-size:13.5px; transition:all 0.15s; }
-        .portal-nav:hover { background:#f5f5f5; color:#111; }
+        .portal-nav { display:flex; align-items:center; gap:10px; color:#8899B0; text-decoration:none; padding:11px 14px; border-radius:8px; font-size:15px; transition:all 0.15s; position:relative; }
+        .portal-nav:hover { background:rgba(77,163,255,0.08); color:#CBD5E1; }
+        .portal-nav-active { background:rgba(77,163,255,0.10); color:#fff !important; }
+        .portal-nav-active::before { content:''; position:absolute; left:0; top:6px; bottom:6px; width:3px; border-radius:0 3px 3px 0; background:#4DA3FF; }
       `}</style>
       <aside style={{
-        width: 240, background: '#fff', borderRight: '1px solid #ebebeb',
-        display: 'flex', flexDirection: 'column', padding: '24px 14px',
+        width: 250, background: '#0A1628',
+        display: 'flex', flexDirection: 'column', padding: '28px 16px',
         position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 50
       }}>
-        <a href="/portal/catalogo" style={{ display: 'block', marginBottom: 32, padding: '0 8px' }}>
-          <img src="/tarabana_logo_negro.jpg" alt="Tarabana" style={{ height: 44, objectFit: 'contain' }} />
+        <a href="/portal/catalogo" style={{ display: 'block', marginBottom: 36, padding: '0 10px' }}>
+          <img src="/logo-blanco.png" alt="Tarabaña" style={{ height: 60, objectFit: 'contain' }} />
         </a>
-        <div style={{ padding: '12px 12px', background: '#fdf8f5', borderRadius: 10, marginBottom: 24, border: '1px solid #f0e8e0' }}>
-          <p style={{ margin: 0, color: '#888', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Hola,</p>
-          <p style={{ margin: '2px 0 0', color: '#111', fontSize: 14, fontWeight: 600 }}>{profile.full_name?.split(' ')[0] || user.email?.split('@')[0]}</p>
-          <p style={{ margin: '4px 0 0', color: '#E8531D', fontSize: 11, fontWeight: 600 }}>{profile.puntos || 0} pts</p>
+        <div style={{ padding: '14px 16px', background: 'rgba(77,163,255,0.08)', borderRadius: 10, marginBottom: 28, border: '1px solid rgba(77,163,255,0.12)' }}>
+          <p style={{ margin: 0, color: '#6B7F99', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Hola,</p>
+          <p style={{ margin: '3px 0 0', color: '#E2E8F0', fontSize: 15, fontWeight: 600 }}>{profile.full_name?.split(' ')[0] || user.email?.split('@')[0]}</p>
+          <p style={{ margin: '5px 0 0', color: '#4DA3FF', fontSize: 12, fontWeight: 600 }}>{profile.puntos || 0} pts</p>
         </div>
-        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <nav style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3 }}>
           {navItems.map(item => (
             <a key={item.href} href={item.href} className="portal-nav">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
                 <path d={item.icon} />
               </svg>
               {item.label}
             </a>
           ))}
         </nav>
-        <div style={{ borderTop: '1px solid #ebebeb', paddingTop: 16 }}>
-          <a href="/api/auth/logout" className="portal-nav" style={{ color: '#ccc' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.06)', paddingTop: 18 }}>
+          <a href="/api/auth/logout" className="portal-nav" style={{ color: '#4B5C73', fontSize: 13.5 }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
             </svg>
-            Cerrar sesion
+            Cerrar sesión
           </a>
         </div>
       </aside>
-      <main style={{ flex: 1, marginLeft: 240, background: '#fafafa', minHeight: '100vh' }}>{children}</main>
+      <main style={{ flex: 1, marginLeft: 250, background: '#fafafa', minHeight: '100vh' }}>{children}</main>
     </div>
   )
 }

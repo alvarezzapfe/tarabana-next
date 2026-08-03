@@ -159,7 +159,40 @@ export default function CatalogoPage() {
   // ── Stats ──
   const puntos = profile?.puntos || 0
   const totalGastado = pedidos.filter(p => p.status !== 'cancelado').reduce((s: number, p: any) => s + (p.total || 0), 0)
-  const ultimoPedido = pedidos[0]
+  const hasPedidos = pedidos.length > 0
+
+  // Active order = most recent non-terminal order
+  const pedidoActivo = pedidos.find((p: any) => !['entregado', 'cancelado'].includes(p.status))
+
+  // Sort productos: in-stock first, then out-of-stock
+  const productosOrdenados = [...productos].sort((a, b) => {
+    const aOut = a.stock_caja24 <= 0 ? 1 : 0
+    const bOut = b.stock_caja24 <= 0 ? 1 : 0
+    return aOut - bOut
+  })
+
+  // Timeline steps for active order
+  const timelineSteps = [
+    { key: 'pendiente', label: 'Recibido' },
+    { key: 'confirmado', label: 'Confirmado' },
+    { key: 'pagado', label: 'Pago' },
+    { key: 'entregado', label: 'Entregado' },
+  ]
+  const getTimelineIndex = (p: any) => {
+    if (!p) return -1
+    if (p.status === 'entregado') return 3
+    if (p.pagado) return 2
+    if (p.status === 'confirmado' || p.status === 'enviado') return 1
+    return 0 // pendiente
+  }
+  const activeStep = getTimelineIndex(pedidoActivo)
+
+  const getNextStepMessage = (p: any) => {
+    if (!p) return ''
+    if (p.pagado && p.status !== 'entregado') return 'Pago confirmado. Preparando tu entrega.'
+    if (p.status === 'confirmado' || p.status === 'enviado') return 'Pedido confirmado. Te contactamos para coordinar el pago.'
+    return 'Estamos revisando tu pedido. Te contactamos hoy para coordinar el pago.'
+  }
 
   if (loading) return <div style={{ padding: 60, textAlign: 'center', color: '#9ca3af', fontFamily: 'system-ui' }}>Cargando...</div>
 
@@ -168,59 +201,80 @@ export default function CatalogoPage() {
       <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#f0fdf4', border: '2px solid #10b981', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#10b981" strokeWidth="2.5"><path d="M20 6L9 17l-5-5"/></svg>
       </div>
-      <h2 style={{ color: '#111', fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Pedido confirmado</h2>
-      <p style={{ color: '#888', fontSize: 15, marginBottom: 28 }}>Te contactaremos para coordinar la entrega.</p>
-      <button onClick={() => setPedidoOk(false)} style={{ padding: '12px 32px', background: '#E8531D', border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Ver catalogo</button>
+      <h2 style={{ color: '#111', fontSize: 24, fontWeight: 800, marginBottom: 8 }}>Pedido recibido</h2>
+      <p style={{ color: '#888', fontSize: 15, marginBottom: 8 }}>Estamos revisando tu pedido.</p>
+      <p style={{ color: '#6b7280', fontSize: 14, marginBottom: 28 }}>Te contactaremos hoy para coordinar el pago y la entrega.</p>
+      <button onClick={() => setPedidoOk(false)} style={{ padding: '12px 32px', background: '#E8531D', border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Ver catálogo</button>
     </div>
   )
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif', position: 'relative' }}>
 
-      {/* HEADER + STATS */}
-      <div style={{ padding: '32px 48px 0' }}>
-        <div style={{ marginBottom: 28 }}>
-          <h1 style={{ color: '#111', fontSize: 22, fontWeight: 800, margin: '0 0 2px' }}>
+      {/* HEADER */}
+      <div style={{ padding: '40px 48px 0' }}>
+        <div style={{ marginBottom: 32 }}>
+          <h1 style={{ color: '#111', fontSize: 34, fontWeight: 800, margin: '0 0 4px', lineHeight: 1.15 }}>
             Hola, {profile?.full_name?.split(' ')[0] || 'bienvenido'}
           </h1>
-          <p style={{ color: '#9ca3af', fontSize: 13, margin: 0 }}>
-            {esTap ? <span style={{ color: '#E8531D', fontWeight: 600 }}>Precios especiales</span> : 'Precios al publico'}
+          <p style={{ color: '#9ca3af', fontSize: 15, margin: 0 }}>
+            {esTap ? <span style={{ color: '#E8531D', fontWeight: 600 }}>Precios mayoristas</span> : 'Precios al público'}
           </p>
         </div>
 
-        {/* Quick stats */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Pedidos</p>
-            <p style={{ margin: '4px 0 0', color: '#111', fontSize: 26, fontWeight: 800 }}>{pedidos.length}</p>
-          </div>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Total comprado</p>
-            <p style={{ margin: '4px 0 0', color: '#E8531D', fontSize: 22, fontWeight: 800 }}>${totalGastado.toLocaleString('es-MX')}</p>
-          </div>
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Puntos</p>
-            <p style={{ margin: '4px 0 0', color: '#7c3aed', fontSize: 26, fontWeight: 800 }}>{puntos.toLocaleString()}</p>
-          </div>
-        </div>
-
-        {/* Last order */}
-        {ultimoPedido && (
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 20px', marginBottom: 28, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <p style={{ margin: 0, color: '#374151', fontSize: 14 }}>
-              Ultimo pedido · <span style={{ fontFamily: 'monospace' }}>#{ultimoPedido.id.slice(-6).toUpperCase()}</span> · ${(ultimoPedido.total || 0).toLocaleString('es-MX')}
+        {/* ── PEDIDO ACTIVO: timeline ── */}
+        {pedidoActivo && (
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 14, padding: '24px 28px', marginBottom: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <p style={{ margin: 0, color: '#374151', fontSize: 15, fontWeight: 600 }}>
+                Pedido <span style={{ fontFamily: 'monospace', color: '#6b7280' }}>#{pedidoActivo.id.slice(-6).toUpperCase()}</span>
+                {' · '}${(pedidoActivo.total || 0).toLocaleString('es-MX')}
+              </p>
+              <a href="/portal/pedidos" style={{ color: '#4DA3FF', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Ver detalle →</a>
+            </div>
+            {/* Timeline */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 0, marginBottom: 16 }}>
+              {timelineSteps.map((step, i) => {
+                const done = i <= activeStep
+                const current = i === activeStep
+                return (
+                  <div key={step.key} style={{ display: 'flex', alignItems: 'center', flex: i < timelineSteps.length - 1 ? 1 : 'none' }}>
+                    <div style={{
+                      width: current ? 32 : 24, height: current ? 32 : 24, borderRadius: '50%', flexShrink: 0,
+                      background: done ? '#E8531D' : '#f3f4f6',
+                      border: current ? '3px solid #FDBA74' : 'none',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      transition: 'all 0.2s',
+                    }}>
+                      {done && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"><path d="M20 6L9 17l-5-5"/></svg>}
+                    </div>
+                    {i < timelineSteps.length - 1 && (
+                      <div style={{ flex: 1, height: 2, background: i < activeStep ? '#E8531D' : '#e5e7eb', margin: '0 4px' }} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 14 }}>
+              {timelineSteps.map((step, i) => (
+                <p key={step.key} style={{
+                  margin: 0, fontSize: 11, fontWeight: i <= activeStep ? 600 : 400,
+                  color: i <= activeStep ? '#374151' : '#9ca3af',
+                  textAlign: i === 0 ? 'left' : i === timelineSteps.length - 1 ? 'right' : 'center',
+                  flex: i < timelineSteps.length - 1 ? 1 : 'none',
+                }}>{step.label}</p>
+              ))}
+            </div>
+            <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>
+              {getNextStepMessage(pedidoActivo)}
+              {pedidoActivo.fecha_entrega && ` Entrega estimada: ${new Date(pedidoActivo.fecha_entrega).toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })}.`}
             </p>
-            <span style={{
-              background: (statusLabel[ultimoPedido.status]?.color || '#888') + '18',
-              color: statusLabel[ultimoPedido.status]?.color || '#888',
-              padding: '4px 12px', borderRadius: 99, fontSize: 13, fontWeight: 600,
-            }}>{statusLabel[ultimoPedido.status]?.label || ultimoPedido.status}</span>
           </div>
         )}
 
         {/* Cart button */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-          <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, margin: 0 }}>Arma tu pedido</h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
+          <h2 style={{ color: '#111', fontSize: 26, fontWeight: 700, margin: 0 }}>Arma tu pedido</h2>
           {cart.length > 0 && (
             <button onClick={() => setShowCart(!showCart)} style={{
               display: 'flex', alignItems: 'center', gap: 8, padding: '10px 18px',
@@ -234,43 +288,46 @@ export default function CatalogoPage() {
       </div>
 
       {/* ══════ CAJA SENCILLA ══════ */}
-      <div style={{ padding: '0 48px 32px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+      <div style={{ padding: '0 48px 40px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <h3 style={{ margin: 0, color: '#374151', fontSize: 16, fontWeight: 700 }}>Caja Sencilla</h3>
-          <span style={{ color: '#9ca3af', fontSize: 13 }}>24 latas del mismo estilo</span>
+          <span style={{ color: '#9ca3af', fontSize: 14 }}>24 latas del mismo estilo</span>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-          {productos.map(p => {
+          {productosOrdenados.map(p => {
             const precio = getPrecio(p)
             const inCart = cart.find(i => i.key === `caja24-${p.id}`)
             const sinStock = p.stock_caja24 <= 0
             return (
-              <div key={p.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px', opacity: sinStock ? 0.5 : 1 }}>
+              <div key={p.id} style={{
+                background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px',
+                opacity: sinStock ? 0.45 : 1,
+                filter: sinStock ? 'grayscale(0.8)' : 'none',
+              }}>
                 {p.imagen_url && (
                   <div style={{ height: 80, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
                     <img src={p.imagen_url} alt={p.nombre} style={{ maxHeight: 70, objectFit: 'contain' }} />
                   </div>
                 )}
-                <p style={{ margin: '0 0 2px', fontWeight: 700, fontSize: 15, color: '#111' }}>{p.nombre}</p>
-                <p style={{ margin: '0 0 8px', fontSize: 13, color: '#9ca3af' }}>{p.estilo} · {p.abv}%</p>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <p style={{ margin: 0, color: '#E8531D', fontSize: 18, fontWeight: 700 }}>${precio?.toLocaleString('es-MX') || '—'}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 13, color: sinStock ? '#dc2626' : '#059669' }}>
-                      {sinStock ? 'Sin stock' : `${p.stock_caja24} disp.`}
-                    </p>
+                <p style={{ margin: '0 0 3px', fontWeight: 700, fontSize: 17, color: '#111' }}>{p.nombre}</p>
+                <p style={{ margin: '0 0 10px', fontSize: 14, color: '#9ca3af' }}>{p.estilo} · {p.abv}%</p>
+                {sinStock ? (
+                  <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>Agotado</p>
+                ) : (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <p style={{ margin: 0, color: '#E8531D', fontSize: 22, fontWeight: 800 }}>${precio?.toLocaleString('es-MX') || '—'}</p>
+                    {precio && (inCart ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button onClick={() => updateQty(`caja24-${p.id}`, -1)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 17 }}>-</button>
+                        <span style={{ fontWeight: 700, fontSize: 16, minWidth: 18, textAlign: 'center' }}>{inCart.cantidad}</span>
+                        <button onClick={() => updateQty(`caja24-${p.id}`, 1)} style={{ width: 30, height: 30, borderRadius: '50%', background: '#E8531D', border: 'none', cursor: 'pointer', fontSize: 17, color: '#fff' }}>+</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => addSencilla(p)} style={{ padding: '10px 20px', background: '#111', border: 'none', borderRadius: 8, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>Agregar</button>
+                    ))}
                   </div>
-                  {!sinStock && precio && (inCart ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <button onClick={() => updateQty(`caja24-${p.id}`, -1)} style={{ width: 28, height: 28, borderRadius: '50%', background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16 }}>-</button>
-                      <span style={{ fontWeight: 700, fontSize: 15, minWidth: 16, textAlign: 'center' }}>{inCart.cantidad}</span>
-                      <button onClick={() => updateQty(`caja24-${p.id}`, 1)} style={{ width: 28, height: 28, borderRadius: '50%', background: '#E8531D', border: 'none', cursor: 'pointer', fontSize: 16, color: '#fff' }}>+</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => addSencilla(p)} style={{ padding: '7px 14px', background: '#111', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Agregar</button>
-                  ))}
-                </div>
+                )}
               </div>
             )
           })}
@@ -279,9 +336,9 @@ export default function CatalogoPage() {
 
       {/* ══════ ARMAR MIX ══════ */}
       <div style={{ padding: '0 48px 48px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
           <h3 style={{ margin: 0, color: '#374151', fontSize: 16, fontWeight: 700 }}>Armar Mix</h3>
-          <span style={{ color: '#9ca3af', fontSize: 13 }}>4 estilos × 6 latas = 24 latas</span>
+          <span style={{ color: '#9ca3af', fontSize: 14 }}>4 estilos × 6 latas = 24 latas</span>
         </div>
 
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
@@ -290,7 +347,7 @@ export default function CatalogoPage() {
           </p>
 
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20 }}>
-            {productos.map(p => {
+            {productosOrdenados.map(p => {
               const selected = mixSeleccion.includes(p.id)
               const disabled = !selected && mixSeleccion.length >= 4
               const sinStock = p.stock_caja24 <= 0
@@ -407,6 +464,68 @@ export default function CatalogoPage() {
               width: '100%', padding: '14px', background: '#E8531D', border: 'none', borderRadius: 10,
               color: '#fff', fontSize: 15, fontWeight: 700, cursor: checkingOut ? 'not-allowed' : 'pointer', opacity: checkingOut ? 0.7 : 1,
             }}>{checkingOut ? 'Enviando...' : 'Confirmar pedido'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* ══════ HISTORIAL DE PEDIDOS ══════ */}
+      {(() => {
+        const historial = pedidos.filter((p: any) =>
+          // Exclude the active order (already shown in timeline above)
+          !(pedidoActivo && p.id === pedidoActivo.id)
+        ).slice(0, 5)
+        if (historial.length === 0) return null
+        const sc: Record<string, { label: string; color: string; bg: string }> = {
+          pendiente:  { label: 'Pendiente',  color: '#f59e0b', bg: '#fef9c3' },
+          confirmado: { label: 'Confirmado', color: '#3b82f6', bg: '#dbeafe' },
+          enviado:    { label: 'En camino',  color: '#8b5cf6', bg: '#ede9fe' },
+          entregado:  { label: 'Entregado',  color: '#10b981', bg: '#dcfce7' },
+          cancelado:  { label: 'Cancelado',  color: '#ef4444', bg: '#fee2e2' },
+        }
+        return (
+          <div style={{ padding: '0 48px 40px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ margin: 0, color: '#374151', fontSize: 16, fontWeight: 700 }}>Historial de pedidos</h3>
+              <a href="/portal/pedidos" style={{ color: '#4DA3FF', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Ver todos →</a>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {historial.map((p: any) => {
+                const s = sc[p.status] || { label: p.status, color: '#888', bg: '#f5f5f5' }
+                const fecha = new Date(p.created_at)
+                return (
+                  <div key={p.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <span style={{ fontFamily: 'monospace', color: '#6b7280', fontSize: 13, fontWeight: 600 }}>#{p.id.slice(-6).toUpperCase()}</span>
+                      <span style={{ color: '#9ca3af', fontSize: 13 }}>{fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                      <span style={{ color: '#111', fontSize: 15, fontWeight: 700 }}>${(p.total || 0).toLocaleString('es-MX')}</span>
+                      <span style={{ background: s.bg, color: s.color, padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{s.label}</span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })()}
+
+      {/* ══════ KPIs (solo si tiene pedidos) ══════ */}
+      {hasPedidos && (
+        <div style={{ padding: '0 48px 48px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Pedidos</p>
+              <p style={{ margin: '4px 0 0', color: '#111', fontSize: 26, fontWeight: 800 }}>{pedidos.length}</p>
+            </div>
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Total comprado</p>
+              <p style={{ margin: '4px 0 0', color: '#E8531D', fontSize: 22, fontWeight: 800 }}>${totalGastado.toLocaleString('es-MX')}</p>
+            </div>
+            <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Puntos</p>
+              <p style={{ margin: '4px 0 0', color: '#7c3aed', fontSize: 26, fontWeight: 800 }}>{puntos.toLocaleString()}</p>
+            </div>
           </div>
         </div>
       )}
