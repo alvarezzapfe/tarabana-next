@@ -91,13 +91,26 @@ function ResetPasswordInner() {
     if (password !== confirm) { setError('Las contraseñas no coinciden'); return }
 
     setSaving(true)
-    const { error: updateError } = await supabase.auth.updateUser({ password })
-    if (updateError) {
-      setError('No se pudo actualizar la contraseña. Intenta solicitar un nuevo link.')
+
+    // Diagnostic — remove after confirming flow works
+    const { data: { session: diagSession } } = await supabase.auth.getSession()
+    console.log('[reset-password] session before update:', diagSession ? 'exists' : 'null')
+
+    const res = await fetch('/api/auth/update-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+    const data = await res.json()
+
+    if (!res.ok) {
+      console.error('[reset-password] update failed:', data.error, res.status)
+      setError(data.error || 'No se pudo actualizar la contraseña.')
       setSaving(false)
       return
     }
 
+    // Server already signed out — clear client-side session too
     await supabase.auth.signOut()
     setDone(true)
     setSaving(false)
