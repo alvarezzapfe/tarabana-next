@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../src/lib/roles'
+import { logAction } from '../../../../../src/lib/audit'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -44,5 +45,6 @@ export async function POST(request: Request) {
     }
   }
 
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pedido.crear', entidad: 'pedidos', entidadId: pedido.id, detalle: { cliente_id, total, vendedor_id: vendedor_id || null }, request })
   return NextResponse.json({ ok: true, pedido_id: pedido.id })
 }

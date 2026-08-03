@@ -1,6 +1,7 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../src/lib/roles'
+import { logAction } from '../../../../../src/lib/audit'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -38,5 +39,6 @@ export async function POST(request: Request) {
     role: 'comprador',
   }).eq('id', newUser.user.id)
 
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'cliente.crear', entidad: 'profiles', entidadId: newUser.user.id, detalle: { email: body.email, full_name: body.full_name, tipo: body.tipo }, request })
   return NextResponse.json({ ok: true, id: newUser.user.id })
 }

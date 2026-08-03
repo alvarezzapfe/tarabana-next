@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canManageAsAdmin } from '../../../../../src/lib/roles'
+import { logAction } from '../../../../../src/lib/audit'
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -35,6 +36,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }).eq('id', id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pdv.editar', entidad: 'puntos_venta', entidadId: id, detalle: { nombre: body.nombre }, request })
   return NextResponse.json({ ok: true })
 }
 
@@ -62,5 +64,6 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
   const { error } = await supabase.from('puntos_venta').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pdv.eliminar', entidad: 'puntos_venta', entidadId: id, detalle: { nombre: pdv?.imagen_url }, request })
   return NextResponse.json({ ok: true })
 }

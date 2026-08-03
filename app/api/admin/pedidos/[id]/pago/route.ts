@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../../src/lib/roles'
+import { logAction } from '../../../../../../src/lib/audit'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,5 +15,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const { pagado } = await request.json()
   await supabase.from('pedidos').update({ pagado }).eq('id', id)
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pedido.pago', entidad: 'pedidos', entidadId: id, detalle: { pagado }, request })
   return NextResponse.json({ ok: true })
 }

@@ -1,6 +1,7 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { isSuperAdmin } from '../../../../../../src/lib/roles'
+import { logAction } from '../../../../../../src/lib/audit'
 
 export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -16,6 +17,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   const serviceClient = createServiceClient()
   await serviceClient.from('profiles').update({ active: !target.active }).eq('id', id)
+
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.toggle', entidad: 'profiles', entidadId: id, detalle: { active: !target.active, target_role: target.role }, request: _req })
 
   return NextResponse.redirect(new URL('/admin/usuarios', _req.url))
 }

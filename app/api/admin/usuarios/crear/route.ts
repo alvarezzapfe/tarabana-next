@@ -2,6 +2,7 @@ import { createServerSupabaseClient, createServiceClient } from '../../../../../
 import { NextResponse } from 'next/server'
 import { Resend } from 'resend'
 import { isSuperAdmin, ASSIGNABLE_ROLES } from '../../../../../src/lib/roles'
+import { logAction } from '../../../../../src/lib/audit'
 
 const resend = new Resend(process.env.RESEND_API_KEY)
 
@@ -93,5 +94,6 @@ export async function POST(request: Request) {
 </html>`
   })
 
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.invitar', entidad: 'invitaciones', entidadId: inv.token, detalle: { email, nombre, rol }, request })
   return NextResponse.json({ ok: true })
 }

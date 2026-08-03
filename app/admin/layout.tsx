@@ -1,6 +1,6 @@
-import { createServerSupabaseClient } from '../../src/lib/supabase-server'
+import { createServerSupabaseClient, createServiceClient } from '../../src/lib/supabase-server'
 import { redirect } from 'next/navigation'
-import { isStaff } from '../../src/lib/roles'
+import { isStaff, isSuperAdmin } from '../../src/lib/roles'
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
@@ -29,10 +29,17 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!user) redirect('/portal')
 
   const { data: profile } = await supabase
-    .from('profiles').select('role, full_name').eq('id', user.id).single()
+    .from('profiles').select('role, full_name, last_seen_at').eq('id', user.id).single()
 
   if (!profile || !isStaff(profile.role))
     redirect('/portal')
+
+  // Fire-and-forget: update last_seen_at if >5 min since last
+  const lastSeen = profile.last_seen_at ? new Date(profile.last_seen_at).getTime() : 0
+  if (Date.now() - lastSeen > 5 * 60 * 1000) {
+    const svc = createServiceClient()
+    svc.from('profiles').update({ last_seen_at: new Date().toISOString() }).eq('id', user.id).then(() => {})
+  }
 
   // Gate AAL2: roles internos requieren 2FA verificado
   const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
@@ -64,6 +71,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               {item.label}
             </a>
           ))}
+          {isSuperAdmin(profile.role) && (
+            <a href="/admin/actividad" className="nav-link">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 20V10M18 20V4M6 20v-4" />
+              </svg>
+              Actividad
+            </a>
+          )}
         </nav>
         <div style={{ borderTop: '1px solid #C0DD97', paddingTop: 14 }}>
           <p style={{ color: '#27500A', fontSize: 13, fontWeight: 500, marginBottom: 2, padding: '0 12px' }}>{profile.full_name || user.email}</p>

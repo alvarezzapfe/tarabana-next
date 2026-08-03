@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../../src/lib/roles'
+import { logAction } from '../../../../../../src/lib/audit'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -59,6 +60,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
   }
 
+  const prevStatus = (await supabase.from('pedidos').select('status').eq('id', id).single()).data?.status
   await supabase.from('pedidos').update({ status }).eq('id', id)
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pedido.status', entidad: 'pedidos', entidadId: id, detalle: { from: prevStatus, to: status }, request })
   return NextResponse.json({ ok: true })
 }

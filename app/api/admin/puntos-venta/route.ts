@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canManageAsAdmin } from '../../../../src/lib/roles'
+import { logAction } from '../../../../src/lib/audit'
 
 export async function GET() {
   const supabase = await createServerSupabaseClient()
@@ -53,5 +54,6 @@ export async function POST(request: Request) {
   }).select('id').single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pdv.crear', entidad: 'puntos_venta', entidadId: data.id, detalle: { nombre: body.nombre, tipo: body.tipo }, request })
   return NextResponse.json({ ok: true, id: data.id })
 }

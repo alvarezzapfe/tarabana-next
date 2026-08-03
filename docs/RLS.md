@@ -92,3 +92,42 @@ Razones:
 Si en el futuro se quiere abrir INSERT a authenticated vía RLS, el route handler
 debe seguir recalculando precios — la policy solo controlaría quién puede insertar,
 no la integridad de los montos.
+
+## Auditoría (audit_log)
+
+Tabla `public.audit_log` con RLS estricto:
+- **SELECT**: solo `is_super_admin()` puede leer
+- **INSERT**: nadie vía RLS — solo `service_role` escribe
+
+Columnas: `actor_id`, `actor_email`, `actor_role`, `accion`, `entidad`,
+`entidad_id`, `detalle` (JSONB), `ip`, `created_at`.
+
+### Escritura
+
+El helper `src/lib/audit.ts` → `logAction()` usa `createServiceClient` para
+insertar. Está envuelto en try/catch: si falla, hace `console.error` pero
+**nunca rompe el flujo principal**. Se llama fire-and-forget después de que
+la acción tenga éxito.
+
+### Acciones instrumentadas
+
+| Acción | Entidad | Route handler |
+|---|---|---|
+| `pedido.status` | pedidos | `/api/admin/pedidos/[id]/status` |
+| `pedido.pago` | pedidos | `/api/admin/pedidos/[id]/pago` |
+| `pedido.eliminar` | pedidos | `/api/admin/pedidos/[id]/eliminar` |
+| `pedido.crear` | pedidos | `/api/admin/pedidos/crear` |
+| `cliente.crear` | profiles | `/api/admin/clientes/crear` |
+| `usuario.invitar` | invitaciones | `/api/admin/usuarios/crear` |
+| `usuario.toggle` | profiles | `/api/admin/usuarios/[id]/toggle` |
+| `usuario.reset_mfa` | profiles | `/api/admin/usuarios/[id]/reset-mfa` |
+| `invitacion.eliminar` | invitaciones | `/api/admin/invitaciones/[id]/eliminar` |
+| `pdv.crear` | puntos_venta | `/api/admin/puntos-venta` |
+| `pdv.editar` | puntos_venta | `/api/admin/puntos-venta/[id]` |
+| `pdv.eliminar` | puntos_venta | `/api/admin/puntos-venta/[id]` |
+
+### last_seen_at
+
+`profiles.last_seen_at` se actualiza fire-and-forget en `app/admin/layout.tsx`
+con `createServiceClient`, solo si pasaron más de 5 minutos desde el último
+update. No bloquea el render del layout.
