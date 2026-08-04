@@ -1,7 +1,7 @@
 'use client'
 import { useState } from 'react'
 
-const statusConfig: Record<string, { label: string, color: string, bg: string }> = {
+const entregaConfig: Record<string, { label: string, color: string, bg: string }> = {
   pendiente:  { label: 'Pendiente',  color: '#f59e0b', bg: '#fef3c7' },
   confirmado: { label: 'Confirmado', color: '#3b82f6', bg: '#dbeafe' },
   enviado:    { label: 'En camino',  color: '#8b5cf6', bg: '#ede9fe' },
@@ -9,32 +9,89 @@ const statusConfig: Record<string, { label: string, color: string, bg: string }>
   cancelado:  { label: 'Cancelado',  color: '#ef4444', bg: '#fee2e2' },
 }
 
-export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], canEdit: boolean }) {
+const cobroConfig: Record<string, { label: string, color: string, bg: string }> = {
+  pagado:    { label: 'Pagado',    color: '#10b981', bg: '#d1fae5' },
+  parcial:   { label: 'Parcial',   color: '#3b82f6', bg: '#dbeafe' },
+  pendiente: { label: 'Pendiente', color: '#f59e0b', bg: '#fef3c7' },
+  vencido:   { label: 'Vencido',   color: '#ef4444', bg: '#fee2e2' },
+}
+
+const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`
+
+export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: any[], saldos: any[], canEdit: boolean }) {
   const [data, setData] = useState(pedidos)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [statusModalId, setStatusModalId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [payModalId, setPayModalId] = useState<string | null>(null)
+  const [payMonto, setPayMonto] = useState('')
+  const [payMetodo, setPayMetodo] = useState('transferencia')
+  const [payRef, setPayRef] = useState('')
+  const [payLoading, setPayLoading] = useState(false)
+  const [payError, setPayError] = useState('')
+
+  // Filters
+  const [filterCobro, setFilterCobro] = useState('')
+  const [filterEntrega, setFilterEntrega] = useState('')
+  const [filterCliente, setFilterCliente] = useState('')
+
+  // Build saldo map
+  const saldoMap: Record<string, any> = {}
+  for (const s of saldos) saldoMap[s.id] = s
+
+  // Filtered data
+  const filtered = data.filter(p => {
+    const s = saldoMap[p.id]
+    if (filterCobro && s?.estado_cobro !== filterCobro) return false
+    if (filterEntrega && p.status !== filterEntrega) return false
+    if (filterCliente) {
+      const q = filterCliente.toLowerCase()
+      const c = p.profiles as any
+      if (!(c?.full_name || '').toLowerCase().includes(q) && !(c?.email || '').toLowerCase().includes(q)) return false
+    }
+    return true
+  })
+
+  // Stats from saldos
+  const totalPedidos = data.filter(p => p.status !== 'cancelado').reduce((s, p) => s + (p.total || 0), 0)
+  const porCobrar = saldos.filter(s => s.saldo > 0).reduce((s, p) => s + p.saldo, 0)
+  const vencido = saldos.filter(s => s.estado_cobro === 'vencido').reduce((s, p) => s + p.saldo, 0)
+  const now = new Date()
+  const entregadosMes = data.filter(p => p.status === 'entregado' && new Date(p.created_at).getMonth() === now.getMonth() && new Date(p.created_at).getFullYear() === now.getFullYear()).length
 
   const updateStatus = async (id: string, status: string) => {
     await fetch(`/api/admin/pedidos/${id}/status`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status }) })
     setData(prev => prev.map(p => p.id === id ? { ...p, status } : p))
-  }
-
-  const togglePago = async (id: string, pagado: boolean) => {
-    await fetch(`/api/admin/pedidos/${id}/pago`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pagado }) })
-    setData(prev => prev.map(p => p.id === id ? { ...p, pagado } : p))
+    setStatusModalId(null)
+    setMenuId(null)
   }
 
   const eliminarPedido = async (id: string) => {
-    if (!confirm('¿Eliminar este pedido? Esta acción no se puede deshacer.')) return
+    if (!confirm('Eliminar este pedido? Esta accion no se puede deshacer.')) return
     setDeletingId(id)
     const res = await fetch(`/api/admin/pedidos/${id}/eliminar`, { method: 'DELETE' })
-    if (res.ok) { setData(prev => prev.filter(p => p.id !== id)) }
-    else { alert('Error al eliminar pedido') }
+    if (res.ok) setData(prev => prev.filter(p => p.id !== id))
     setDeletingId(null)
+    setMenuId(null)
   }
 
-  const totalVentas = data.filter(p => p.pagado).reduce((s, p) => s + (p.total || 0), 0)
-  const porCobrar = data.filter(p => !p.pagado && p.status !== 'cancelado').reduce((s, p) => s + (p.total || 0), 0)
+  const submitPago = async () => {
+    if (!payModalId) return
+    setPayLoading(true); setPayError('')
+    const monto = parseFloat(payMonto)
+    if (!monto || monto <= 0) { setPayError('Monto invalido'); setPayLoading(false); return }
+    const res = await fetch('/api/admin/pagos', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pedido_id: payModalId, monto, metodo: payMetodo, referencia: payRef, fecha_pago: new Date().toISOString() }),
+    })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setPayError(d.error || 'Error'); setPayLoading(false); return }
+    setPayModalId(null); setPayMonto(''); setPayRef(''); setMenuId(null)
+    setPayLoading(false)
+    // Reload would be ideal but we don't have a reload mechanism from server component
+    // For now the saldo will be stale until page refresh
+    window.location.reload()
+  }
 
   return (
     <div style={{ padding: '36px 40px', fontFamily: 'system-ui, sans-serif' }}>
@@ -52,151 +109,177 @@ export default function PedidosClient({ pedidos, canEdit }: { pedidos: any[], ca
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 28 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
         {[
-          { label: 'Total', value: data.length, color: '#1a1a1a', currency: false },
-          { label: 'Sin entregar', value: data.filter(p => !['entregado','cancelado'].includes(p.status)).length, color: '#3b82f6', currency: false },
-          { label: 'Cobrado', value: totalVentas, color: '#10b981', currency: true },
-          { label: 'Por cobrar', value: porCobrar, color: '#f59e0b', currency: true },
+          { label: 'Total ventas', value: fmt(totalPedidos), color: '#1a1a1a' },
+          { label: 'Por cobrar', value: fmt(porCobrar), color: '#f59e0b' },
+          { label: 'Vencido', value: fmt(vencido), color: '#ef4444' },
+          { label: 'Entregados este mes', value: String(entregadosMes), color: '#10b981' },
         ].map(s => (
           <div key={s.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
             <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 6px' }}>{s.label}</p>
-            <p style={{ color: s.color, fontSize: 22, fontWeight: 700, margin: 0 }}>
-              {s.currency ? `$${(s.value as number).toLocaleString('es-MX', { minimumFractionDigits: 0 })}` : s.value}
-            </p>
+            <p style={{ color: s.color, fontSize: 22, fontWeight: 700, margin: 0 }}>{s.value}</p>
           </div>
         ))}
       </div>
 
-      {/* Tabla */}
+      {/* Filters */}
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
+        <input placeholder="Buscar cliente..." value={filterCliente} onChange={e => setFilterCliente(e.target.value)}
+          style={{ padding: '8px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#1a1a1a', outline: 'none', width: 200 }} />
+        <select value={filterCobro} onChange={e => setFilterCobro(e.target.value)}
+          style={{ padding: '8px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#1a1a1a', outline: 'none' }}>
+          <option value="">Cobro: todos</option>
+          {Object.entries(cobroConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+        <select value={filterEntrega} onChange={e => setFilterEntrega(e.target.value)}
+          style={{ padding: '8px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#1a1a1a', outline: 'none' }}>
+          <option value="">Entrega: todos</option>
+          {Object.entries(entregaConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['#', 'Cliente', 'Productos', 'Total', 'Entrega', 'Pago', canEdit ? 'Pago' : '', canEdit ? 'Entrega' : '', canEdit ? 'Editar' : '', canEdit ? 'Eliminar' : ''].filter(h => h !== '' || !canEdit).map((h, i) => (
-                <th key={i} style={{ color: '#6b7280', fontSize: 13, textAlign: 'left', padding: '10px 16px', textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap' }}>{h}</th>
+              {['# y fecha', 'Cliente', 'Total', 'Saldo', 'Cobro', 'Entrega', ''].map((h, i) => (
+                <th key={i} style={{ color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 16px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {data.length ? data.map(p => {
-              const sc = statusConfig[p.status] || { label: p.status, color: '#6b7280', bg: '#88888818' }
+            {filtered.length ? filtered.map(p => {
+              const ec = entregaConfig[p.status] || { label: p.status, color: '#6b7280', bg: '#f3f4f6' }
+              const s = saldoMap[p.id]
+              const cc = s ? (cobroConfig[s.estado_cobro] || cobroConfig.pendiente) : cobroConfig.pendiente
               const cliente = p.profiles as any
-              const items = p.pedido_items as any[]
               const fecha = new Date(p.created_at)
               const isExpanded = expandedId === p.id
+              const items = p.pedido_items as any[]
+
               return (
-                <>
-                  <tr key={p.id} style={{ borderBottom: isExpanded ? 'none' : '1px solid #181818', cursor: 'pointer' }} onClick={() => setExpandedId(isExpanded ? null : p.id)}>
-                    <td style={{ padding: '14px 16px' }}>
-                      <p style={{ margin: 0, color: '#374151', fontSize: 13, fontFamily: 'monospace', fontWeight: 600 }}>#{p.id.slice(-6).toUpperCase()}</p>
-                      <p style={{ margin: '3px 0 0', color: '#6b7280', fontSize: 13 }}>{fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}</p>
-                      <p style={{ margin: '1px 0 0', color: '#6b7280', fontSize: 10 }}>{fecha.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' })}</p>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>{cliente?.full_name || '—'}</p>
-                      <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: 11 }}>{cliente?.email}</p>
-                      <span style={{ background: p.tipo_precio === 'taproom' ? '#fef3c7' : '#1a1a1a', color: p.tipo_precio === 'taproom' ? '#f59e0b' : '#888', fontSize: 13, padding: '1px 6px', borderRadius: 99, marginTop: 4, display: 'inline-block' }}>
-                        {p.tipo_precio === 'taproom' ? 'Taproom' : 'Público'}
-                      </span>
-                    </td>
-                    <td style={{ padding: '14px 16px', maxWidth: 260 }}>
-                      {items?.length > 0 ? items.map((item: any, i: number) => (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                          <span style={{ color: '#E8531D', fontSize: 13, fontWeight: 700, minWidth: 20 }}>{item.cantidad}×</span>
-                          {item.unidad === 'mix24' ? (
-                            <span style={{ color: '#1a1a1a', fontSize: 13 }}>
-                              <span style={{ background: '#ede9fe', color: '#7c3aed', fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 99, marginRight: 4 }}>MIX</span>
-                              {item.metadata?.estilos?.map((e: any) => e.nombre).join(', ') || item.productos?.nombre}
-                            </span>
-                          ) : (
-                            <span style={{ color: '#1a1a1a', fontSize: 13 }}>{item.productos?.nombre}</span>
-                          )}
-                          <span style={{ color: '#6b7280', fontSize: 10 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</span>
-                        </div>
-                      )) : <span style={{ color: '#6b7280', fontSize: 13 }}>Sin productos</span>}
-                    </td>
-                    <td style={{ padding: '14px 16px', color: '#E8531D', fontSize: 15, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                      ${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 })}
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ background: sc.bg, color: sc.color, padding: '4px 10px', borderRadius: 99, fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>{sc.label}</span>
-                    </td>
-                    <td style={{ padding: '14px 16px' }}>
-                      <span style={{ background: p.pagado ? '#d1fae5' : '#fee2e2', color: p.pagado ? '#10b981' : '#ef4444', padding: '4px 10px', borderRadius: 99, fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
-                        {p.pagado ? 'Pagado' : 'Sin pagar'}
-                      </span>
-                    </td>
+                <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }} onClick={() => setExpandedId(isExpanded ? null : p.id)}>
+                  <td style={{ padding: '14px 16px' }}>
+                    <p style={{ margin: 0, color: '#374151', fontSize: 13, fontFamily: 'monospace', fontWeight: 600 }}>#{p.id.slice(-6).toUpperCase()}</p>
+                    <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 11 }}>{fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}</p>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>{cliente?.full_name || '--'}</p>
+                    <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 11 }}>{cliente?.email}</p>
+                  </td>
+                  <td style={{ padding: '14px 16px', color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>
+                    {fmt(p.total || 0)}
+                  </td>
+                  <td style={{ padding: '14px 16px', color: s?.saldo > 0 ? '#E8531D' : '#9ca3af', fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>
+                    {s ? fmt(s.saldo) : '--'}
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{ background: cc.bg, color: cc.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                      {cc.label}
+                      {s?.dias_vencido > 0 && s?.estado_cobro === 'vencido' ? ` (${s.dias_vencido}d)` : ''}
+                    </span>
+                  </td>
+                  <td style={{ padding: '14px 16px' }}>
+                    <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{ec.label}</span>
+                  </td>
+                  <td style={{ padding: '14px 16px', position: 'relative' }} onClick={e => e.stopPropagation()}>
                     {canEdit && (
                       <>
-                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
-                          <button onClick={() => togglePago(p.id, !p.pagado)} style={{ padding: '6px 10px', background: p.pagado ? '#2a1010' : '#102a10', border: `1px solid ${p.pagado ? '#ef444440' : '#10b98140'}`, borderRadius: 6, color: p.pagado ? '#ef4444' : '#10b981', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' }}>
-                            {p.pagado ? 'Sin pagar' : 'Marcar pagado'}
-                          </button>
-                        </td>
-                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
-                          <select value={p.status} onChange={e => updateStatus(p.id, e.target.value)}
-                            style={{ background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#374151', fontSize: 13, padding: '6px 8px', cursor: 'pointer' }}>
-                            {Object.entries(statusConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                          </select>
-                        </td>
-                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
-                          <a href={`/admin/pedidos/${p.id}/edit`} style={{ padding: '6px 14px', background: '#1a1a2a', border: '1px solid #3b82f640', borderRadius: 6, color: '#3b82f6', fontSize: 13, textDecoration: 'none', whiteSpace: 'nowrap', display: 'inline-block' }}>
-                            ✏️ Editar
-                          </a>
-                        </td>
-                        <td style={{ padding: '14px 16px' }} onClick={e => e.stopPropagation()}>
-                          <button onClick={() => eliminarPedido(p.id)} disabled={deletingId === p.id}
-                            style={{ padding: '6px 14px', background: '#1a0a0a', border: '1px solid #ef444430', borderRadius: 6, color: '#ef4444', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', opacity: deletingId === p.id ? 0.5 : 1 }}>
-                            {deletingId === p.id ? '...' : '🗑 Eliminar'}
-                          </button>
-                        </td>
+                        <button onClick={() => setMenuId(menuId === p.id ? null : p.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 18, padding: '4px 8px' }}>
+                          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                        </button>
+                        {menuId === p.id && (
+                          <div style={{ position: 'absolute', right: 16, top: 40, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', zIndex: 50, minWidth: 180 }}>
+                            <button onClick={() => { setPayModalId(p.id); setPayMonto(''); setPayRef(''); setPayError('') }}
+                              style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+                              Registrar pago
+                            </button>
+                            <button onClick={() => setStatusModalId(p.id)}
+                              style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+                              Cambiar entrega
+                            </button>
+                            <a href={`/admin/pedidos/${p.id}/edit`}
+                              style={{ display: 'block', padding: '10px 16px', fontSize: 13, color: '#374151', textDecoration: 'none', borderTop: '1px solid #f3f4f6' }}>
+                              Editar
+                            </a>
+                            <button onClick={() => eliminarPedido(p.id)} disabled={deletingId === p.id}
+                              style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#ef4444', cursor: 'pointer', borderTop: '1px solid #f3f4f6' }}>
+                              {deletingId === p.id ? 'Eliminando...' : 'Eliminar'}
+                            </button>
+                          </div>
+                        )}
                       </>
                     )}
-                  </tr>
-                  {/* Fila expandida con detalle */}
-                  {isExpanded && (
-                    <tr key={`${p.id}-detail`} style={{ borderBottom: '1px solid #181818' }}>
-                      <td colSpan={7} style={{ padding: '0 16px 16px 16px', background: '#f9fafb' }}>
-                        <div style={{ padding: '16px', background: '#fff', borderRadius: 8, border: '1px solid #e5e7eb' }}>
-                          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 12 }}>Detalle del pedido</p>
-                          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                            <thead>
-                              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                                {['Producto', 'Estilo', 'Cantidad', 'Precio unit.', 'Subtotal'].map((h, i) => (
-                                  <th key={i} style={{ color: '#6b7280', fontSize: 13, textAlign: 'left', padding: '6px 12px', textTransform: 'uppercase' }}>{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {items?.map((item: any, i: number) => (
-                                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                                  <td style={{ padding: '8px 12px', color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>{item.productos?.nombre || '—'}</td>
-                                  <td style={{ padding: '8px 12px', color: '#6b7280', fontSize: 12 }}>{item.productos?.estilo || '—'}</td>
-                                  <td style={{ padding: '8px 12px', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>{item.cantidad}</td>
-                                  <td style={{ padding: '8px 12px', color: '#374151', fontSize: 12 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</td>
-                                  <td style={{ padding: '8px 12px', color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>${((item.cantidad || 0) * (item.precio_unitario || 0)).toLocaleString('es-MX')}</td>
-                                </tr>
-                              ))}
-                              <tr>
-                                <td colSpan={4} style={{ padding: '10px 12px', color: '#6b7280', fontSize: 13, textAlign: 'right', fontWeight: 600 }}>TOTAL</td>
-                                <td style={{ padding: '10px 12px', color: '#E8531D', fontSize: 15, fontWeight: 700 }}>${(p.total || 0).toLocaleString('es-MX')}</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                          {p.notas && <p style={{ color: '#6b7280', fontSize: 13, marginTop: 12, fontStyle: 'italic' }}>📝 {p.notas}</p>}
-                        </div>
-                      </td>
-                    </tr>
-                  )}
-                </>
+                  </td>
+                </tr>
               )
             }) : (
-              <tr><td colSpan={7} style={{ color: '#6b7280', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>No hay pedidos aún</td></tr>
+              <tr><td colSpan={7} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>No hay pedidos</td></tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Status change modal */}
+      {statusModalId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setStatusModalId(null)}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '24px 28px', width: 340 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#1a1a1a', fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>Cambiar estado de entrega</h3>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {Object.entries(entregaConfig).map(([k, v]) => (
+                <button key={k} onClick={() => updateStatus(statusModalId, k)}
+                  style={{ padding: '10px 14px', background: data.find(p => p.id === statusModalId)?.status === k ? v.bg : '#f9fafb', border: `1px solid ${data.find(p => p.id === statusModalId)?.status === k ? v.color + '40' : '#e5e7eb'}`, borderRadius: 8, color: v.color, fontSize: 13, fontWeight: 600, cursor: 'pointer', textAlign: 'left' }}>
+                  {v.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick pay modal */}
+      {payModalId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setPayModalId(null)}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '24px 28px', width: 380 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#1a1a1a', fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>Registrar pago</h3>
+            <p style={{ color: '#9ca3af', fontSize: 12, margin: '0 0 16px' }}>Pedido #{payModalId.slice(-6).toUpperCase()} — Saldo: {saldoMap[payModalId] ? fmt(saldoMap[payModalId].saldo) : '--'}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Monto</label>
+                <input type="number" value={payMonto} onChange={e => setPayMonto(e.target.value)} placeholder="0.00"
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 15, fontWeight: 700, boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Método</label>
+                <select value={payMetodo} onChange={e => setPayMetodo(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Referencia</label>
+                <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="No. de operación"
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+            </div>
+            {payError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{payError}</p>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setPayModalId(null)} style={{ padding: '9px 16px', background: '#f3f4f6', border: 'none', borderRadius: 8, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={submitPago} disabled={payLoading} style={{ padding: '9px 20px', background: '#E8531D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: payLoading ? 0.6 : 1 }}>
+                {payLoading ? 'Registrando...' : 'Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Click outside to close menu */}
+      {menuId && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }} onClick={() => setMenuId(null)} />}
     </div>
   )
 }

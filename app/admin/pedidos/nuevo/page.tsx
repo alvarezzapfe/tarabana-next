@@ -23,6 +23,7 @@ export default function NuevoPedidoPage() {
   const [productos, setProductos] = useState<Producto[]>([])
   const [clienteId, setClienteId] = useState(searchParams.get('cliente') || '')
   const [tipoPrecio, setTipoPrecio] = useState<'publico' | 'taproom'>('publico')
+  const [condicionesPago, setCondicionesPago] = useState('contado')
   const [items, setItems] = useState<Item[]>([])
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
@@ -32,14 +33,20 @@ export default function NuevoPedidoPage() {
 
   useEffect(() => {
     const load = async () => {
-      const [{ data: cl }, { data: pr }, { data: vend }] = await Promise.all([
+      const [{ data: cl }, { data: pr }, { data: vend }, configRes] = await Promise.all([
         supabase.from('profiles').select('id, full_name, email, tipo_consumidor, nivel_precio').eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
-        supabase.from('vendedores').select('id, nombre, comision_pct').eq('activo', true).order('nombre')
+        supabase.from('vendedores').select('id, nombre, comision_pct').eq('activo', true).order('nombre'),
+        fetch('/api/admin/config').then(r => r.ok ? r.json() : {}),
       ])
       setClientes(cl || [])
       setProductos(pr || [])
       setVendedores(vend || [])
+      // Set default condiciones_pago from config
+      const diasDefault = (configRes as any)?.negocio?.dias_credito_default
+      if (diasDefault === 15) setCondicionesPago('15_dias')
+      else if (diasDefault === 30) setCondicionesPago('30_dias')
+      else setCondicionesPago('contado')
     }
     load()
   }, [])
@@ -89,7 +96,7 @@ export default function NuevoPedidoPage() {
     const res = await fetch('/api/admin/pedidos/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cliente_id: clienteId, tipo_precio: tipoPrecio, items, notas, total, vendedor_id: vendedorId || null })
+      body: JSON.stringify({ cliente_id: clienteId, tipo_precio: tipoPrecio, condiciones_pago: condicionesPago, items, notas, total, vendedor_id: vendedorId || null })
     })
     if (res.ok) { router.push('/admin/pedidos'); router.refresh() }
     else { alert('Error al crear pedido'); setLoading(false) }
@@ -154,6 +161,22 @@ export default function NuevoPedidoPage() {
                 borderRadius: 8, cursor: 'pointer', color: tipoPrecio === t ? '#fff' : '#555', fontSize: 13, fontWeight: tipoPrecio === t ? 600 : 400
               }}>
                 {t === 'publico' ? 'Precio público' : 'Precio taproom'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Condiciones de pago */}
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Condiciones de pago</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {[{ key: 'contado', label: 'Contado' }, { key: '15_dias', label: '15 dias' }, { key: '30_dias', label: '30 dias' }].map(c => (
+              <button key={c.key} onClick={() => setCondicionesPago(c.key)} style={{
+                flex: 1, padding: '9px', background: condicionesPago === c.key ? '#1e1e1e' : '#0a0a0a',
+                border: `1.5px solid ${condicionesPago === c.key ? '#E8531D' : '#1e1e1e'}`,
+                borderRadius: 8, cursor: 'pointer', color: condicionesPago === c.key ? '#fff' : '#555', fontSize: 13, fontWeight: condicionesPago === c.key ? 600 : 400
+              }}>
+                {c.label}
               </button>
             ))}
           </div>

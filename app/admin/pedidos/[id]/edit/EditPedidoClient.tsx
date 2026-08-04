@@ -14,7 +14,7 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
   const [saving, setSaving] = useState(false)
 
   const [status, setStatus] = useState(pedido.status || 'pendiente')
-  const [pagado, setPagado] = useState(pedido.pagado || false)
+  const [condicionesPago, setCondicionesPago] = useState(pedido.condiciones_pago || 'contado')
   const [vendedorId, setVendedorId] = useState(pedido.vendedor_id || '')
   const [notas, setNotas] = useState(pedido.notas || '')
   const [notasInternas, setNotasInternas] = useState(pedido.notas_internas || '')
@@ -29,7 +29,7 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
     setSaving(true)
     const { error } = await supabase.from('pedidos').update({
       status,
-      pagado,
+      condiciones_pago: condicionesPago,
       vendedor_id: vendedorId || null,
       notas: notas || null,
       notas_internas: notasInternas || null,
@@ -103,7 +103,7 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
       </div>
 
       {/* Status y pago */}
-      <Section title="Status" />
+      <Section title="Status y condiciones" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 4 }}>
         <div>
           <label style={labelStyle}>Status de entrega</label>
@@ -112,10 +112,12 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
           </select>
         </div>
         <div>
-          <label style={labelStyle}>Status de pago</label>
-          <button onClick={() => setPagado(!pagado)} style={{ ...inputStyle, background: pagado ? '#102a10' : '#2a1010', border: `1px solid ${pagado ? '#10b98140' : '#ef444440'}`, color: pagado ? '#10b981' : '#ef4444', cursor: 'pointer', textAlign: 'left' as const }}>
-            {pagado ? '✓ Pagado' : '✗ Sin pagar'} — click para cambiar
-          </button>
+          <label style={labelStyle}>Condiciones de pago</label>
+          <select value={condicionesPago} onChange={e => setCondicionesPago(e.target.value)} style={inputStyle}>
+            <option value="contado">Contado</option>
+            <option value="15_dias">15 dias</option>
+            <option value="30_dias">30 dias</option>
+          </select>
         </div>
       </div>
 

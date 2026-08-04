@@ -48,15 +48,26 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     redirect('/tierra-mojada/verificar')
   }
 
+  // Read branding config
+  const { data: brandingRow } = await supabase.from('app_config').select('value').eq('key', 'branding').single()
+  const branding = brandingRow?.value || {}
+  const brandPrimary = branding.color_primary || '#E8531D'
+  const sidebarBg = branding.sidebar_bg || '#EAF3DE'
+  const sidebarText = branding.sidebar_text || '#27500A'
+
+  const superAdmin = isSuperAdmin(profile.role)
+
   return (
     <div style={{ display: 'flex', minHeight: '100vh', background: '#fafafa', fontFamily: 'system-ui, -apple-system, sans-serif', margin: 0 }}>
       <style>{`
-        .nav-link { display:flex; align-items:center; gap:10px; color:#27500A; text-decoration:none; padding:9px 12px; border-radius:8px; font-size:14px; font-weight:450; transition:all 0.15s; }
-        .nav-link:hover { background:rgba(59,109,17,0.1) !important; color:#3B6D11 !important; }
+        :root { --brand-primary: ${brandPrimary}; --sidebar-bg: ${sidebarBg}; --sidebar-text: ${sidebarText}; }
+        .nav-link { display:flex; align-items:center; gap:10px; color:var(--sidebar-text); text-decoration:none; padding:9px 12px; border-radius:8px; font-size:14px; font-weight:450; transition:all 0.15s; }
+        .nav-link:hover { background:rgba(0,0,0,0.06) !important; }
         body { background: #fafafa !important; }
+        .btn-primary { background: var(--brand-primary); }
       `}</style>
       <aside style={{
-        width: 240, background: '#EAF3DE', borderRight: '1px solid #C0DD97',
+        width: 240, background: 'var(--sidebar-bg)', borderRight: '1px solid rgba(0,0,0,0.08)',
         display: 'flex', flexDirection: 'column', padding: '20px 12px',
         position: 'fixed', top: 0, left: 0, height: '100vh', zIndex: 50
       }}>
@@ -72,25 +83,34 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               {item.label}
             </a>
           ))}
-          {isSuperAdmin(profile.role) && (
-            <a href="/admin/actividad" className="nav-link">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20V10M18 20V4M6 20v-4" />
-              </svg>
-              Actividad
-            </a>
+          {superAdmin && (
+            <>
+              <a href="/admin/actividad" className="nav-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 20V10M18 20V4M6 20v-4" />
+                </svg>
+                Actividad
+              </a>
+              <a href="/admin/configuracion" className="nav-link">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+                Configuracion
+              </a>
+            </>
           )}
         </nav>
-        <div style={{ borderTop: '1px solid #C0DD97', paddingTop: 14 }}>
-          <p style={{ color: '#27500A', fontSize: 13, fontWeight: 500, marginBottom: 2, padding: '0 12px' }}>{profile.full_name || user.email}</p>
-          <p style={{ color: '#3B6D11', fontSize: 11, marginBottom: 14, padding: '0 12px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600 }}>
+        <div style={{ borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 14 }}>
+          <p style={{ color: 'var(--sidebar-text)', fontSize: 13, fontWeight: 500, marginBottom: 2, padding: '0 12px' }}>{profile.full_name || user.email}</p>
+          <p style={{ color: 'var(--sidebar-text)', fontSize: 11, marginBottom: 14, padding: '0 12px', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 600, opacity: 0.7 }}>
             {roleLabel[profile.role] || profile.role}
           </p>
-          <a href="/api/auth/logout" className="nav-link" style={{ color: '#27500A', opacity: 0.7 }}>
+          <a href="/api/auth/logout" className="nav-link" style={{ opacity: 0.6 }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
               <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/>
             </svg>
-            Cerrar sesión
+            Cerrar sesion
           </a>
         </div>
       </aside>

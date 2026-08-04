@@ -12,10 +12,10 @@ export async function POST(request: Request) {
   if (!canWrite(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
-  const { cliente_id, tipo_precio, items, notas, total, vendedor_id } = await request.json()
+  const { cliente_id, tipo_precio, condiciones_pago, items, notas, total, vendedor_id } = await request.json()
 
   const { data: pedido, error } = await supabase.from('pedidos').insert({
-    cliente_id, vendedor_id: vendedor_id || null, tipo_precio, notas, total, status: 'confirmado'
+    cliente_id, vendedor_id: vendedor_id || null, tipo_precio, condiciones_pago: condiciones_pago || 'contado', notas, total, status: 'confirmado'
   }).select('id').single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
