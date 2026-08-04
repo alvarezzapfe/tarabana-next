@@ -85,13 +85,25 @@ Razones:
 - El checkout recalcula precios contra la tabla `productos` server-side.
   No confía en `total`, `precio_unitario` ni `cliente_id` del body.
 - El sufijo de precio (`taproom` / `publico`) se deriva de
-  `profiles.tipo_consumidor` en la DB, no del request.
+  `profiles.nivel_precio` en la DB con service_role, no del request.
 - Cancelar valida `cliente_id = user.id` y `status = 'pendiente'` en código
   antes de ejecutar el update.
 
 Si en el futuro se quiere abrir INSERT a authenticated vía RLS, el route handler
 debe seguir recalculando precios — la policy solo controlaría quién puede insertar,
 no la integridad de los montos.
+
+## nivel_precio (sin grant para authenticated)
+
+`profiles.nivel_precio` determina qué columna de precio ve el cliente en el
+catálogo: `'publico'` → `precio_*_publico`, `'taproom'`/`'distribuidor'` →
+`precio_*_taproom`.
+
+**No tiene grant para authenticated a propósito.** Solo `service_role` puede
+modificarlo (vía `/api/admin/clientes/[id]/nivel-precio`). Si un cliente
+pudiera cambiarse a sí mismo el nivel de precio, podría acceder a precios de
+mayorista sin autorización. El cambio queda registrado en `audit_log` con
+acción `cliente.nivel_precio` y el from/to.
 
 ## Auditoría (audit_log)
 

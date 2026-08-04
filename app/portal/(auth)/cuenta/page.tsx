@@ -1,13 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
-
-const tipoLabel: Record<string, string> = {
-  ocasional: 'Consumidor ocasional',
-  tiene_tap: 'Tap Room',
-  tiene_bar: 'Bar',
-  restaurante: 'Restaurante',
-}
+import { tipoLabel as getTipoLabel, nivelLabel } from '../../../../src/lib/clientes'
 
 const regimenesMap: Record<string, { codigo: string; desc: string }[]> = {
   fisica: [
@@ -128,7 +122,8 @@ export default function CuentaPage() {
     { label: 'Nombre', value: profile?.full_name || '\u2014' },
     { label: 'Email', value: user?.email || '\u2014' },
     { label: 'Teléfono', value: profile?.phone || '\u2014' },
-    { label: 'Tipo de cliente', value: tipoLabel[profile?.tipo_consumidor] || '\u2014' },
+    { label: 'Tipo de cliente', value: getTipoLabel(profile?.tipo_consumidor) },
+    { label: 'Nivel de precio', value: nivelLabel(profile?.nivel_precio) },
     { label: 'Dirección de entrega', value: profile?.direccion_entrega || '\u2014' },
     { label: 'Ciudad / CP', value: [profile?.ciudad, profile?.cp].filter(Boolean).join(' \u00b7 ') || '\u2014' },
   ]

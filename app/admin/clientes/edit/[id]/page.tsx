@@ -2,13 +2,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-
-const tipos = [
-  { value: 'ocasional', label: 'Ocasional', icon: '🏠' },
-  { value: 'tiene_tap', label: 'Tap Room', icon: '🍺' },
-  { value: 'tiene_bar', label: 'Bar', icon: '🍻' },
-  { value: 'restaurante', label: 'Restaurante', icon: '🍽️' },
-]
+import { TIPOS_CLIENTE } from '../../../../../src/lib/clientes'
 
 const usosCFDI = [
   { clave: 'G01', desc: 'Adquisición de mercancias' },
@@ -129,7 +123,7 @@ export default function EditClientePage() {
         <div>
           <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular</label>
           <div style={{ display: 'flex' }}>
-            <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '10px 12px', color: '#6b7280', fontSize: 13 }}>🇲🇽 +52</div>
+            <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '10px 12px', color: '#6b7280', fontSize: 13 }}>MX +52</div>
             <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="55 1234 5678"
               style={{ flex: 1, padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '0 8px 8px 0', color: '#1a1a1a', fontSize: 14, outline: 'none' }} />
           </div>
@@ -138,13 +132,13 @@ export default function EditClientePage() {
 
       <Section title="Tipo de cliente" />
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
-        {tipos.map(t => (
+        {TIPOS_CLIENTE.map(t => (
           <button key={t.value} onClick={() => set('tipo', t.value)} style={{
             padding: '10px 8px', background: form.tipo === t.value ? '#1e1e1e' : '#111',
             border: `1.5px solid ${form.tipo === t.value ? '#E8531D' : '#1e1e1e'}`,
             borderRadius: 8, cursor: 'pointer', textAlign: 'center'
           }}>
-            <p style={{ margin: '0 0 3px', fontSize: 20 }}>{t.icon}</p>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={form.tipo === t.value ? '#E8531D' : '#555'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 3 }}><path d={t.iconPath} /></svg>
             <p style={{ margin: 0, color: form.tipo === t.value ? '#fff' : '#555', fontSize: 13, fontWeight: form.tipo === t.value ? 600 : 400 }}>{t.label}</p>
           </button>
         ))}

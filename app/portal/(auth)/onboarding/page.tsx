@@ -2,13 +2,7 @@
 import { useState } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
-
-const tipos = [
-  { value: 'ocasional', label: 'Consumidor ocasional', desc: 'Compro para casa o reuniones', iconPath: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10' },
-  { value: 'tiene_tap', label: 'Tengo un Tap Room', desc: 'Cuento con líneas de barril', iconPath: 'M17 11h1a3 3 0 010 6h-1M9 12v6M13 12v6M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4L18 8z' },
-  { value: 'tiene_bar', label: 'Tengo un bar', desc: 'Bar o cantina con carta de cervezas', iconPath: 'M17 11h1a3 3 0 010 6h-1M9 12v6M13 12v6M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4L18 8z' },
-  { value: 'restaurante', label: 'Restaurante', desc: 'Cocina con carta de bebidas', iconPath: 'M18 8h1a4 4 0 010 8h-1M2 8h16v9a4 4 0 01-4 4H6a4 4 0 01-4-4V8zM6 1v3M10 1v3M14 1v3' },
-]
+import { TIPOS_CLIENTE } from '../../../../src/lib/clientes'
 
 const usosCFDI = [
   { clave: 'G01', desc: 'Adquisición de mercancias' },
@@ -122,7 +116,7 @@ export default function OnboardingPage() {
               <h1 style={{ fontSize: 22, fontWeight: 800, color: '#0a0a0a', marginBottom: 6 }}>¿Qué tipo de consumidor eres?</h1>
               <p style={{ color: '#888', fontSize: 14, marginBottom: 28 }}>Esto nos ayuda a darte el mejor servicio y precios.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {tipos.map(t => (
+                {TIPOS_CLIENTE.map(t => (
                   <button key={t.value} onClick={() => setTipo(t.value)} style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px 18px', background: tipo === t.value ? '#fff5f2' : '#f8f8f8', border: `2px solid ${tipo === t.value ? '#E8531D' : '#ebebeb'}`, borderRadius: 10, cursor: 'pointer', textAlign: 'left', width: '100%' }}>
                     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={tipo === t.value ? '#E8531D' : '#6b7280'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d={t.iconPath} /></svg>
                     <div>

@@ -63,8 +63,8 @@ export default function CatalogoPage() {
     load()
   }, [])
 
-  const esTap = profile?.tipo_consumidor === 'tiene_tap' || profile?.tipo_consumidor === 'tiene_bar'
-  const getPrecio = (p: Producto) => esTap ? p.precio_caja24_taproom : p.precio_caja24_publico
+  const esMayorista = profile?.nivel_precio === 'taproom' || profile?.nivel_precio === 'distribuidor'
+  const getPrecio = (p: Producto) => esMayorista ? p.precio_caja24_taproom : p.precio_caja24_publico
 
   // ── Cart helpers ──
   const addSencilla = (p: Producto) => {
@@ -135,7 +135,7 @@ export default function CatalogoPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         cliente_id: user!.id,
-        tipo_precio: esTap ? 'taproom' : 'publico',
+        tipo_precio: esMayorista ? 'taproom' : 'publico',
         items: cart,
         notas,
         total,
@@ -218,7 +218,7 @@ export default function CatalogoPage() {
             Hola, {profile?.full_name?.split(' ')[0] || 'bienvenido'}
           </h1>
           <p style={{ color: '#9ca3af', fontSize: 15, margin: 0 }}>
-            {esTap ? <span style={{ color: '#E8531D', fontWeight: 600 }}>Precios mayoristas</span> : 'Precios al público'}
+            {esMayorista ? <span style={{ color: '#E8531D', fontWeight: 600 }}>Precios mayoristas</span> : 'Precios al público'}
           </p>
         </div>
 

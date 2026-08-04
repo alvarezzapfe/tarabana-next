@@ -4,7 +4,7 @@ import { createClient } from '../../../../src/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 type Producto = { id: string; nombre: string; estilo: string; precio_caja12_publico: number; precio_caja12_taproom: number; precio_caja24_publico: number; precio_caja24_taproom: number; precio_barril_pet_publico: number; precio_barril_pet_taproom: number; precio_barril_acero_taproom: number; stock_caja12: number; stock_caja24: number; stock_barril_pet: number; stock_barril_acero: number; imagen_url: string }
-type Cliente = { id: string; full_name: string; email: string; tipo_consumidor: string }
+type Cliente = { id: string; full_name: string; email: string; tipo_consumidor: string; nivel_precio: string }
 type Item = { producto_id: string; nombre: string; unidad: string; cantidad: number; precio: number }
 
 const unidades = [
@@ -33,7 +33,7 @@ export default function NuevoPedidoPage() {
   useEffect(() => {
     const load = async () => {
       const [{ data: cl }, { data: pr }, { data: vend }] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, tipo_consumidor').eq('role', 'comprador').order('full_name'),
+        supabase.from('profiles').select('id, full_name, email, tipo_consumidor, nivel_precio').eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
         supabase.from('vendedores').select('id, nombre, comision_pct').eq('activo', true).order('nombre')
       ])
@@ -45,7 +45,7 @@ export default function NuevoPedidoPage() {
   }, [])
 
   const clienteSeleccionado = clientes.find(c => c.id === clienteId)
-  const esTap = clienteSeleccionado?.tipo_consumidor === 'tiene_tap' || clienteSeleccionado?.tipo_consumidor === 'tiene_bar'
+  const esMayorista = clienteSeleccionado?.nivel_precio === 'taproom' || clienteSeleccionado?.nivel_precio === 'distribuidor'
 
   const getPrecio = (p: Producto, unidad: string): number => {
     const isTap = tipoPrecio === 'taproom'
@@ -138,7 +138,7 @@ export default function NuevoPedidoPage() {
           {clienteSeleccionado && (
             <div style={{ marginTop: 10, padding: '8px 12px', background: '#f3f4f6', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <p style={{ margin: 0, color: '#10b981', fontSize: 14 }}>✓ {clienteSeleccionado.full_name}</p>
-              {esTap && <span style={{ background: '#fef3c7', color: '#f59e0b', fontSize: 13, padding: '2px 8px', borderRadius: 99 }}>Tap/Bar</span>}
+              {esMayorista && <span style={{ background: '#dbeafe', color: '#3b82f6', fontSize: 13, padding: '2px 8px', borderRadius: 99 }}>Mayorista</span>}
             </div>
           )}
         </div>

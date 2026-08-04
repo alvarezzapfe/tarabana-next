@@ -28,10 +28,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'El carrito está vacío' }, { status: 400 })
   }
 
-  // Sufijo de precio derivado del perfil, nunca del body
-  const { data: profile } = await service.from('profiles').select('tipo_consumidor').eq('id', user.id).single()
+  // Sufijo de precio derivado de nivel_precio en el perfil, nunca del body
+  const { data: profile } = await service.from('profiles').select('nivel_precio').eq('id', user.id).single()
   if (!profile) return NextResponse.json({ error: 'Perfil no encontrado' }, { status: 400 })
-  const sufijo = (profile.tipo_consumidor === 'tiene_tap' || profile.tipo_consumidor === 'tiene_bar')
+  const sufijo = (profile.nivel_precio === 'taproom' || profile.nivel_precio === 'distribuidor')
     ? 'taproom' as const
     : 'publico' as const
 
