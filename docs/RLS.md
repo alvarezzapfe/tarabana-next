@@ -105,6 +105,33 @@ pudiera cambiarse a sí mismo el nivel de precio, podría acceder a precios de
 mayorista sin autorización. El cambio queda registrado en `audit_log` con
 acción `cliente.nivel_precio` y el from/to.
 
+## Pagos (public.pagos)
+
+Tabla de pagos asociados a pedidos. Los pagos **nunca se borran** (hard delete
+prohibido). Para corregir errores se hace soft delete con `cancelado_at`,
+`cancelado_por` y `cancelado_motivo`.
+
+- **SELECT**: `is_staff()` — contabilidad y todos los roles internos pueden leer
+- **INSERT/UPDATE**: `is_admin()` — solo roles con permiso de escritura
+
+La vista `pedidos_saldo` calcula el saldo en tiempo real: `total - sum(pagos
+activos)`. Los campos `estado_cobro` y `dias_vencido` se derivan de
+`fecha_vencimiento`, que a su vez se calcula por trigger según
+`condiciones_pago` ('contado' = inmediato, '15_dias', '30_dias').
+
+Acciones auditadas: `pago.registrar`, `pago.cancelar`, `pago.aplicar`.
+
+## app_config
+
+Configuración global de la app (branding, negocio).
+
+- **SELECT**: `is_staff()` — todos los roles internos leen (el layout necesita
+  los colores)
+- **INSERT/UPDATE/DELETE**: `is_super_admin()` — solo super admin modifica
+
+Las keys actuales son `'branding'` y `'negocio'`. El endpoint PATCH valida el
+shape del JSONB. Cambios auditados como `config.update`.
+
 ## Auditoría (audit_log)
 
 Tabla `public.audit_log` con RLS estricto:
