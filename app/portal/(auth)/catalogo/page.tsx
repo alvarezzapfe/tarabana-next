@@ -212,7 +212,7 @@ export default function CatalogoPage() {
   )
 
   return (
-    <div style={{ fontFamily: 'system-ui, sans-serif', position: 'relative', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="portal-page" style={{ fontFamily: 'system-ui, sans-serif', position: 'relative', maxWidth: 1200, margin: '0 auto', padding: '0 48px' }}>
 
       {/* HEADER */}
       <div style={{ padding: '40px 48px 0' }}>
@@ -298,7 +298,7 @@ export default function CatalogoPage() {
           <span style={{ color: '#9ca3af', fontSize: 14 }}>24 latas del mismo estilo</span>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
+        <div className="portal-products-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
           {productosOrdenados.map(p => {
             const precio = getPrecio(p)
             const inCart = cart.find(i => i.key === `caja24-${p.id}`)
@@ -418,7 +418,7 @@ export default function CatalogoPage() {
 
       {/* ══════ CARRITO LATERAL ══════ */}
       {showCart && cart.length > 0 && (
-        <div style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: 400, background: '#fff', borderLeft: '1px solid #e5e7eb', zIndex: 100, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.08)' }}>
+        <div className="portal-cart" style={{ position: 'fixed', top: 0, right: 0, height: '100vh', width: 400, background: '#fff', borderLeft: '1px solid #e5e7eb', zIndex: 100, display: 'flex', flexDirection: 'column', boxShadow: '-8px 0 32px rgba(0,0,0,0.08)' }}>
           <div style={{ padding: '24px 24px 16px', borderBottom: '1px solid #f3f4f6', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111' }}>Tu pedido</h2>
             <button onClick={() => setShowCart(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af', fontSize: 20 }}>✕</button>
@@ -525,7 +525,7 @@ export default function CatalogoPage() {
       {/* ══════ KPIs (solo si tiene pedidos) ══════ */}
       {hasPedidos && (
         <div style={{ padding: '0 48px 48px' }}>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
+          <div className="portal-kpi-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14 }}>
             <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '16px 20px' }}>
               <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Pedidos</p>
               <p style={{ margin: '4px 0 0', color: '#111', fontSize: 26, fontWeight: 800 }}>{pedidos.length}</p>

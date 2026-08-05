@@ -93,16 +93,16 @@ export default function DireccionForm({ value, onChange, legacyAddress }: Props)
       {legacyAddress && !value.calle && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
           <p style={{ margin: 0, color: '#92400e', fontSize: 13, lineHeight: 1.5 }}>
-            Direccion anterior: <strong>{legacyAddress}</strong>
+            Dirección anterior: <strong>{legacyAddress}</strong>
           </p>
           <p style={{ margin: '4px 0 0', color: '#92400e', fontSize: 12, opacity: 0.7 }}>Recaptura los datos en los campos de abajo.</p>
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: '140px 1fr 100px', gap: 14, marginBottom: 16 }}>
-        {/* CP */}
+      {/* Row 1: CP + Colonia */}
+      <div className="dir-row-1" style={{ display: 'grid', gridTemplateColumns: '140px 1fr', gap: 14, marginBottom: 16 }}>
         <div>
-          <label style={labelStyle}>Codigo postal</label>
+          <label style={labelStyle}>Código postal</label>
           <div style={{ position: 'relative' }}>
             <input
               value={value.cp}
@@ -118,16 +118,10 @@ export default function DireccionForm({ value, onChange, legacyAddress }: Props)
           </div>
           {cpNotFound && <p style={{ color: '#E8531D', fontSize: 11, margin: '4px 0 0' }}>CP no encontrado</p>}
         </div>
-
-        {/* Colonia */}
         <div>
           <label style={labelStyle}>Colonia</label>
           {cpResolved ? (
-            <select
-              value={value.colonia}
-              onChange={e => set('colonia', e.target.value)}
-              style={{ ...inputStyle, cursor: 'pointer' }}
-            >
+            <select value={value.colonia} onChange={e => set('colonia', e.target.value)} style={{ ...inputStyle, cursor: 'pointer' }}>
               <option value="">-- Selecciona colonia --</option>
               {colonias.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
@@ -135,30 +129,32 @@ export default function DireccionForm({ value, onChange, legacyAddress }: Props)
             <input value={value.colonia} onChange={e => set('colonia', e.target.value)} placeholder="Colonia" style={inputStyle} />
           )}
         </div>
+      </div>
 
-        {/* Estado */}
+      {/* Row 2: Municipio + Estado */}
+      <div className="dir-row-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 16 }}>
+        <div>
+          <label style={labelStyle}>Municipio / Alcaldía</label>
+          <input value={value.municipio} readOnly={cpResolved} onChange={e => !cpResolved && set('municipio', e.target.value)} style={cpResolved ? readonlyStyle : inputStyle} />
+        </div>
         <div>
           <label style={labelStyle}>Estado</label>
           <input value={value.estado} readOnly={cpResolved} onChange={e => !cpResolved && set('estado', e.target.value)} style={cpResolved ? readonlyStyle : inputStyle} />
         </div>
       </div>
 
-      <div style={{ marginBottom: 16 }}>
-        <label style={labelStyle}>Municipio / Alcaldia</label>
-        <input value={value.municipio} readOnly={cpResolved} onChange={e => !cpResolved && set('municipio', e.target.value)} style={cpResolved ? readonlyStyle : inputStyle} />
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 100px 100px', gap: 14, marginBottom: 16 }}>
+      {/* Row 3: Calle + Nums */}
+      <div className="dir-row-3" style={{ display: 'grid', gridTemplateColumns: '1fr 120px 120px', gap: 14, marginBottom: 16 }}>
         <div>
           <label style={labelStyle}>Calle</label>
-          <input value={value.calle} onChange={e => set('calle', e.target.value)} placeholder="Av. Amsterdam" style={inputStyle} />
+          <input value={value.calle} onChange={e => set('calle', e.target.value)} placeholder="Av. Ámsterdam" style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>Num. ext.</label>
+          <label style={labelStyle}>Núm. ext.</label>
           <input value={value.num_ext} onChange={e => set('num_ext', e.target.value)} placeholder="123" style={inputStyle} />
         </div>
         <div>
-          <label style={labelStyle}>Num. int.</label>
+          <label style={labelStyle}>Núm. int.</label>
           <input value={value.num_int} onChange={e => set('num_int', e.target.value)} placeholder="4B" style={inputStyle} />
         </div>
       </div>
@@ -174,7 +170,12 @@ export default function DireccionForm({ value, onChange, legacyAddress }: Props)
         />
       </div>
 
-      <style>{`@keyframes spin { to { transform: translateY(-50%) rotate(360deg) } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: translateY(-50%) rotate(360deg) } }
+        @media (max-width: 768px) {
+          .dir-row-1, .dir-row-2, .dir-row-3 { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
     </div>
   )
 }

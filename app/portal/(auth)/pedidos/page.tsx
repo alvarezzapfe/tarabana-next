@@ -43,7 +43,7 @@ export default function MisPedidosPage() {
   if (loading) return <div style={{ padding: 60, textAlign: 'center', color: '#aaa', fontFamily: 'system-ui' }}>Cargando...</div>
 
   return (
-    <div style={{ padding: '40px 48px', fontFamily: 'system-ui, sans-serif', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="portal-page" style={{ padding: '40px 48px', fontFamily: 'system-ui, sans-serif', maxWidth: 1200, margin: '0 auto' }}>
       <div style={{ marginBottom: 40 }}>
         <h1 style={{ color: '#111', fontSize: 34, fontWeight: 800, margin: '0 0 6px', lineHeight: 1.15 }}>Mis pedidos</h1>
         <p style={{ color: '#6b7280', fontSize: 15, margin: 0 }}>{pedidos.length} pedidos en total</p>

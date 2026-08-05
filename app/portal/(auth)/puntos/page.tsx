@@ -24,7 +24,7 @@ export default async function PuntosPage() {
   const progreso = nivelSig ? ((puntos - nivelActual.min) / (nivelSig.min - nivelActual.min)) * 100 : 100
 
   return (
-    <div style={{ padding: '40px 48px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="portal-page" style={{ padding: '40px 48px', maxWidth: 1200, margin: '0 auto' }}>
       <h1 style={{ fontSize: 34, fontWeight: 800, color: '#111', marginBottom: 6, lineHeight: 1.15 }}>Mis puntos</h1>
       <p style={{ color: '#6b7280', fontSize: 15, marginBottom: 48 }}>Programa de lealtad Tarabaña</p>
 

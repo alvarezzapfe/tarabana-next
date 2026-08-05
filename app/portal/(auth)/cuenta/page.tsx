@@ -102,7 +102,7 @@ export default function CuentaPage() {
 
   if (loading) {
     return (
-      <div style={{ padding: '40px 48px', maxWidth: 1200, margin: '0 auto' }}>
+      <div className="portal-page" style={{ padding: '40px 48px', maxWidth: 1200, margin: '0 auto' }}>
         <p style={{ fontSize: 15, color: '#888' }}>Cargando...</p>
       </div>
     )
@@ -140,14 +140,14 @@ export default function CuentaPage() {
   ]
 
   return (
-    <div style={{ padding: '40px 48px', maxWidth: 1200, margin: '0 auto' }}>
+    <div className="portal-page" style={{ padding: '40px 48px', maxWidth: 1200, margin: '0 auto' }}>
       {/* Header */}
       <h1 style={{ fontSize: 34, fontWeight: 800, color: '#111', marginBottom: 6 }}>Mi cuenta</h1>
       <p style={{ color: '#888', fontSize: 15, marginBottom: 48 }}>Tus datos y preferencias</p>
 
       {/* Profile info cards */}
       <h2 style={{ fontSize: 26, fontWeight: 700, color: '#111', marginBottom: 24 }}>Información personal</h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+      <div className="portal-profile-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
         {profileFields.map(f => (
           <div key={f.label} style={{ background: '#fff', borderRadius: 12, border: '1px solid #ebebeb', padding: '18px 20px' }}>
             <p style={{ ...labelStyle, margin: '0 0 4px' }}>{f.label}</p>
@@ -156,19 +156,19 @@ export default function CuentaPage() {
         ))}
       </div>
 
-      <div style={{ marginTop: 24 }}>
+      <div style={{ marginTop: 16 }}>
         <a href="/portal/cuenta/editar" style={{
           display: 'inline-flex', alignItems: 'center', gap: 8,
-          padding: '12px 24px', background: '#0a0a0a', color: '#fff',
-          borderRadius: 9, textDecoration: 'none', fontSize: 15, fontWeight: 600,
+          padding: '10px 20px', background: '#fff', color: '#6b7280',
+          border: '1px solid #e5e7eb', borderRadius: 9, textDecoration: 'none', fontSize: 14, fontWeight: 500,
         }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-          Editar datos
+          Editar datos personales
         </a>
       </div>
 
       {/* Address section */}
-      <h2 style={{ fontSize: 26, fontWeight: 700, color: '#111', marginBottom: 24, marginTop: 48 }}>Direccion de entrega</h2>
+      <h2 style={{ fontSize: 26, fontWeight: 700, color: '#111', marginBottom: 24, marginTop: 48 }}>Dirección de entrega</h2>
       <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #ebebeb', padding: '24px' }}>
         <DireccionForm value={direccion} onChange={setDireccion} legacyAddress={profile?.direccion_entrega} />
         <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -187,7 +187,7 @@ export default function CuentaPage() {
             padding: '12px 24px', background: '#E8531D', border: 'none', borderRadius: 9,
             color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', opacity: savingDir ? 0.6 : 1,
           }}>
-            {savingDir ? 'Guardando...' : 'Guardar direccion'}
+            {savingDir ? 'Guardando...' : 'Guardar dirección'}
           </button>
           {savedDir && <span style={{ color: '#10b981', fontSize: 14 }}>Guardado</span>}
         </div>
