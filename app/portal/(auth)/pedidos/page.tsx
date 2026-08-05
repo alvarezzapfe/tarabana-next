@@ -88,7 +88,7 @@ export default function MisPedidosPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <p style={{ margin: 0, color: '#E8531D', fontSize: 18, fontWeight: 800 }}>${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 0 })}</p>
+                    <p style={{ margin: 0, color: '#E8531D', fontSize: 18, fontWeight: 800 }}>${((p.total || 0) + (p.costo_envio || 0)).toLocaleString('es-MX', { minimumFractionDigits: 0 })}</p>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                       <path d="M6 9l6 6 6-6"/>
                     </svg>
@@ -152,8 +152,13 @@ export default function MisPedidosPage() {
                         )}
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        <p style={{ margin: 0, color: '#aaa', fontSize: 12 }}>Total del pedido</p>
-                        <p style={{ margin: 0, color: '#E8531D', fontSize: 20, fontWeight: 800 }}>${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                        {p.costo_envio > 0 && (
+                          <>
+                            <p style={{ margin: 0, color: '#9ca3af', fontSize: 12 }}>Subtotal: ${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                            <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>Envio: ${(p.costo_envio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                          </>
+                        )}
+                        <p style={{ margin: '2px 0 0', color: '#E8531D', fontSize: 20, fontWeight: 800 }}>${((p.total || 0) + (p.costo_envio || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
                       </div>
                     </div>
                   </div>

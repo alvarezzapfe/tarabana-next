@@ -31,6 +31,14 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
   const [payLoading, setPayLoading] = useState(false)
   const [payError, setPayError] = useState('')
 
+  // Shipping modal
+  const [shipModalId, setShipModalId] = useState<string | null>(null)
+  const [shipCosto, setShipCosto] = useState('')
+  const [shipPaqueteria, setShipPaqueteria] = useState('Tres Guerras')
+  const [shipGuia, setShipGuia] = useState('')
+  const [shipLoading, setShipLoading] = useState(false)
+  const [shipError, setShipError] = useState('')
+
   // Filters
   const [filterCobro, setFilterCobro] = useState('')
   const [filterEntrega, setFilterEntrega] = useState('')
@@ -90,6 +98,31 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
     setPayLoading(false)
     // Reload would be ideal but we don't have a reload mechanism from server component
     // For now the saldo will be stale until page refresh
+    window.location.reload()
+  }
+
+  const openShipModal = (id: string) => {
+    const p = data.find(x => x.id === id)
+    setShipCosto(p?.costo_envio > 0 ? String(p.costo_envio) : '')
+    setShipPaqueteria(p?.paqueteria || 'Tres Guerras')
+    setShipGuia(p?.guia_envio || '')
+    setShipError('')
+    setShipModalId(id)
+    setMenuId(null)
+  }
+
+  const submitShip = async () => {
+    if (!shipModalId) return
+    setShipLoading(true); setShipError('')
+    const costo = parseFloat(shipCosto)
+    if (isNaN(costo) || costo < 0) { setShipError('Costo invalido'); setShipLoading(false); return }
+    const res = await fetch(`/api/admin/pedidos/${shipModalId}/envio`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ costo_envio: costo, paqueteria: shipPaqueteria, guia_envio: shipGuia }),
+    })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setShipError(d.error || 'Error'); setShipLoading(false); return }
+    setShipModalId(null)
+    setShipLoading(false)
     window.location.reload()
   }
 
@@ -169,8 +202,9 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
                     <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>{cliente?.full_name || '--'}</p>
                     <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 11 }}>{cliente?.email}</p>
                   </td>
-                  <td style={{ padding: '14px 16px', color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>
-                    {fmt(p.total || 0)}
+                  <td style={{ padding: '14px 16px' }}>
+                    <p style={{ margin: 0, color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(p.total || 0)}</p>
+                    {p.costo_envio > 0 && <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 11 }}>+ {fmt(p.costo_envio)} envio</p>}
                   </td>
                   <td style={{ padding: '14px 16px', color: s?.saldo > 0 ? '#E8531D' : '#9ca3af', fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>
                     {s ? fmt(s.saldo) : '--'}
@@ -195,6 +229,10 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
                             <button onClick={() => { setPayModalId(p.id); setPayMonto(''); setPayRef(''); setPayError('') }}
                               style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#374151', cursor: 'pointer' }}>
                               Registrar pago
+                            </button>
+                            <button onClick={() => openShipModal(p.id)}
+                              style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#374151', cursor: 'pointer' }}>
+                              {p.costo_envio > 0 ? 'Editar envio' : 'Registrar envio'}
                             </button>
                             <button onClick={() => setStatusModalId(p.id)}
                               style={{ display: 'block', width: '100%', padding: '10px 16px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#374151', cursor: 'pointer' }}>
@@ -272,6 +310,42 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
               <button onClick={() => setPayModalId(null)} style={{ padding: '9px 16px', background: '#f3f4f6', border: 'none', borderRadius: 8, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
               <button onClick={submitPago} disabled={payLoading} style={{ padding: '9px 20px', background: '#E8531D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: payLoading ? 0.6 : 1 }}>
                 {payLoading ? 'Registrando...' : 'Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Shipping modal */}
+      {shipModalId && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShipModalId(null)}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: '24px 28px', width: 400 }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#1a1a1a', fontSize: 16, fontWeight: 700, margin: '0 0 4px' }}>
+              {data.find(p => p.id === shipModalId)?.costo_envio > 0 ? 'Editar envio' : 'Registrar envio'}
+            </h3>
+            <p style={{ color: '#9ca3af', fontSize: 12, margin: '0 0 16px' }}>Pedido #{shipModalId.slice(-6).toUpperCase()}</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Costo de envio</label>
+                <input type="number" value={shipCosto} onChange={e => setShipCosto(e.target.value)} placeholder="0.00" min="0" step="0.01"
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 15, fontWeight: 700, boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Paqueteria</label>
+                <input value={shipPaqueteria} onChange={e => setShipPaqueteria(e.target.value)}
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Numero de guia</label>
+                <input value={shipGuia} onChange={e => setShipGuia(e.target.value)} placeholder="Opcional"
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'monospace', boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+            </div>
+            {shipError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{shipError}</p>}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={() => setShipModalId(null)} style={{ padding: '9px 16px', background: '#f3f4f6', border: 'none', borderRadius: 8, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+              <button onClick={submitShip} disabled={shipLoading} style={{ padding: '9px 20px', background: '#E8531D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: shipLoading ? 0.6 : 1 }}>
+                {shipLoading ? 'Guardando...' : 'Guardar envio'}
               </button>
             </div>
           </div>

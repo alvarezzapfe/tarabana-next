@@ -190,7 +190,10 @@ export default function CatalogoPage() {
   const getNextStepMessage = (p: any) => {
     if (!p) return ''
     if (p.pagado && p.status !== 'entregado') return 'Pago confirmado. Preparando tu entrega.'
-    if (p.status === 'confirmado' || p.status === 'enviado') return 'Pedido confirmado. Te contactamos para coordinar el pago.'
+    if (p.status === 'confirmado' || p.status === 'enviado') {
+      if (!p.envio_cotizado_at) return 'Pedido confirmado. Te contactamos para coordinar el pago. El costo de envio se cotiza por separado y te lo confirmamos antes del envio.'
+      return 'Pedido confirmado. Te contactamos para coordinar el pago.'
+    }
     return 'Estamos revisando tu pedido. Te contactamos hoy para coordinar el pago.'
   }
 
@@ -228,7 +231,8 @@ export default function CatalogoPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
               <p style={{ margin: 0, color: '#374151', fontSize: 15, fontWeight: 600 }}>
                 Pedido <span style={{ fontFamily: 'monospace', color: '#6b7280' }}>#{pedidoActivo.id.slice(-6).toUpperCase()}</span>
-                {' · '}${(pedidoActivo.total || 0).toLocaleString('es-MX')}
+                {' · '}${((pedidoActivo.total || 0) + (pedidoActivo.costo_envio || 0)).toLocaleString('es-MX')}
+                {pedidoActivo.costo_envio > 0 && <span style={{ color: '#9ca3af', fontSize: 12 }}> (incluye ${(pedidoActivo.costo_envio || 0).toLocaleString('es-MX')} envio)</span>}
               </p>
               <a href="/portal/pedidos" style={{ color: '#4DA3FF', fontSize: 13, fontWeight: 500, textDecoration: 'none' }}>Ver detalle →</a>
             </div>
@@ -466,7 +470,7 @@ export default function CatalogoPage() {
               </div>
             )}
             <div style={{ background: '#f9fafb', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
-              <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>Tu pedido será revisado por nuestro equipo. Te contactaremos para confirmar entrega y pago.</p>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13, lineHeight: 1.5 }}>Tu pedido será revisado por nuestro equipo. Te contactaremos para confirmar entrega y pago. El costo de envio no esta incluido y se cotiza por separado.</p>
             </div>
             <button onClick={handleCheckout} disabled={checkingOut} style={{
               width: '100%', padding: '14px', background: '#E8531D', border: 'none', borderRadius: 10,
