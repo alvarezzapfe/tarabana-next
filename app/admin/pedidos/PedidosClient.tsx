@@ -303,7 +303,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
                       <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
                         <td style={{ padding: '10px 12px' }}>
                           <span style={{ color: '#1a1a1a', fontWeight: 500 }}>{prod?.nombre || '--'}</span>
-                          {isMix && <> <B label="MIX" color="#8b5cf6" bg="#ede9fe" /><p style={{ margin: '4px 0 0', color: '#9ca3af', fontSize: 11 }}>{(item.metadata.estilos as any[]).map((e: any) => `${e.nombre || e.estilo} x${e.cantidad}`).join(', ')}</p></>}
+                          {isMix && <> <B label="MIX" color="#8b5cf6" bg="#ede9fe" /><p style={{ margin: '4px 0 0', color: '#9ca3af', fontSize: 11 }}>{(item.metadata.estilos as any[]).map((e: any) => `${e.nombre || e.estilo} x${e.latas || e.cantidad_latas || e.cantidad || '?'}`).join(', ')}</p></>}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#6b7280' }}>{item.unidad}</td>
                         <td style={{ padding: '10px 12px', color: '#374151', textAlign: 'center' }}>{item.cantidad}</td>

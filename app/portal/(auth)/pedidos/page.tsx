@@ -114,11 +114,16 @@ export default function MisPedidosPage() {
                               {item.unidad === 'mix24' && <span style={{ background: '#ede9fe', color: '#7c3aed', fontSize: 11, fontWeight: 600, padding: '1px 6px', borderRadius: 99 }}>MIX</span>}
                               <p style={{ margin: 0, color: '#111', fontSize: 14, fontWeight: 600 }}>
                                 {item.unidad === 'mix24' && item.metadata?.estilos
-                                  ? item.metadata.estilos.map((e: any) => e.nombre).join(', ')
+                                  ? item.metadata.estilos.map((e: any) => `${e.nombre} x${e.latas || e.cantidad_latas || '?'}`).join(', ')
                                   : item.productos?.nombre || '—'}
                               </p>
                             </div>
-                            <p style={{ margin: '1px 0 0', color: '#aaa', fontSize: 12 }}>{item.unidad === 'mix24' ? '4 estilos × 6 latas' : 'Caja 24 latas'}</p>
+                            <p style={{ margin: '1px 0 0', color: '#aaa', fontSize: 12 }}>
+                              {item.unidad === 'mix24' ? 'Mix 24 latas'
+                                : item.unidad === 'caja12' ? 'Caja 12 latas'
+                                : item.unidad === 'barril_pet' ? 'Barril 20L PET'
+                                : 'Caja 24 latas'}
+                            </p>
                           </div>
                           <div style={{ textAlign: 'right' }}>
                             <p style={{ margin: 0, color: '#111', fontSize: 13, fontWeight: 600 }}>{item.cantidad}× ${item.precio_unitario?.toLocaleString('es-MX')}</p>

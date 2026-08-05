@@ -25,36 +25,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data: items } = await supabase
       .from('pedido_items')
-      .select('*, productos(id, stock_caja24, stock_latas)')
+      .select('*, productos(id, nombre, stock_caja24, stock_caja12, stock_barril_pet, stock_latas)')
       .eq('pedido_id', id)
 
     if (items) {
       for (const item of items) {
-        if (item.unidad === 'caja24') {
-          // Sencilla: deduct full cajas
-          const newStock24 = (item.productos?.stock_caja24 || 0) - item.cantidad
-          const newStockLatas = (item.productos?.stock_latas || 0) - (item.cantidad * 24)
-          if (newStock24 < 0) {
-            return NextResponse.json({ error: `Stock insuficiente de ${item.productos?.nombre || 'producto'} para entregar. Stock actual: ${item.productos?.stock_caja24} cajas.` }, { status: 400 })
-          }
-          await supabase.from('productos').update({
-            stock_caja24: newStock24,
-            stock_latas: Math.max(0, newStockLatas),
-          }).eq('id', item.producto_id)
-        } else if (item.unidad === 'mix24' && item.metadata?.estilos) {
-          // Mix: deduct 6 latas per estilo per mix caja
+        if (item.unidad === 'mix24' && item.metadata?.estilos) {
+          // Mix flexible: deduct from stock_latas ONLY, never touch stock_caja24.
+          // The mix is assembled from latas sueltas.
           for (const estilo of item.metadata.estilos) {
             const { data: prod } = await supabase
               .from('productos')
-              .select('stock_caja24, stock_latas')
+              .select('stock_latas')
               .eq('id', estilo.producto_id)
               .single()
             if (!prod) continue
-            const latasToDeduct = item.cantidad * (estilo.cantidad_latas || 6)
+            const latasToDeduct = item.cantidad * (estilo.latas || estilo.cantidad_latas || 6)
+            if ((prod.stock_latas || 0) < latasToDeduct) {
+              return NextResponse.json({ error: `Stock de latas insuficiente de ${estilo.nombre || 'producto'} para el mix. Disponible: ${prod.stock_latas || 0} latas.` }, { status: 400 })
+            }
             await supabase.from('productos').update({
-              stock_latas: Math.max(0, (prod.stock_latas || 0) - latasToDeduct),
+              stock_latas: (prod.stock_latas || 0) - latasToDeduct,
             }).eq('id', estilo.producto_id)
           }
+        } else {
+          // Standard items: caja24, caja12, barril_pet
+          const stockCol = item.unidad === 'caja12' ? 'stock_caja12'
+            : item.unidad === 'barril_pet' ? 'stock_barril_pet'
+            : 'stock_caja24'
+          const currentStock = item.productos?.[stockCol] || 0
+          const newStock = currentStock - item.cantidad
+          if (newStock < 0) {
+            return NextResponse.json({ error: `Stock insuficiente de ${item.productos?.nombre || 'producto'} para entregar. Stock actual: ${currentStock}.` }, { status: 400 })
+          }
+          const update: Record<string, any> = { [stockCol]: newStock }
+          // Also deduct from stock_latas for caja items
+          if (item.unidad === 'caja24' || item.unidad === 'caja12') {
+            const latasPerUnit = item.unidad === 'caja24' ? 24 : 12
+            update.stock_latas = Math.max(0, (item.productos?.stock_latas || 0) - (item.cantidad * latasPerUnit))
+          }
+          await supabase.from('productos').update(update).eq('id', item.producto_id)
         }
       }
     }
