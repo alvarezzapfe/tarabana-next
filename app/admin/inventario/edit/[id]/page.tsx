@@ -25,7 +25,7 @@ export default function EditProductoPage() {
     precio_barril_acero_publico: '', precio_barril_acero_taproom: '',
     precio_barril10_pet_publico: '', precio_barril10_pet_taproom: '',
     precio_barril10_acero_publico: '', precio_barril10_acero_taproom: '',
-    stock_caja12: '0', stock_caja24: '0', stock_barril_pet: '0', stock_barril_acero: '0',
+    stock_latas: '0', stock_caja12: '0', stock_caja24: '0', stock_barril_pet: '0', stock_barril_acero: '0',
     stock_barril10_pet: '0', stock_barril10_acero: '0',
     activo: true, imagen_url: '',
   })
@@ -59,6 +59,7 @@ export default function EditProductoPage() {
         precio_barril10_pet_taproom: p.precio_barril10_pet_taproom?.toString() || '',
         precio_barril10_acero_publico: p.precio_barril10_acero_publico?.toString() || '',
         precio_barril10_acero_taproom: p.precio_barril10_acero_taproom?.toString() || '',
+        stock_latas: p.stock_latas?.toString() || '0',
         stock_caja12: p.stock_caja12?.toString() || '0',
         stock_caja24: p.stock_caja24?.toString() || '0',
         stock_barril_pet: p.stock_barril_pet?.toString() || '0',
@@ -103,7 +104,7 @@ export default function EditProductoPage() {
       stock_barril_acero: parseInt(form.stock_barril_acero) || 0,
       stock_barril10_pet: parseInt(form.stock_barril10_pet) || 0,
       stock_barril10_acero: parseInt(form.stock_barril10_acero) || 0,
-      stock_latas: (parseInt(form.stock_caja12) || 0) * 12 + (parseInt(form.stock_caja24) || 0) * 24,
+      stock_latas: parseInt(form.stock_latas) || 0,
       stock_barriles: (parseInt(form.stock_barril_pet) || 0) + (parseInt(form.stock_barril_acero) || 0),
     }
 
@@ -289,17 +290,19 @@ export default function EditProductoPage() {
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
               {[
+                { label: 'Latas sueltas', key: 'stock_latas', hint: 'Para armar mix' },
                 { label: 'Cajas 12', key: 'stock_caja12' },
                 { label: 'Cajas 24', key: 'stock_caja24' },
                 { label: 'Bbl 20L PET', key: 'stock_barril_pet' },
                 { label: 'Bbl 20L Acero', key: 'stock_barril_acero' },
                 { label: 'Bbl 10L PET', key: 'stock_barril10_pet' },
                 { label: 'Bbl 10L Acero', key: 'stock_barril10_acero' },
-              ].map(s => (
+              ].map((s: any) => (
                 <div key={s.key}>
                   <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>{s.label}</label>
                   <input type="number" value={(form as any)[s.key]} onChange={e => set(s.key, e.target.value)}
                     style={{ width: '100%', padding: '9px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#10b981', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const }} />
+                  {s.hint && <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 10 }}>{s.hint}</p>}
                 </div>
               ))}
             </div>

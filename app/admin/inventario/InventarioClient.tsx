@@ -49,7 +49,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       const ba = p.stock_barril_acero || 0
       const bp10 = p.stock_barril10_pet || 0
       const ba10 = p.stock_barril10_acero || 0
-      totalLatas += c12 * 12 + c24 * 24
+      totalLatas += p.stock_latas || 0
       totalBblPet += bp
       totalBblAcero += ba
       totalBblPet10 += bp10
@@ -112,14 +112,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
   // Detect products with stock but no price
   const missingPrices = useMemo(() => {
-    return productos.filter(p => {
-      if (!p.activo) return false
-      if ((p.stock_caja24 || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
-      if ((p.stock_caja12 || 0) > 0 && (!p.precio_caja12_publico || !p.precio_caja12_taproom)) return true
-      if ((p.stock_barril_pet || 0) > 0 && (!p.precio_barril_pet_publico || !p.precio_barril_pet_taproom)) return true
-      if ((p.stock_barril_acero || 0) > 0 && (!p.precio_barril_acero_publico || !p.precio_barril_acero_taproom)) return true
-      return false
-    })
+    return productos.filter(p => p.activo && hasMissingPrice(p))
   }, [productos])
 
   const hasMissingPrice = (p: any): boolean => {
@@ -127,6 +120,8 @@ export default function InventarioClient({ productos, canEdit }: Props) {
     if ((p.stock_caja12 || 0) > 0 && (!p.precio_caja12_publico || !p.precio_caja12_taproom)) return true
     if ((p.stock_barril_pet || 0) > 0 && (!p.precio_barril_pet_publico || !p.precio_barril_pet_taproom)) return true
     if ((p.stock_barril_acero || 0) > 0 && (!p.precio_barril_acero_publico || !p.precio_barril_acero_taproom)) return true
+    // Latas sueltas need caja24 price (used for mix prorrateo)
+    if ((p.stock_latas || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
     return false
   }
 
@@ -268,7 +263,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
               <th style={{ padding: '10px 14px', textAlign: 'left', width: 36 }}>
                 <input ref={headerCheckRef} type="checkbox" checked={allFilteredSelected} onChange={toggleAll} />
               </th>
-              {['Producto', 'ABV', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Bbl 10L PET', 'Bbl 10L Acero', 'Precio', 'Estado', ''].map(h => (
+              {['Producto', 'ABV', 'Latas', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Bbl 10L PET', 'Bbl 10L Acero', 'Precio', 'Estado', ''].map(h => (
                 <th key={h} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 14px', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -301,6 +296,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                     </div>
                   </td>
                   <td style={{ color: '#6b7280', padding: '12px 14px', fontSize: 13 }}>{p.abv ? `${p.abv}%` : '—'}</td>
+                  <td style={{ color: (p.stock_latas || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_latas || 0}</td>
                   <td style={{ color: (p.stock_caja12 || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_caja12 || 0}</td>
                   <td style={{ color: (p.stock_caja24 || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_caja24 || 0}</td>
                   <td style={{ color: (p.stock_barril_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_pet || 0}</td>
@@ -338,7 +334,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                 </tr>
               )
             }) : (
-              <tr><td colSpan={12} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
+              <tr><td colSpan={13} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
             )}
           </tbody>
         </table>

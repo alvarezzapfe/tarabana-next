@@ -20,7 +20,7 @@ export default function NuevoProductoPage() {
     precio_barril_acero_publico: '', precio_barril_acero_taproom: '',
     precio_barril10_pet_publico: '', precio_barril10_pet_taproom: '',
     precio_barril10_acero_publico: '', precio_barril10_acero_taproom: '',
-    stock_caja12: '0', stock_caja24: '0', stock_barril_pet: '0', stock_barril_acero: '0', stock_barril10_pet: '0', stock_barril10_acero: '0',
+    stock_latas: '0', stock_caja12: '0', stock_caja24: '0', stock_barril_pet: '0', stock_barril_acero: '0', stock_barril10_pet: '0', stock_barril10_acero: '0',
     activo: true,
   })
 
@@ -76,7 +76,7 @@ export default function NuevoProductoPage() {
       stock_caja24: parseInt(form.stock_caja24) || 0,
       stock_barril_pet: parseInt(form.stock_barril_pet) || 0,
       stock_barril_acero: parseInt(form.stock_barril_acero) || 0,
-      stock_latas: (parseInt(form.stock_caja12) || 0) * 12 + (parseInt(form.stock_caja24) || 0) * 24,
+      stock_latas: parseInt(form.stock_latas) || 0,
       stock_barriles: (parseInt(form.stock_barril_pet) || 0) + (parseInt(form.stock_barril_acero) || 0),
       activo: form.activo,
     })
@@ -203,6 +203,7 @@ export default function NuevoProductoPage() {
             <p style={{ color: '#6b7280', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Stock inicial</p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
               {[
+                { label: 'Latas sueltas', key: 'stock_latas' },
                 { label: 'Cajas 12', key: 'stock_caja12' },
                 { label: 'Cajas 24', key: 'stock_caja24' },
                 { label: 'Bbl 20L PET', key: 'stock_barril_pet' },
