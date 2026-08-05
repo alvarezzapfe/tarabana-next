@@ -110,6 +110,38 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
   const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
 
+  // Detect products with stock but no price
+  const missingPrices = useMemo(() => {
+    return productos.filter(p => {
+      if (!p.activo) return false
+      if ((p.stock_caja24 || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
+      if ((p.stock_caja12 || 0) > 0 && (!p.precio_caja12_publico || !p.precio_caja12_taproom)) return true
+      if ((p.stock_barril_pet || 0) > 0 && (!p.precio_barril_pet_publico || !p.precio_barril_pet_taproom)) return true
+      if ((p.stock_barril_acero || 0) > 0 && (!p.precio_barril_acero_publico || !p.precio_barril_acero_taproom)) return true
+      return false
+    })
+  }, [productos])
+
+  const hasMissingPrice = (p: any): boolean => {
+    if ((p.stock_caja24 || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
+    if ((p.stock_caja12 || 0) > 0 && (!p.precio_caja12_publico || !p.precio_caja12_taproom)) return true
+    if ((p.stock_barril_pet || 0) > 0 && (!p.precio_barril_pet_publico || !p.precio_barril_pet_taproom)) return true
+    if ((p.stock_barril_acero || 0) > 0 && (!p.precio_barril_acero_publico || !p.precio_barril_acero_taproom)) return true
+    return false
+  }
+
+  const priceTooltip = (p: any): string => {
+    const rows = [
+      ['Caja 12', p.precio_caja12_publico, p.precio_caja12_taproom],
+      ['Caja 24', p.precio_caja24_publico, p.precio_caja24_taproom],
+      ['Bbl PET', p.precio_barril_pet_publico, p.precio_barril_pet_taproom],
+      ['Bbl Acero', p.precio_barril_acero_publico, p.precio_barril_acero_taproom],
+    ]
+    return rows.map(([label, pub, tap]) =>
+      `${label}: $${pub || '—'} / $${tap || '—'}`
+    ).join('\n')
+  }
+
   const pillActive = { background: '#E8531D', color: '#1a1a1a', border: '1px solid #E8531D' }
   const pillInactive = { background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db' }
 
@@ -176,6 +208,23 @@ export default function InventarioClient({ productos, canEdit }: Props) {
         ))}
       </div>
 
+      {/* MISSING PRICE ALERT */}
+      {missingPrices.length > 0 && (
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '14px 20px', marginBottom: 20 }}>
+          <p style={{ margin: '0 0 6px', color: '#92400e', fontSize: 14, fontWeight: 600 }}>
+            {missingPrices.length} producto{missingPrices.length > 1 ? 's' : ''} activo{missingPrices.length > 1 ? 's' : ''} con stock pero sin precio configurado — no se pueden vender
+          </p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {missingPrices.map(p => (
+              <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: '#E8531D', fontSize: 13, textDecoration: 'none', fontWeight: 500 }}>
+                {p.nombre}
+                {missingPrices.indexOf(p) < missingPrices.length - 1 ? ',' : ''}
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* FILTERS */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
         <input
@@ -241,7 +290,9 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       {p.imagen_url
                         ? <img src={p.imagen_url} alt={p.nombre} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6 }} />
-                        : <div style={{ width: 36, height: 36, background: '#f3f4f6', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: 16 }}>🍺</div>
+                        : <div style={{ width: 36, height: 36, background: '#f3f4f6', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8"><path d="M17 11h1a3 3 0 010 6h-1M9 12v6M13 12v6M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4L18 8z"/></svg>
+                          </div>
                       }
                       <div>
                         <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13.5, fontWeight: 600 }}>{p.nombre}</p>
@@ -256,7 +307,15 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                   <td style={{ color: (p.stock_barril_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_acero || 0}</td>
                   <td style={{ color: (p.stock_barril10_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_pet || 0}</td>
                   <td style={{ color: (p.stock_barril10_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_acero || 0}</td>
-                  <td style={{ color: '#E8531D', padding: '12px 14px', fontSize: 13 }}>{getPrice(p)}</td>
+                  <td style={{ padding: '12px 14px' }} title={priceTooltip(p)}>
+                    {hasMissingPrice(p) ? (
+                      <span style={{ background: '#fef3c7', color: '#d97706', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Sin precio</span>
+                    ) : p.precio_caja24_publico ? (
+                      <span style={{ color: '#E8531D', fontSize: 13, cursor: 'help' }}>${Math.round(p.precio_caja24_publico).toLocaleString('es-MX')}</span>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>
+                    )}
+                  </td>
                   <td style={{ padding: '12px 14px' }}>
                     <span style={{
                       background: p.activo ? '#d1fae5' : '#f3f4f6',

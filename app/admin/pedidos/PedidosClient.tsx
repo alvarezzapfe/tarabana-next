@@ -87,7 +87,8 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
     return true
   })
 
-  const totalPedidos = data.filter(p => p.status !== 'cancelado').reduce((s, p) => s + (p.total || 0), 0)
+  // All stats from pedidos_saldo (already excludes cancelados)
+  const totalVentas = saldos.reduce((s, p) => s + (p.total || 0), 0)
   const porCobrar = saldos.filter(s => s.saldo > 0).reduce((s, p) => s + p.saldo, 0)
   const vencido = saldos.filter(s => s.estado_cobro === 'vencido').reduce((s, p) => s + p.saldo, 0)
   const now = new Date()
@@ -158,7 +159,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
-        {[{ label: 'Total ventas', value: fmt(totalPedidos), color: '#1a1a1a' }, { label: 'Por cobrar', value: fmt(porCobrar), color: '#f59e0b' },
+        {[{ label: 'Total ventas', value: fmt(totalVentas), color: '#1a1a1a' }, { label: 'Por cobrar', value: fmt(porCobrar), color: '#f59e0b' },
           { label: 'Vencido', value: fmt(vencido), color: '#ef4444' }, { label: 'Entregados este mes', value: String(entregadosMes), color: '#10b981' }].map(s => (
           <div key={s.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
             <p style={{ ...SL, margin: '0 0 6px' }}>{s.label}</p>

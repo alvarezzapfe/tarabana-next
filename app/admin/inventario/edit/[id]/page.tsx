@@ -246,15 +246,40 @@ export default function EditProductoPage() {
             </div>
           )}
 
-          <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 14 }}>
-            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {priceRow('Caja 12 latas', 'precio_caja12_publico', 'precio_caja12_taproom', !isSuperAdmin)}
-              {priceRow('Caja 24 latas', 'precio_caja24_publico', 'precio_caja24_taproom', !isSuperAdmin)}
-              {priceRow('Barril 20L PET', 'precio_barril_pet_publico', 'precio_barril_pet_taproom', !isSuperAdmin)}
-              {priceRow('Barril 20L Acero', 'precio_barril_acero_publico', 'precio_barril_acero_taproom', !isSuperAdmin)}
-              {priceRow('Barril 10L PET', 'precio_barril10_pet_publico', 'precio_barril10_pet_taproom', !isSuperAdmin)}
-              {priceRow('Barril 10L Acero', 'precio_barril10_acero_publico', 'precio_barril10_acero_taproom', !isSuperAdmin)}
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 14 }}>
+            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios por presentación</p>
+            <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                    <th style={{ padding: '10px 14px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Presentación</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Público</th>
+                    <th style={{ padding: '10px 14px', textAlign: 'center', color: '#f59e0b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mayorista</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {([
+                    ['Caja 12 latas', 'precio_caja12_publico', 'precio_caja12_taproom'],
+                    ['Caja 24 latas', 'precio_caja24_publico', 'precio_caja24_taproom'],
+                    ['Barril 20L PET', 'precio_barril_pet_publico', 'precio_barril_pet_taproom'],
+                    ['Barril 20L Acero', 'precio_barril_acero_publico', 'precio_barril_acero_taproom'],
+                    ['Barril 10L PET', 'precio_barril10_pet_publico', 'precio_barril10_pet_taproom'],
+                    ['Barril 10L Acero', 'precio_barril10_acero_publico', 'precio_barril10_acero_taproom'],
+                  ] as const).map(([label, pubKey, tapKey]) => (
+                    <tr key={pubKey} style={{ borderBottom: '1px solid #e5e7eb' }}>
+                      <td style={{ padding: '8px 14px', color: '#374151', fontSize: 13, fontWeight: 500 }}>{label}</td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                        <input type="number" value={(form as any)[pubKey]} onChange={e => set(pubKey, e.target.value)} disabled={!isSuperAdmin}
+                          placeholder="—" style={{ width: 90, padding: '6px 8px', background: !isSuperAdmin ? '#f3f4f6' : '#fff', border: '1px solid #d1d5db', borderRadius: 6, color: (form as any)[pubKey] ? '#1a1a1a' : '#d1d5db', fontSize: 13, textAlign: 'right', outline: 'none' }} />
+                      </td>
+                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                        <input type="number" value={(form as any)[tapKey]} onChange={e => set(tapKey, e.target.value)} disabled={!isSuperAdmin}
+                          placeholder="—" style={{ width: 90, padding: '6px 8px', background: !isSuperAdmin ? '#f3f4f6' : '#fff', border: '1px solid #d1d5db', borderRadius: 6, color: (form as any)[tapKey] ? '#f59e0b' : '#d1d5db', fontSize: 13, textAlign: 'right', outline: 'none' }} />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
 
