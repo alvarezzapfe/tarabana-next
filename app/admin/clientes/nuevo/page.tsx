@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
 import { TIPOS_CLIENTE } from '../../../../src/lib/clientes'
+import DireccionForm, { type DireccionData } from '../../../../src/components/DireccionForm'
 
 const usosCFDI = [
   { clave: 'G01', desc: 'Adquisición de mercancias' },
@@ -40,8 +41,9 @@ export default function NuevoClientePage() {
     nombre: '', marca_negocio: '',
     email: '', phone: '', tipo: 'ocasional',
     razon_social: '', rfc: '', uso_cfdi: '', requiere_factura: false,
-    direccion_entrega: '', ciudad: '', cp: '', notas: ''
+    notas: ''
   })
+  const [addr, setAddr] = useState<DireccionData>({ cp: '', colonia: '', municipio: '', estado: '', calle: '', num_ext: '', num_int: '', referencias: '' })
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
 
   const handleSave = async () => {
@@ -52,7 +54,7 @@ export default function NuevoClientePage() {
     setLoading(true); setError('')
     const res = await fetch('/api/admin/clientes/crear', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, full_name: form.nombre })
+      body: JSON.stringify({ ...form, full_name: form.nombre, ...addr, direccion_entrega: `${addr.calle} ${addr.num_ext}`.trim() || null, ciudad: addr.municipio || null })
     })
     const data = await res.json()
     if (!res.ok) { setError(data.error || 'Error'); setLoading(false); return }
@@ -146,10 +148,8 @@ export default function NuevoClientePage() {
       </div>
 
       <Section title="Entrega" />
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 14, marginBottom: 14 }}>
-        {inp('Dirección', 'direccion_entrega', 'Calle y número')}
-        {inp('Ciudad / Alcaldía', 'ciudad', 'Condesa, CDMX')}
-        {inp('CP', 'cp', '06600')}
+      <div style={{ marginBottom: 14 }}>
+        <DireccionForm value={addr} onChange={setAddr} />
       </div>
 
       <div style={{ marginBottom: 20 }}>

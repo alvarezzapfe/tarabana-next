@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { TIPOS_CLIENTE } from '../../../../../src/lib/clientes'
+import DireccionForm, { type DireccionData } from '../../../../../src/components/DireccionForm'
 
 const usosCFDI = [
   { clave: 'G01', desc: 'Adquisición de mercancias' },
@@ -42,28 +43,35 @@ export default function EditClientePage() {
     nombre: '', marca_negocio: '',
     email: '', phone: '', tipo: 'ocasional',
     razon_social: '', rfc: '', uso_cfdi: '', requiere_factura: false,
-    direccion_entrega: '', ciudad: '', cp: '', notas: ''
+    notas: ''
   })
+  const [addr, setAddr] = useState<DireccionData>({ cp: '', colonia: '', municipio: '', estado: '', calle: '', num_ext: '', num_int: '', referencias: '' })
+  const [legacyAddr, setLegacyAddr] = useState<string | null>(null)
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
-      if (data) setForm({
-        nombre: data.full_name || data.nombre || '',
-        marca_negocio: data.marca_negocio || '',
-        email: data.email || '',
-        phone: data.phone?.replace('+52', '') || '',
-        tipo: data.tipo_consumidor || 'ocasional',
-        razon_social: data.razon_social || '',
-        rfc: data.rfc || '',
-        uso_cfdi: data.uso_cfdi || '',
-        requiere_factura: data.requiere_factura || false,
-        direccion_entrega: data.direccion_entrega || '',
-        ciudad: data.ciudad || '',
-        cp: data.cp || '',
-        notas: data.notas || '',
-      })
+      if (data) {
+        setForm({
+          nombre: data.full_name || data.nombre || '',
+          marca_negocio: data.marca_negocio || '',
+          email: data.email || '',
+          phone: data.phone?.replace('+52', '') || '',
+          tipo: data.tipo_consumidor || 'ocasional',
+          razon_social: data.razon_social || '',
+          rfc: data.rfc || '',
+          uso_cfdi: data.uso_cfdi || '',
+          requiere_factura: data.requiere_factura || false,
+          notas: data.notas || '',
+        })
+        setAddr({
+          cp: data.cp || '', colonia: data.colonia || '', municipio: data.municipio || '',
+          estado: data.estado || '', calle: data.calle || '', num_ext: data.num_ext || '',
+          num_int: data.num_int || '', referencias: data.referencias || '',
+        })
+        if (data.direccion_entrega && !data.calle) setLegacyAddr(data.direccion_entrega)
+      }
       setLoading(false)
     }
     load()
@@ -80,9 +88,16 @@ export default function EditClientePage() {
       rfc: form.requiere_factura ? form.rfc || null : null,
       uso_cfdi: form.requiere_factura ? form.uso_cfdi || null : null,
       requiere_factura: form.requiere_factura,
-      direccion_entrega: form.direccion_entrega || null,
-      ciudad: form.ciudad || null,
-      cp: form.cp || null,
+      direccion_entrega: `${addr.calle} ${addr.num_ext}`.trim() || null,
+      ciudad: addr.municipio || null,
+      cp: addr.cp || null,
+      colonia: addr.colonia || null,
+      municipio: addr.municipio || null,
+      estado: addr.estado || null,
+      calle: addr.calle || null,
+      num_ext: addr.num_ext || null,
+      num_int: addr.num_int || null,
+      referencias: addr.referencias || null,
     }).eq('id', id)
     if (error) { setError(error.message); setSaving(false); return }
     router.push('/admin/clientes'); router.refresh()
@@ -177,10 +192,8 @@ export default function EditClientePage() {
       </div>
 
       <Section title="Entrega" />
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 14, marginBottom: 20 }}>
-        {inp('Dirección', 'direccion_entrega', 'Calle y número')}
-        {inp('Ciudad', 'ciudad', 'Condesa, CDMX')}
-        {inp('CP', 'cp', '06600')}
+      <div style={{ marginBottom: 20 }}>
+        <DireccionForm value={addr} onChange={setAddr} legacyAddress={legacyAddr} />
       </div>
 
       {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>

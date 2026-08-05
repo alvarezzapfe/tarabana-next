@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
 import { tipoLabel as getTipoLabel, nivelLabel } from '../../../../src/lib/clientes'
+import DireccionForm, { type DireccionData } from '../../../../src/components/DireccionForm'
 
 const regimenesMap: Record<string, { codigo: string; desc: string }[]> = {
   fisica: [
@@ -42,6 +43,11 @@ export default function CuentaPage() {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  // Address
+  const [direccion, setDireccion] = useState<DireccionData>({ cp: '', colonia: '', municipio: '', estado: '', calle: '', num_ext: '', num_int: '', referencias: '' })
+  const [savingDir, setSavingDir] = useState(false)
+  const [savedDir, setSavedDir] = useState(false)
+
   useEffect(() => {
     const load = async () => {
       const { data: { user: u } } = await supabase.auth.getUser()
@@ -57,6 +63,11 @@ export default function CuentaPage() {
         setRegimenFiscal(p.regimen_fiscal || '')
         setUsoCfdi(p.uso_cfdi || '')
         setCpFiscal(p.cp_fiscal || '')
+        setDireccion({
+          cp: p.cp || '', colonia: p.colonia || '', municipio: p.municipio || '',
+          estado: p.estado || '', calle: p.calle || '', num_ext: p.num_ext || '',
+          num_int: p.num_int || '', referencias: p.referencias || '',
+        })
       }
       setLoading(false)
     }
@@ -154,6 +165,32 @@ export default function CuentaPage() {
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Editar datos
         </a>
+      </div>
+
+      {/* Address section */}
+      <h2 style={{ fontSize: 26, fontWeight: 700, color: '#111', marginBottom: 24, marginTop: 48 }}>Direccion de entrega</h2>
+      <div style={{ background: '#fff', borderRadius: 12, border: '1px solid #ebebeb', padding: '24px' }}>
+        <DireccionForm value={direccion} onChange={setDireccion} legacyAddress={profile?.direccion_entrega} />
+        <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button onClick={async () => {
+            if (!user) return
+            setSavingDir(true)
+            await supabase.from('profiles').update({
+              cp: direccion.cp || null, colonia: direccion.colonia || null,
+              municipio: direccion.municipio || null, estado: direccion.estado || null,
+              calle: direccion.calle || null, num_ext: direccion.num_ext || null,
+              num_int: direccion.num_int || null, referencias: direccion.referencias || null,
+            }).eq('id', user.id)
+            setSavingDir(false); setSavedDir(true)
+            setTimeout(() => setSavedDir(false), 3000)
+          }} disabled={savingDir} style={{
+            padding: '12px 24px', background: '#E8531D', border: 'none', borderRadius: 9,
+            color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer', opacity: savingDir ? 0.6 : 1,
+          }}>
+            {savingDir ? 'Guardando...' : 'Guardar direccion'}
+          </button>
+          {savedDir && <span style={{ color: '#10b981', fontSize: 14 }}>Guardado</span>}
+        </div>
       </div>
 
       {/* Billing section */}

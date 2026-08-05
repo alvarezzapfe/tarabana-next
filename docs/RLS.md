@@ -93,6 +93,21 @@ Si en el futuro se quiere abrir INSERT a authenticated vía RLS, el route handle
 debe seguir recalculando precios — la policy solo controlaría quién puede insertar,
 no la integridad de los montos.
 
+## codigos_postales (catalogo publico)
+
+Tabla con 159k registros del catalogo SEPOMEX. Lectura publica
+(`TO anon, authenticated USING (true)`), escritura solo `service_role`.
+Se consulta desde el componente `DireccionForm` en el cliente con anon key
+para autocompletar colonia, municipio y estado a partir del CP.
+
+## Envio en pedidos
+
+`pedidos.costo_envio` empieza en 0 y se actualiza via
+`/api/admin/pedidos/[id]/envio` (PATCH, canWrite). `pedidos_saldo` calcula
+saldo sobre `total + costo_envio`. Al agregar flete a un pedido ya pagado,
+el saldo se vuelve positivo, lo que es correcto (se necesita un pago
+adicional por el envio).
+
 ## nivel_precio (sin grant para authenticated)
 
 `profiles.nivel_precio` determina qué columna de precio ve el cliente en el
