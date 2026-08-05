@@ -2,6 +2,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '../../../src/lib/supabase'
 import { canWrite } from '../../../src/lib/roles'
+import { METODOS_PAGO } from '../../../src/lib/pagos'
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
@@ -297,11 +298,8 @@ export default function CobranzaPage() {
               <div>
                 <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Método</label>
                 <select value={payMetodo} onChange={e => setPayMetodo(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, color: '#1a1a1a', boxSizing: 'border-box', outline: 'none' }}>
-                  <option value="transferencia">Transferencia</option>
-                  <option value="efectivo">Efectivo</option>
-                  <option value="cheque">Cheque</option>
-                  <option value="otro">Otro</option>
+                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, color: '#1a1a1a', boxSizing: 'border-box', outline: 'none', cursor: 'pointer' }}>
+                  {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
             </div>
@@ -325,7 +323,7 @@ export default function CobranzaPage() {
                   <span style={{ fontFamily: 'monospace', color: '#6b7280', fontSize: 12, minWidth: 70 }}>#{a.pedido_id.slice(-6).toUpperCase()}</span>
                   <span style={{ color: '#9ca3af', fontSize: 12, flex: 1 }}>Saldo: {fmt(a.saldo)}</span>
                   <input type="number" value={a.monto || ''} onChange={e => setPayApps(prev => prev.map((p, j) => j === i ? { ...p, monto: parseFloat(e.target.value) || 0 } : p))}
-                    style={{ width: 100, padding: '6px 8px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, fontWeight: 600, textAlign: 'right', outline: 'none' }} />
+                    style={{ width: 100, padding: '6px 8px', background: '#fff', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 13, fontWeight: 600, textAlign: 'right', outline: 'none', color: '#1a1a1a' }} />
                 </div>
               ))}
             </div>

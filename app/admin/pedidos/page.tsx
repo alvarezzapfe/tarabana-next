@@ -11,7 +11,7 @@ export default async function PedidosPage() {
   const [{ data: pedidos }, { data: saldos }] = await Promise.all([
     supabase
       .from('pedidos')
-      .select('*, profiles!pedidos_cliente_id_fkey(full_name, email), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
+      .select('*, profiles!pedidos_cliente_id_fkey(full_name, email, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
       .order('created_at', { ascending: false }),
     supabase.from('pedidos_saldo').select('*'),
   ])

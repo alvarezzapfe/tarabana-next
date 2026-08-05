@@ -36,6 +36,13 @@ interface Cliente {
   direccion_entrega: string | null
   ciudad: string | null
   cp: string | null
+  calle: string | null
+  num_ext: string | null
+  num_int: string | null
+  colonia: string | null
+  municipio: string | null
+  estado: string | null
+  referencias: string | null
   created_at: string
 }
 
@@ -411,9 +418,37 @@ export default function ClientesPage() {
             {/* Address */}
             <div style={{ marginBottom: 24 }}>
               <SectionTitle>Direccion de entrega</SectionTitle>
-              <InfoRow label="Direccion" value={selectedCliente.direccion_entrega} />
-              <InfoRow label="Ciudad" value={selectedCliente.ciudad} />
-              <InfoRow label="C.P." value={selectedCliente.cp} />
+              {selectedCliente.calle ? (
+                <>
+                  <p style={{ margin: '0 0 4px', color: '#1a1a1a', fontSize: 14, lineHeight: 1.5 }}>
+                    {[selectedCliente.calle, selectedCliente.num_ext, selectedCliente.num_int ? `Int. ${selectedCliente.num_int}` : ''].filter(Boolean).join(' ')}
+                  </p>
+                  {selectedCliente.colonia && <p style={{ margin: '0 0 2px', color: '#6b7280', fontSize: 13 }}>{selectedCliente.colonia}</p>}
+                  <p style={{ margin: '0 0 2px', color: '#6b7280', fontSize: 13 }}>{[selectedCliente.municipio, selectedCliente.estado].filter(Boolean).join(', ')} {selectedCliente.cp}</p>
+                  {selectedCliente.referencias && <p style={{ margin: '4px 0 0', color: '#9ca3af', fontSize: 12, fontStyle: 'italic' }}>{selectedCliente.referencias}</p>}
+                  <button
+                    onClick={() => {
+                      const parts = [
+                        [selectedCliente.calle, selectedCliente.num_ext, selectedCliente.num_int ? `Int. ${selectedCliente.num_int}` : ''].filter(Boolean).join(' '),
+                        selectedCliente.colonia, selectedCliente.municipio,
+                        [selectedCliente.estado, selectedCliente.cp].filter(Boolean).join(' '),
+                      ].filter(Boolean)
+                      navigator.clipboard.writeText(parts.join(', '))
+                    }}
+                    style={{ marginTop: 8, padding: '4px 10px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 6, color: '#6b7280', fontSize: 11, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                    Copiar direccion
+                  </button>
+                </>
+              ) : selectedCliente.direccion_entrega ? (
+                <>
+                  <p style={{ margin: '0 0 2px', color: '#1a1a1a', fontSize: 14 }}>{selectedCliente.direccion_entrega}</p>
+                  {selectedCliente.ciudad && <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>{selectedCliente.ciudad} {selectedCliente.cp}</p>}
+                </>
+              ) : (
+                <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>Sin direccion registrada</p>
+              )}
             </div>
 
             {/* Fiscal data */}

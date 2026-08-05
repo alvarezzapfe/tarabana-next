@@ -1,5 +1,6 @@
 'use client'
 import { useState } from 'react'
+import { METODOS_PAGO } from '../../../src/lib/pagos'
 
 const entregaConfig: Record<string, { label: string, color: string, bg: string }> = {
   pendiente:  { label: 'Pendiente',  color: '#f59e0b', bg: '#fef3c7' },
@@ -17,6 +18,22 @@ const cobroConfig: Record<string, { label: string, color: string, bg: string }> 
 }
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 0 })}`
+const modalInput: React.CSSProperties = { width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 14, color: '#1a1a1a', boxSizing: 'border-box', outline: 'none', fontFamily: 'system-ui' }
+
+function formatAddress(profile: any): string | null {
+  if (!profile) return null
+  if (profile.calle) {
+    const parts = [
+      [profile.calle, profile.num_ext, profile.num_int ? `Int. ${profile.num_int}` : ''].filter(Boolean).join(' '),
+      profile.colonia,
+      profile.municipio,
+      [profile.estado, profile.cp].filter(Boolean).join(' '),
+    ].filter(Boolean)
+    const addr = parts.join(', ')
+    return profile.referencias ? `${addr}\n${profile.referencias}` : addr
+  }
+  return profile.direccion_entrega || null
+}
 
 export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: any[], saldos: any[], canEdit: boolean }) {
   const [data, setData] = useState(pedidos)
@@ -201,6 +218,20 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
                   <td style={{ padding: '14px 16px' }}>
                     <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>{cliente?.full_name || '--'}</p>
                     <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 11 }}>{cliente?.email}</p>
+                    {(() => {
+                      const addr = formatAddress(cliente)
+                      if (!addr) return null
+                      return (
+                        <button
+                          title={addr}
+                          onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(addr.replace(/\n/g, ', ')) }}
+                          style={{ marginTop: 4, padding: '2px 6px', background: '#f3f4f6', border: '1px solid #e5e7eb', borderRadius: 4, color: '#9ca3af', fontSize: 10, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+                          Copiar direccion
+                        </button>
+                      )
+                    })()}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <p style={{ margin: 0, color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(p.total || 0)}</p>
@@ -210,10 +241,14 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
                     {s ? fmt(s.saldo) : '--'}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    <span style={{ background: cc.bg, color: cc.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {cc.label}
-                      {s?.dias_vencido > 0 && s?.estado_cobro === 'vencido' ? ` (${s.dias_vencido}d)` : ''}
-                    </span>
+                    {p.status === 'cancelado' ? (
+                      <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>
+                    ) : (
+                      <span style={{ background: cc.bg, color: cc.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        {cc.label}
+                        {s?.dias_vencido > 0 && s?.estado_cobro === 'vencido' ? ` (${s.dias_vencido}d)` : ''}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <span style={{ background: ec.bg, color: ec.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{ec.label}</span>
@@ -287,22 +322,17 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
               <div>
                 <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Monto</label>
                 <input type="number" value={payMonto} onChange={e => setPayMonto(e.target.value)} placeholder="0.00"
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 15, fontWeight: 700, boxSizing: 'border-box', outline: 'none' }} />
+                  style={{ ...modalInput, fontSize: 15, fontWeight: 700 }} />
               </div>
               <div>
-                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Método</label>
-                <select value={payMetodo} onChange={e => setPayMetodo(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }}>
-                  <option value="transferencia">Transferencia</option>
-                  <option value="efectivo">Efectivo</option>
-                  <option value="cheque">Cheque</option>
-                  <option value="otro">Otro</option>
+                <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Metodo</label>
+                <select value={payMetodo} onChange={e => setPayMetodo(e.target.value)} style={{ ...modalInput, cursor: 'pointer' }}>
+                  {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
               <div>
                 <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Referencia</label>
-                <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="No. de operación"
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }} />
+                <input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="No. de operacion" style={modalInput} />
               </div>
             </div>
             {payError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{payError}</p>}
@@ -328,17 +358,16 @@ export default function PedidosClient({ pedidos, saldos, canEdit }: { pedidos: a
               <div>
                 <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Costo de envio</label>
                 <input type="number" value={shipCosto} onChange={e => setShipCosto(e.target.value)} placeholder="0.00" min="0" step="0.01"
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 15, fontWeight: 700, boxSizing: 'border-box', outline: 'none' }} />
+                  style={{ ...modalInput, fontSize: 15, fontWeight: 700 }} />
               </div>
               <div>
                 <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Paqueteria</label>
-                <input value={shipPaqueteria} onChange={e => setShipPaqueteria(e.target.value)}
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, boxSizing: 'border-box', outline: 'none' }} />
+                <input value={shipPaqueteria} onChange={e => setShipPaqueteria(e.target.value)} style={modalInput} />
               </div>
               <div>
                 <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Numero de guia</label>
                 <input value={shipGuia} onChange={e => setShipGuia(e.target.value)} placeholder="Opcional"
-                  style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, fontFamily: 'monospace', boxSizing: 'border-box', outline: 'none' }} />
+                  style={{ ...modalInput, fontFamily: 'monospace' }} />
               </div>
             </div>
             {shipError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{shipError}</p>}
