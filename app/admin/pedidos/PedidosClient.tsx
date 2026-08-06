@@ -39,7 +39,7 @@ function formatAddressBlock(p: any): string[] | null {
   if (p.calle) {
     const lines = [[p.calle, p.num_ext, p.num_int ? `Int. ${p.num_int}` : ''].filter(Boolean).join(' ')]
     if (p.colonia) lines.push(p.colonia)
-    lines.push([p.municipio, p.estado, p.cp].filter(Boolean).join(', '))
+    lines.push([p.municipio, [p.estado, p.cp].filter(Boolean).join(' ')].filter(Boolean).join(', '))
     if (p.referencias) lines.push(p.referencias)
     return lines
   }
@@ -202,7 +202,13 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
                     <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 11 }}>{cl?.email}</p>
                   </td>
                   <td style={{ padding: '14px 16px' }}>
-                    {cl?.municipio ? <p style={{ margin: 0, color: '#374151', fontSize: 13 }}>{cl.municipio}, {cl.estado}</p> : <span style={{ color: '#9ca3af', fontSize: 13 }}>--</span>}
+                    {cl?.municipio ? (
+                      <p style={{ margin: 0, color: '#374151', fontSize: 13 }}>{cl.municipio}, {cl.estado}</p>
+                    ) : cl?.direccion_entrega ? (
+                      <p style={{ margin: 0, color: '#374151', fontSize: 13, maxWidth: 140, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cl.direccion_entrega}</p>
+                    ) : (
+                      <span style={{ color: '#9ca3af', fontSize: 13 }}>--</span>
+                    )}
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <p style={{ margin: 0, color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(p.total || 0)}</p>
@@ -378,6 +384,10 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
                 <button onClick={() => openPay(dp.id)} style={{ padding: '8px 14px', background: '#E8531D', color: '#fff', border: 'none', borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Registrar pago</button>
                 <button onClick={() => openShipModal(dp.id)} style={btnSec}>Registrar envio</button>
                 <button onClick={() => setStatusModalId(dp.id)} style={btnSec}>Cambiar entrega</button>
+                <a href={`/api/pedidos/${dp.id}/documento`} download style={btnSec}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginRight: 4 }}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Word
+                </a>
                 <a href={`/admin/pedidos/${dp.id}/edit`} style={btnSec}>Editar</a>
                 <button onClick={() => eliminarPedido(dp.id)} disabled={deletingId === dp.id}
                   style={{ padding: '8px 14px', background: '#fff', border: '1px solid #fee2e2', borderRadius: 8, fontSize: 12, color: '#ef4444', cursor: 'pointer' }}>

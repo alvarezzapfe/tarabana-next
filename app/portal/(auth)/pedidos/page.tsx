@@ -155,6 +155,14 @@ export default function MisPedidosPage() {
                             {canceling === p.id ? 'Cancelando...' : 'Cancelar pedido'}
                           </button>
                         )}
+                        <a href={`/api/pedidos/${p.id}/documento`} download style={{
+                          padding: '4px 12px', background: '#f3f4f6', color: '#6b7280',
+                          border: 'none', borderRadius: 99, fontSize: 12, fontWeight: 500, textDecoration: 'none',
+                          display: 'inline-flex', alignItems: 'center', gap: 4,
+                        }}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                          Comprobante
+                        </a>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         {(p.costo_envio > 0 || p.descuento_valor > 0) && (
