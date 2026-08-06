@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '../../../../src/lib/supabase-server'
+import { createServerSupabaseClient, createServiceClient } from '../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
@@ -27,6 +27,13 @@ export async function POST(request: Request) {
       { status: 400 }
     )
   }
+
+  // Mark account as activated (for client portal onboarding tracking)
+  const service = createServiceClient()
+  await service.from('profiles')
+    .update({ cuenta_activada_at: new Date().toISOString() })
+    .eq('id', user.id)
+    .is('cuenta_activada_at', null)
 
   await supabase.auth.signOut()
   return NextResponse.json({ ok: true })

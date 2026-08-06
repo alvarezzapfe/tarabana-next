@@ -43,6 +43,8 @@ interface Cliente {
   municipio: string | null
   estado: string | null
   referencias: string | null
+  invitacion_enviada_at: string | null
+  cuenta_activada_at: string | null
   created_at: string
 }
 
@@ -73,6 +75,8 @@ export default function ClientesPage() {
   // Nivel precio edit
   const [savingNivel, setSavingNivel] = useState(false)
   const [nivelSaved, setNivelSaved] = useState(false)
+  const [invitingId, setInvitingId] = useState<string | null>(null)
+  const [inviteResult, setInviteResult] = useState<string | null>(null)
 
   useEffect(() => {
     const load = async () => {
@@ -268,7 +272,7 @@ export default function ClientesPage() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Cliente', 'Tipo', 'Nivel de precio', 'Pedidos', 'Registrado', ...(canEdit ? [''] : [])].map((h, i) => (
+              {['Cliente', 'Tipo', 'Nivel de precio', 'Portal', 'Pedidos', 'Registrado', ...(canEdit ? [''] : [])].map((h, i) => (
                 <th key={i} style={{
                   color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 14px',
                   textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap',
@@ -317,6 +321,15 @@ export default function ClientesPage() {
                     }}>
                       {nivelLabel(nivel)}
                     </span>
+                  </td>
+                  <td style={{ padding: '12px 14px' }}>
+                    {c.cuenta_activada_at ? (
+                      <span style={{ background: '#d1fae5', color: '#10b981', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Activo</span>
+                    ) : c.invitacion_enviada_at ? (
+                      <span style={{ background: '#fef3c7', color: '#f59e0b', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Invitado</span>
+                    ) : (
+                      <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Sin invitar</span>
+                    )}
                   </td>
                   <td style={{ padding: '12px 14px', color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>
                     {pedidosCounts[c.id] || 0}
@@ -449,6 +462,46 @@ export default function ClientesPage() {
               ) : (
                 <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>Sin direccion registrada</p>
               )}
+            </div>
+
+            {/* Portal access */}
+            <div style={{ marginBottom: 24 }}>
+              <SectionTitle>Acceso al portal</SectionTitle>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                {selectedCliente.cuenta_activada_at ? (
+                  <span style={{ background: '#d1fae5', color: '#10b981', padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>Activo</span>
+                ) : selectedCliente.invitacion_enviada_at ? (
+                  <span style={{ background: '#fef3c7', color: '#f59e0b', padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>Invitado</span>
+                ) : (
+                  <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>Sin invitar</span>
+                )}
+              </div>
+              {selectedCliente.invitacion_enviada_at && (
+                <p style={{ margin: '0 0 4px', color: '#9ca3af', fontSize: 12 }}>Invitacion enviada: {formatDate(selectedCliente.invitacion_enviada_at)}</p>
+              )}
+              {selectedCliente.cuenta_activada_at && (
+                <p style={{ margin: '0 0 4px', color: '#9ca3af', fontSize: 12 }}>Cuenta activada: {formatDate(selectedCliente.cuenta_activada_at)}</p>
+              )}
+              {canEdit && !selectedCliente.cuenta_activada_at && (
+                <button
+                  onClick={async () => {
+                    setInvitingId(selectedCliente.id); setInviteResult(null)
+                    const res = await fetch(`/api/admin/clientes/${selectedCliente.id}/invitar`, { method: 'POST' })
+                    const d = await res.json().catch(() => ({}))
+                    setInvitingId(null)
+                    if (res.ok) {
+                      setInviteResult('Invitacion enviada')
+                      setClientes(prev => prev.map(c => c.id === selectedCliente.id ? { ...c, invitacion_enviada_at: new Date().toISOString() } : c))
+                    } else { setInviteResult(d.error || 'Error') }
+                    setTimeout(() => setInviteResult(null), 3000)
+                  }}
+                  disabled={invitingId === selectedCliente.id}
+                  style={{ marginTop: 8, padding: '6px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, color: '#6b7280', fontSize: 12, cursor: 'pointer', opacity: invitingId === selectedCliente.id ? 0.5 : 1 }}
+                >
+                  {invitingId === selectedCliente.id ? 'Enviando...' : selectedCliente.invitacion_enviada_at ? 'Reenviar invitacion' : 'Enviar invitacion'}
+                </button>
+              )}
+              {inviteResult && <p style={{ margin: '6px 0 0', color: inviteResult.includes('Error') ? '#ef4444' : '#10b981', fontSize: 12 }}>{inviteResult}</p>}
             </div>
 
             {/* Fiscal data */}

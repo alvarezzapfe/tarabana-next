@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '../../../../../src/lib/supabase-serv
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
+import { enviarInvitacionCliente } from '../../../../../src/lib/invitar-cliente'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -46,5 +47,16 @@ export async function POST(request: Request) {
   }
 
   logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pedido.crear', entidad: 'pedidos', entidadId: pedido.id, detalle: { cliente_id, total, vendedor_id: vendedor_id || null }, request })
+
+  // Fire-and-forget: invite client on first order
+  const { count: pedidoCount } = await supabase.from('pedidos').select('id', { count: 'exact', head: true }).eq('cliente_id', cliente_id)
+  if (pedidoCount === 1) {
+    enviarInvitacionCliente(cliente_id, { pedidoId: pedido.id, pedidoTotal: total }).then(result => {
+      if (result.sent) {
+        logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'cliente.invitacion', entidad: 'profiles', entidadId: cliente_id, detalle: { pedido_id: pedido.id, trigger: 'primer_pedido' }, request })
+      }
+    })
+  }
+
   return NextResponse.json({ ok: true, pedido_id: pedido.id })
 }
