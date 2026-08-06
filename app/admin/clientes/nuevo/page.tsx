@@ -1,174 +1,83 @@
 'use client'
 import { useState } from 'react'
-import { createClient } from '../../../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { TIPOS_CLIENTE } from '../../../../src/lib/clientes'
-import DireccionForm, { type DireccionData } from '../../../../src/components/DireccionForm'
-
-const usosCFDI = [
-  { clave: 'G01', desc: 'Adquisición de mercancias' },
-  { clave: 'G02', desc: 'Devoluciones, descuentos o bonificaciones' },
-  { clave: 'G03', desc: 'Gastos en general' },
-  { clave: 'I01', desc: 'Construcciones' },
-  { clave: 'I02', desc: 'Mobilario y equipo de oficina por inversiones' },
-  { clave: 'I03', desc: 'Equipo de transporte' },
-  { clave: 'I04', desc: 'Equipo de computo y accesorios' },
-  { clave: 'I05', desc: 'Dados, troqueles, moldes, matrices y herramental' },
-  { clave: 'I06', desc: 'Comunicaciones telefónicas' },
-  { clave: 'I07', desc: 'Comunicaciones satelitales' },
-  { clave: 'I08', desc: 'Otra maquinaria y equipo' },
-  { clave: 'D01', desc: 'Honorarios médicos, dentales y gastos hospitalarios' },
-  { clave: 'D02', desc: 'Gastos médicos por incapacidad o discapacidad' },
-  { clave: 'D03', desc: 'Gastos funerales' },
-  { clave: 'D04', desc: 'Donativos' },
-  { clave: 'D05', desc: 'Intereses reales efectivamente pagados por créditos hipotecarios' },
-  { clave: 'D06', desc: 'Aportaciones voluntarias al SAR' },
-  { clave: 'D07', desc: 'Primas por seguros de gastos médicos' },
-  { clave: 'D08', desc: 'Gastos de transportación escolar obligatoria' },
-  { clave: 'D09', desc: 'Depósitos en cuentas para el ahorro, planes de pensiones' },
-  { clave: 'D10', desc: 'Pagos por servicios educativos (colegiaturas)' },
-  { clave: 'S01', desc: 'Sin efectos fiscales' },
-  { clave: 'CP01', desc: 'Pagos' },
-  { clave: 'CN01', desc: 'Nómina' },
-]
+import ClienteForm, { type ClienteData } from '../../../../src/components/ClienteForm'
+import { NIVELES_PRECIO } from '../../../../src/lib/clientes'
 
 export default function NuevoClientePage() {
   const router = useRouter()
-  const supabase = createClient()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    nombre: '', marca_negocio: '',
-    email: '', phone: '', tipo: 'ocasional',
-    razon_social: '', rfc: '', uso_cfdi: '', requiere_factura: false,
-    notas: ''
-  })
-  const [addr, setAddr] = useState<DireccionData>({ cp: '', colonia: '', municipio: '', estado: '', calle: '', num_ext: '', num_int: '', referencias: '' })
-  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const [saving, setSaving] = useState(false)
+  const [nivelPrecio, setNivelPrecio] = useState('publico')
+  const [notas, setNotas] = useState('')
 
-  const handleSave = async () => {
-    if (!form.nombre || !form.email) { setError('Nombre y email son requeridos'); return }
-    if (form.requiere_factura && (!form.rfc || !form.razon_social || !form.uso_cfdi)) {
-      setError('RFC, Razón Social y Uso CFDI son requeridos para facturación'); return
-    }
-    setLoading(true); setError('')
+  const handleSave = async (data: ClienteData & { full_name: string }) => {
+    setSaving(true)
     const res = await fetch('/api/admin/clientes/crear', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, full_name: form.nombre, ...addr, direccion_entrega: `${addr.calle} ${addr.num_ext}`.trim() || null, ciudad: addr.municipio || null })
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: data.full_name,
+        nombre_pila: data.nombre_pila, apellido_paterno: data.apellido_paterno, apellido_materno: data.apellido_materno,
+        razon_social: data.razon_social, marca_negocio: data.marca_negocio, contacto_nombre: data.contacto_nombre,
+        tipo_persona_registro: data.tipo_persona_registro,
+        email: data.email, phone: data.phone ? data.phone.replace(/\D/g, '') : null,
+        tipo: data.tipo_consumidor, nivel_precio: nivelPrecio,
+        requiere_factura: data.requiere_factura, rfc: data.rfc || null,
+        razon_social_fiscal: data.requiere_factura ? data.razon_social : null,
+        uso_cfdi: data.uso_cfdi || null, regimen_fiscal: data.regimen_fiscal || null, cp_fiscal: data.cp_fiscal || null,
+        ...data.direccion,
+        direccion_entrega: [data.direccion.calle, data.direccion.num_ext].filter(Boolean).join(' ') || null,
+        ciudad: data.direccion.municipio || null,
+        notas,
+      }),
     })
-    const data = await res.json()
-    if (!res.ok) { setError(data.error || 'Error'); setLoading(false); return }
+    const d = await res.json()
+    setSaving(false)
+    if (!res.ok) return { error: d.error || 'Error al crear cliente' }
     router.push('/admin/clientes'); router.refresh()
+    return {}
   }
 
-  const inp = (label: string, key: string, placeholder = '', type = 'text') => (
-    <div>
-      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
-      <input type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)} placeholder={placeholder}
-        style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none' }} />
-    </div>
-  )
-
-  const Section = ({ title }: { title: string }) => (
-    <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 10px', paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>{title}</p>
-  )
-
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 720 }}>
+    <div style={{ padding: '36px 40px', maxWidth: 720, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <a href="/admin/clientes" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Clientes
         </a>
-        <span style={{ color: '#2a2a2a' }}>/</span>
+        <span style={{ color: '#d1d5db' }}>/</span>
         <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>Nuevo cliente</h1>
       </div>
 
-      <Section title="Datos personales" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        {inp('Nombre *', 'nombre', 'Juan')}
-        {inp('Marca / Negocio', 'marca_negocio', 'El Caracol, Bar La Paloma...')}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        {inp('Email *', 'email', 'juan@ejemplo.com', 'email')}
-        <div>
-          <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular</label>
-          <div style={{ display: 'flex' }}>
-            <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '10px 12px', color: '#6b7280', fontSize: 13, whiteSpace: 'nowrap' }}>MX +52</div>
-            <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="55 1234 5678"
-              style={{ flex: 1, padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '0 8px 8px 0', color: '#1a1a1a', fontSize: 14, outline: 'none' }} />
-          </div>
-        </div>
-      </div>
-
-      <Section title="Tipo de cliente" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
-        {TIPOS_CLIENTE.map(t => (
-          <button key={t.value} onClick={() => set('tipo', t.value)} style={{
-            padding: '10px 8px', background: form.tipo === t.value ? '#1e1e1e' : '#111',
-            border: `1.5px solid ${form.tipo === t.value ? '#E8531D' : '#1e1e1e'}`,
-            borderRadius: 8, cursor: 'pointer', textAlign: 'center'
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={form.tipo === t.value ? '#E8531D' : '#555'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 3 }}><path d={t.iconPath} /></svg>
-            <p style={{ margin: 0, color: form.tipo === t.value ? '#fff' : '#555', fontSize: 13, fontWeight: form.tipo === t.value ? 600 : 400 }}>{t.label}</p>
-          </button>
-        ))}
-      </div>
-
-      <Section title="Facturación" />
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.requiere_factura ? 16 : 0 }}>
-          <div>
-            <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13.5, fontWeight: 500 }}>¿Requiere factura?</p>
-            <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: 12 }}>Activa para agregar datos fiscales</p>
-          </div>
-          <button onClick={() => set('requiere_factura', !form.requiere_factura)} style={{
-            width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-            background: form.requiere_factura ? '#E8531D' : '#2a2a2a', position: 'relative', transition: 'all 0.2s'
-          }}>
-            <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: form.requiere_factura ? 23 : 3, transition: 'all 0.2s' }} />
-          </button>
-        </div>
-        {form.requiere_factura && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {inp('RFC *', 'rfc', 'XAXX010101000')}
-              {inp('Razón Social *', 'razon_social', 'EMPRESA S.A. DE C.V.')}
+      <ClienteForm
+        onSave={handleSave}
+        saving={saving}
+        submitLabel="Crear cliente"
+        adminExtras={
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Nivel de precio</p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {NIVELES_PRECIO.map(n => (
+                  <button key={n.value} onClick={() => setNivelPrecio(n.value)} style={{
+                    flex: 1, padding: '10px', background: nivelPrecio === n.value ? '#1e1e1e' : '#f9fafb',
+                    border: `1.5px solid ${nivelPrecio === n.value ? '#E8531D' : '#e5e7eb'}`,
+                    borderRadius: 8, cursor: 'pointer', color: nivelPrecio === n.value ? '#fff' : '#6b7280', fontSize: 13, fontWeight: 500,
+                  }}>
+                    <p style={{ margin: 0, fontWeight: 600 }}>{n.label}</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 11, opacity: 0.7 }}>{n.desc}</p>
+                  </button>
+                ))}
+              </div>
             </div>
             <div>
-              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Uso de CFDI *</label>
-              <select value={form.uso_cfdi} onChange={e => set('uso_cfdi', e.target.value)}
-                style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: form.uso_cfdi ? '#fff' : '#555', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
-                <option value="">— Selecciona uso —</option>
-                {usosCFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} – {u.desc}</option>)}
-              </select>
+              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Notas internas</label>
+              <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="Horarios, contacto en sitio, observaciones..."
+                style={{ width: '100%', padding: '12px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 9, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
             </div>
           </div>
-        )}
-      </div>
-
-      <Section title="Entrega" />
-      <div style={{ marginBottom: 14 }}>
-        <DireccionForm value={addr} onChange={setAddr} />
-      </div>
-
-      <div style={{ marginBottom: 20 }}>
-        <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Notas internas</label>
-        <textarea value={form.notas} onChange={e => set('notas', e.target.value)} rows={2} placeholder="Horarios de entrega, contacto en sitio, observaciones..."
-          style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
-      </div>
-
-      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
-        <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>{error}</p>
-      </div>}
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <a href="/admin/clientes" style={{ padding: '11px 20px', background: '#f3f4f6', color: '#6b7280', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
-        <button onClick={handleSave} disabled={loading} style={{
-          flex: 1, padding: '11px', background: '#E8531D', border: 'none', borderRadius: 8,
-          color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: loading ? 0.7 : 1
-        }}>{loading ? 'Guardando...' : 'Guardar cliente'}</button>
-      </div>
+        }
+      />
     </div>
   )
 }

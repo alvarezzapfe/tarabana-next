@@ -2,211 +2,95 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
-import { TIPOS_CLIENTE } from '../../../../../src/lib/clientes'
-import DireccionForm, { type DireccionData } from '../../../../../src/components/DireccionForm'
-
-const usosCFDI = [
-  { clave: 'G01', desc: 'Adquisición de mercancias' },
-  { clave: 'G02', desc: 'Devoluciones, descuentos o bonificaciones' },
-  { clave: 'G03', desc: 'Gastos en general' },
-  { clave: 'I01', desc: 'Construcciones' },
-  { clave: 'I02', desc: 'Mobilario y equipo de oficina por inversiones' },
-  { clave: 'I03', desc: 'Equipo de transporte' },
-  { clave: 'I04', desc: 'Equipo de computo y accesorios' },
-  { clave: 'I05', desc: 'Dados, troqueles, moldes, matrices y herramental' },
-  { clave: 'I06', desc: 'Comunicaciones telefónicas' },
-  { clave: 'I07', desc: 'Comunicaciones satelitales' },
-  { clave: 'I08', desc: 'Otra maquinaria y equipo' },
-  { clave: 'D01', desc: 'Honorarios médicos, dentales y gastos hospitalarios' },
-  { clave: 'D02', desc: 'Gastos médicos por incapacidad o discapacidad' },
-  { clave: 'D03', desc: 'Gastos funerales' },
-  { clave: 'D04', desc: 'Donativos' },
-  { clave: 'D05', desc: 'Intereses reales efectivamente pagados por créditos hipotecarios' },
-  { clave: 'D06', desc: 'Aportaciones voluntarias al SAR' },
-  { clave: 'D07', desc: 'Primas por seguros de gastos médicos' },
-  { clave: 'D08', desc: 'Gastos de transportación escolar obligatoria' },
-  { clave: 'D09', desc: 'Depósitos en cuentas para el ahorro, planes de pensiones' },
-  { clave: 'D10', desc: 'Pagos por servicios educativos (colegiaturas)' },
-  { clave: 'S01', desc: 'Sin efectos fiscales' },
-  { clave: 'CP01', desc: 'Pagos' },
-  { clave: 'CN01', desc: 'Nómina' },
-]
+import ClienteForm, { type ClienteData } from '../../../../../src/components/ClienteForm'
+import { NIVELES_PRECIO } from '../../../../../src/lib/clientes'
+import { type DireccionData } from '../../../../../src/components/DireccionForm'
 
 export default function EditClientePage() {
   const router = useRouter()
-  const { id } = useParams()
+  const params = useParams()
+  const id = params.id as string
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
-  const [form, setForm] = useState({
-    nombre: '', marca_negocio: '',
-    email: '', phone: '', tipo: 'ocasional',
-    razon_social: '', rfc: '', uso_cfdi: '', requiere_factura: false,
-    notas: ''
-  })
-  const [addr, setAddr] = useState<DireccionData>({ cp: '', colonia: '', municipio: '', estado: '', calle: '', num_ext: '', num_int: '', referencias: '' })
+  const [initial, setInitial] = useState<Partial<ClienteData>>({})
   const [legacyAddr, setLegacyAddr] = useState<string | null>(null)
-  const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }))
+  const [nivelPrecio, setNivelPrecio] = useState('publico')
+  const [notas, setNotas] = useState('')
 
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from('profiles').select('*').eq('id', id).single()
-      if (data) {
-        setForm({
-          nombre: data.full_name || data.nombre || '',
-          marca_negocio: data.marca_negocio || '',
-          email: data.email || '',
-          phone: data.phone?.replace('+52', '') || '',
-          tipo: data.tipo_consumidor || 'ocasional',
-          razon_social: data.razon_social || '',
-          rfc: data.rfc || '',
-          uso_cfdi: data.uso_cfdi || '',
-          requiere_factura: data.requiere_factura || false,
-          notas: data.notas || '',
-        })
-        setAddr({
-          cp: data.cp || '', colonia: data.colonia || '', municipio: data.municipio || '',
-          estado: data.estado || '', calle: data.calle || '', num_ext: data.num_ext || '',
-          num_int: data.num_int || '', referencias: data.referencias || '',
-        })
-        if (data.direccion_entrega && !data.calle) setLegacyAddr(data.direccion_entrega)
-      }
+      if (!data) { router.push('/admin/clientes'); return }
+      setInitial({
+        tipo_persona_registro: data.tipo_persona_registro || '',
+        nombre_pila: data.nombre_pila || (data.full_name?.split(' ')[0]) || '',
+        apellido_paterno: data.apellido_paterno || (data.full_name?.split(' ')[1]) || '',
+        apellido_materno: data.apellido_materno || (data.full_name?.split(' ')[2]) || '',
+        razon_social: data.razon_social || '', marca_negocio: data.marca_negocio || '', contacto_nombre: data.contacto_nombre || '',
+        email: data.email || '', phone: data.phone?.replace(/^\+52/, '') || '', tipo_consumidor: data.tipo_consumidor || '',
+        direccion: { cp: data.cp || '', colonia: data.colonia || '', municipio: data.municipio || '', estado: data.estado || '', calle: data.calle || '', num_ext: data.num_ext || '', num_int: data.num_int || '', referencias: data.referencias || '' },
+        requiere_factura: data.requiere_factura || false, rfc: data.rfc || '', regimen_fiscal: data.regimen_fiscal || '', uso_cfdi: data.uso_cfdi || '', cp_fiscal: data.cp_fiscal || '',
+      })
+      if (data.direccion_entrega && !data.calle) setLegacyAddr(data.direccion_entrega)
+      setNivelPrecio(data.nivel_precio || 'publico')
+      setNotas(data.notas || '')
       setLoading(false)
     }
     load()
   }, [id])
 
-  const handleSave = async () => {
-    setSaving(true); setError('')
+  const handleSave = async (data: ClienteData & { full_name: string }) => {
+    setSaving(true)
     const { error } = await supabase.from('profiles').update({
-      full_name: form.nombre,
-      marca_negocio: form.marca_negocio || null,
-      phone: form.phone ? `+52${form.phone}` : null,
-      tipo_consumidor: form.tipo,
-      razon_social: form.requiere_factura ? form.razon_social || null : null,
-      rfc: form.requiere_factura ? form.rfc || null : null,
-      uso_cfdi: form.requiere_factura ? form.uso_cfdi || null : null,
-      requiere_factura: form.requiere_factura,
-      direccion_entrega: `${addr.calle} ${addr.num_ext}`.trim() || null,
-      ciudad: addr.municipio || null,
-      cp: addr.cp || null,
-      colonia: addr.colonia || null,
-      municipio: addr.municipio || null,
-      estado: addr.estado || null,
-      calle: addr.calle || null,
-      num_ext: addr.num_ext || null,
-      num_int: addr.num_int || null,
-      referencias: addr.referencias || null,
+      full_name: data.full_name,
+      nombre_pila: data.nombre_pila || null, apellido_paterno: data.apellido_paterno || null, apellido_materno: data.apellido_materno || null,
+      razon_social: data.razon_social || null, marca_negocio: data.marca_negocio || null, contacto_nombre: data.contacto_nombre || null,
+      tipo_persona_registro: data.tipo_persona_registro || null,
+      phone: data.phone ? data.phone.replace(/\D/g, '') : null,
+      tipo_consumidor: data.tipo_consumidor,
+      ...data.direccion,
+      direccion_entrega: [data.direccion.calle, data.direccion.num_ext].filter(Boolean).join(' ') || null,
+      ciudad: data.direccion.municipio || null,
+      requiere_factura: data.requiere_factura,
+      rfc: data.requiere_factura ? data.rfc : null,
+      regimen_fiscal: data.requiere_factura ? data.regimen_fiscal : null,
+      uso_cfdi: data.requiere_factura ? data.uso_cfdi : null,
+      cp_fiscal: data.requiere_factura ? data.cp_fiscal : null,
     }).eq('id', id)
-    if (error) { setError(error.message); setSaving(false); return }
+    setSaving(false)
+    if (error) return { error: error.message }
     router.push('/admin/clientes'); router.refresh()
+    return {}
   }
 
-  const inp = (label: string, key: string, placeholder = '', type = 'text', disabled = false) => (
-    <div>
-      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
-      <input type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)} placeholder={placeholder} disabled={disabled}
-        style={{ width: '100%', padding: '10px 13px', background: disabled ? '#141414' : '#1a1a1a', border: '1px solid #d1d5db', borderRadius: 8, color: disabled ? '#555' : '#fff', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none' }} />
-    </div>
-  )
-
-  const Section = ({ title }: { title: string }) => (
-    <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '20px 0 10px', paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>{title}</p>
-  )
-
-  if (loading) return <div style={{ padding: 60, color: '#6b7280', textAlign: 'center', fontFamily: 'system-ui' }}>Cargando...</div>
+  if (loading) return <div style={{ padding: '36px 40px' }}><p style={{ color: '#9ca3af' }}>Cargando...</p></div>
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 720 }}>
+    <div style={{ padding: '36px 40px', maxWidth: 720, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <a href="/admin/clientes" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
           Clientes
         </a>
-        <span style={{ color: '#2a2a2a' }}>/</span>
+        <span style={{ color: '#d1d5db' }}>/</span>
         <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>Editar cliente</h1>
       </div>
 
-      <Section title="Datos personales" />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        {inp('Nombre *', 'nombre', 'Juan')}
-        {inp('Marca / Negocio', 'marca_negocio', 'El Caracol, Bar La Paloma...')}
-      </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-        {inp('Email', 'email', '', 'email', false)}
-        <div>
-          <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Celular</label>
-          <div style={{ display: 'flex' }}>
-            <div style={{ background: '#fff', border: '1px solid #d1d5db', borderRight: 'none', borderRadius: '8px 0 0 8px', padding: '10px 12px', color: '#6b7280', fontSize: 13 }}>MX +52</div>
-            <input type="tel" value={form.phone} onChange={e => set('phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="55 1234 5678"
-              style={{ flex: 1, padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '0 8px 8px 0', color: '#1a1a1a', fontSize: 14, outline: 'none' }} />
-          </div>
-        </div>
-      </div>
-
-      <Section title="Tipo de cliente" />
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginBottom: 14 }}>
-        {TIPOS_CLIENTE.map(t => (
-          <button key={t.value} onClick={() => set('tipo', t.value)} style={{
-            padding: '10px 8px', background: form.tipo === t.value ? '#1e1e1e' : '#111',
-            border: `1.5px solid ${form.tipo === t.value ? '#E8531D' : '#1e1e1e'}`,
-            borderRadius: 8, cursor: 'pointer', textAlign: 'center'
-          }}>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={form.tipo === t.value ? '#E8531D' : '#555'} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" style={{ marginBottom: 3 }}><path d={t.iconPath} /></svg>
-            <p style={{ margin: 0, color: form.tipo === t.value ? '#fff' : '#555', fontSize: 13, fontWeight: form.tipo === t.value ? 600 : 400 }}>{t.label}</p>
-          </button>
-        ))}
-      </div>
-
-      <Section title="Facturación" />
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', marginBottom: 14 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: form.requiere_factura ? 16 : 0 }}>
+      <ClienteForm
+        initial={initial}
+        legacyAddress={legacyAddr}
+        onSave={handleSave}
+        saving={saving}
+        submitLabel="Guardar cambios"
+        adminExtras={
           <div>
-            <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13.5, fontWeight: 500 }}>¿Requiere CFDI / factura?</p>
-            <p style={{ margin: '2px 0 0', color: '#6b7280', fontSize: 12 }}>Activa para agregar datos fiscales</p>
+            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8 }}>Notas internas</p>
+            <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="Horarios, contacto en sitio..."
+              style={{ width: '100%', padding: '12px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 9, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
           </div>
-          <button onClick={() => set('requiere_factura', !form.requiere_factura)} style={{
-            width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer',
-            background: form.requiere_factura ? '#E8531D' : '#2a2a2a', position: 'relative', transition: 'all 0.2s'
-          }}>
-            <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: form.requiere_factura ? 23 : 3, transition: 'all 0.2s' }} />
-          </button>
-        </div>
-        {form.requiere_factura && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-              {inp('RFC *', 'rfc', 'XAXX010101000')}
-              {inp('Razón Social *', 'razon_social', 'EMPRESA S.A. DE C.V.')}
-            </div>
-            <div>
-              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Uso de CFDI *</label>
-              <select value={form.uso_cfdi} onChange={e => set('uso_cfdi', e.target.value)}
-                style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: form.uso_cfdi ? '#fff' : '#555', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
-                <option value="">— Selecciona uso —</option>
-                {usosCFDI.map(u => <option key={u.clave} value={u.clave}>{u.clave} – {u.desc}</option>)}
-              </select>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <Section title="Entrega" />
-      <div style={{ marginBottom: 20 }}>
-        <DireccionForm value={addr} onChange={setAddr} legacyAddress={legacyAddr} />
-      </div>
-
-      {error && <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
-        <p style={{ color: '#ef4444', fontSize: 13, margin: 0 }}>{error}</p>
-      </div>}
-
-      <div style={{ display: 'flex', gap: 10 }}>
-        <a href="/admin/clientes" style={{ padding: '11px 20px', background: '#f3f4f6', color: '#6b7280', borderRadius: 8, textDecoration: 'none', fontSize: 14 }}>Cancelar</a>
-        <button onClick={handleSave} disabled={saving} style={{
-          flex: 1, padding: '11px', background: '#E8531D', border: 'none', borderRadius: 8,
-          color: '#1a1a1a', fontSize: 14, fontWeight: 600, cursor: 'pointer', opacity: saving ? 0.7 : 1
-        }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
-      </div>
+        }
+      />
     </div>
   )
 }
