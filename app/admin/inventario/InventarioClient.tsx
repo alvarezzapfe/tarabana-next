@@ -110,20 +110,39 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
   const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
 
-  const hasMissingPrice = (p: any): boolean => {
-    if ((p.stock_caja24 || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
-    if ((p.stock_caja12 || 0) > 0 && (!p.precio_caja12_publico || !p.precio_caja12_taproom)) return true
-    if ((p.stock_barril_pet || 0) > 0 && (!p.precio_barril_pet_publico || !p.precio_barril_pet_taproom)) return true
-    if ((p.stock_barril_acero || 0) > 0 && (!p.precio_barril_acero_publico || !p.precio_barril_acero_taproom)) return true
-    // Latas sueltas need caja24 price (used for mix prorrateo)
-    if ((p.stock_latas || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
-    return false
+  // Price check helpers per presentation with stock
+  const PRES = [
+    { stock: 'stock_caja24', pub: 'precio_caja24_publico', tap: 'precio_caja24_taproom' },
+    { stock: 'stock_caja12', pub: 'precio_caja12_publico', tap: 'precio_caja12_taproom' },
+    { stock: 'stock_barril_pet', pub: 'precio_barril_pet_publico', tap: 'precio_barril_pet_taproom' },
+    { stock: 'stock_barril_acero', pub: 'precio_barril_acero_publico', tap: 'precio_barril_acero_taproom' },
+  ]
+
+  /** Returns 'none' | 'mayorista' | 'ok' */
+  const priceStatus = (p: any): 'none' | 'mayorista' | 'ok' => {
+    let missingPub = false, missingTap = false
+    for (const pr of PRES) {
+      if ((p[pr.stock] || 0) > 0) {
+        if (!p[pr.pub]) missingPub = true
+        if (!p[pr.tap]) missingTap = true
+      }
+    }
+    // Latas sueltas need caja24 price for mix
+    if ((p.stock_latas || 0) > 0) {
+      if (!p.precio_caja24_publico) missingPub = true
+      if (!p.precio_caja24_taproom) missingTap = true
+    }
+    if (missingPub) return 'none'      // missing public = can't sell to anyone
+    if (missingTap) return 'mayorista' // has public but missing taproom
+    return 'ok'
   }
 
-  // Detect products with stock but no price
-  const missingPrices = useMemo(() => {
-    return productos.filter(p => p.activo && hasMissingPrice(p))
-  }, [productos])
+  const hasMissingPrice = (p: any): boolean => priceStatus(p) !== 'ok'
+
+  // Detect products with price issues
+  const missingAll = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'none'), [productos])
+  const missingMayo = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'mayorista'), [productos])
+  const hasAlert = missingAll.length > 0 || missingMayo.length > 0
 
   const priceTooltip = (p: any): string => {
     const rows = [
@@ -204,19 +223,36 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       </div>
 
       {/* MISSING PRICE ALERT */}
-      {missingPrices.length > 0 && (
+      {hasAlert && (
         <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '14px 20px', marginBottom: 20 }}>
-          <p style={{ margin: '0 0 6px', color: '#92400e', fontSize: 14, fontWeight: 600 }}>
-            {missingPrices.length} producto{missingPrices.length > 1 ? 's' : ''} activo{missingPrices.length > 1 ? 's' : ''} con stock pero sin precio configurado — no se pueden vender
-          </p>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {missingPrices.map(p => (
-              <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: '#E8531D', fontSize: 13, textDecoration: 'none', fontWeight: 500 }}>
-                {p.nombre}
-                {missingPrices.indexOf(p) < missingPrices.length - 1 ? ',' : ''}
-              </a>
-            ))}
-          </div>
+          {missingAll.length > 0 && (
+            <div style={{ marginBottom: missingMayo.length > 0 ? 10 : 0 }}>
+              <p style={{ margin: '0 0 4px', color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
+                {missingAll.length} producto{missingAll.length > 1 ? 's' : ''} sin ningún precio — no se pueden vender
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {missingAll.map((p, i) => (
+                  <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: '#E8531D', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>
+                    {p.nombre}{i < missingAll.length - 1 ? ',' : ''}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
+          {missingMayo.length > 0 && (
+            <div>
+              <p style={{ margin: '0 0 4px', color: '#d97706', fontSize: 13, fontWeight: 600 }}>
+                {missingMayo.length} producto{missingMayo.length > 1 ? 's' : ''} sin precio mayorista — clientes mayoristas no pueden comprarlos
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                {missingMayo.map((p, i) => (
+                  <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: '#E8531D', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>
+                    {p.nombre}{i < missingMayo.length - 1 ? ',' : ''}
+                  </a>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -303,14 +339,15 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                   <td style={{ color: (p.stock_barril_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_acero || 0}</td>
                   <td style={{ color: (p.stock_barril10_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_pet || 0}</td>
                   <td style={{ color: (p.stock_barril10_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_acero || 0}</td>
-                  <td style={{ padding: '12px 14px' }} title={priceTooltip(p)}>
-                    {hasMissingPrice(p) ? (
-                      <span style={{ background: '#fef3c7', color: '#d97706', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Sin precio</span>
-                    ) : p.precio_caja24_publico ? (
-                      <span style={{ color: '#E8531D', fontSize: 13, cursor: 'help' }}>${Math.round(p.precio_caja24_publico).toLocaleString('es-MX')}</span>
-                    ) : (
-                      <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>
-                    )}
+                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }} title={priceTooltip(p)}>
+                    {(() => {
+                      const ps = priceStatus(p)
+                      if (ps === 'none') return <span style={{ background: '#fee2e2', color: '#dc2626', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Sin precio</span>
+                      if (ps === 'mayorista') return <span style={{ background: '#fef3c7', color: '#d97706', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Falta mayorista</span>
+                      return p.precio_caja24_publico
+                        ? <span style={{ color: '#E8531D', fontSize: 13, cursor: 'help' }}>${Math.round(p.precio_caja24_publico).toLocaleString('es-MX')}</span>
+                        : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>
+                    })()}
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <span style={{
