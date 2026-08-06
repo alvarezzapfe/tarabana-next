@@ -16,6 +16,9 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
   const [status, setStatus] = useState(pedido.status || 'pendiente')
   const [condicionesPago, setCondicionesPago] = useState(pedido.condiciones_pago || 'contado')
   const [vendedorId, setVendedorId] = useState(pedido.vendedor_id || '')
+  const [descuentoTipo, setDescuentoTipo] = useState<'' | 'porcentaje' | 'monto'>(pedido.descuento_tipo || '')
+  const [descuentoValor, setDescuentoValor] = useState(pedido.descuento_valor?.toString() || '')
+  const [descuentoMotivo, setDescuentoMotivo] = useState(pedido.descuento_motivo || '')
   const [notas, setNotas] = useState(pedido.notas || '')
   const [notasInternas, setNotasInternas] = useState(pedido.notas_internas || '')
   const [fechaEntrega, setFechaEntrega] = useState(
@@ -27,16 +30,27 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
 
   const handleSave = async () => {
     setSaving(true)
-    const { error } = await supabase.from('pedidos').update({
-      status,
-      condiciones_pago: condicionesPago,
-      vendedor_id: vendedorId || null,
-      notas: notas || null,
-      notas_internas: notasInternas || null,
-      fecha_entrega: fechaEntrega ? new Date(fechaEntrega).toISOString() : null,
-    }).eq('id', pedido.id)
+    if (descuentoTipo && !descuentoMotivo.trim()) { alert('El motivo del descuento es obligatorio'); setSaving(false); return }
+    const descVal = parseFloat(descuentoValor) || 0
+    if (descuentoTipo === 'porcentaje' && (descVal < 0 || descVal > 100)) { alert('El porcentaje debe estar entre 0 y 100'); setSaving(false); return }
 
-    if (error) { alert('Error: ' + error.message); setSaving(false); return }
+    const res = await fetch(`/api/admin/pedidos/${pedido.id}/actualizar`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        status,
+        condiciones_pago: condicionesPago,
+        vendedor_id: vendedorId || null,
+        descuento_tipo: descuentoTipo || null,
+        descuento_valor: descuentoTipo ? descVal : null,
+        descuento_motivo: descuentoTipo ? descuentoMotivo : null,
+        notas: notas || null,
+        notas_internas: notasInternas || null,
+        fecha_entrega: fechaEntrega || null,
+      }),
+    })
+
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert('Error: ' + (d.error || 'Error al guardar')); setSaving(false); return }
     router.push('/admin/pedidos')
     router.refresh()
   }
@@ -122,6 +136,33 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
       </div>
 
       {/* Fechas */}
+      {/* Descuento */}
+      <Section title="Descuento" />
+      <div style={{ display: 'flex', gap: 8, marginBottom: descuentoTipo ? 14 : 4 }}>
+        {[{ key: '', label: 'Sin descuento' }, { key: 'porcentaje', label: 'Porcentaje' }, { key: 'monto', label: 'Monto fijo' }].map(t => (
+          <button key={t.key} onClick={() => { setDescuentoTipo(t.key as any); if (!t.key) { setDescuentoValor(''); setDescuentoMotivo('') } }} style={{
+            flex: 1, padding: '8px', background: descuentoTipo === t.key ? '#1e1e1e' : '#f9fafb',
+            border: `1.5px solid ${descuentoTipo === t.key ? '#E8531D' : '#e5e7eb'}`,
+            borderRadius: 7, cursor: 'pointer', color: descuentoTipo === t.key ? '#fff' : '#6b7280', fontSize: 12, fontWeight: 500,
+          }}>{t.label}</button>
+        ))}
+      </div>
+      {descuentoTipo && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 14, marginBottom: 4 }}>
+          <div>
+            <label style={labelStyle}>{descuentoTipo === 'porcentaje' ? '% (0-100)' : 'Monto'}</label>
+            <input type="number" value={descuentoValor} onChange={e => setDescuentoValor(e.target.value)}
+              min="0" max={descuentoTipo === 'porcentaje' ? '100' : undefined}
+              style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Motivo (obligatorio)</label>
+            <input value={descuentoMotivo} onChange={e => setDescuentoMotivo(e.target.value)} placeholder="Volumen, cliente nuevo..."
+              style={inputStyle} />
+          </div>
+        </div>
+      )}
+
       <Section title="Fechas" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 4 }}>
         <div>

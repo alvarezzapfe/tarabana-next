@@ -206,6 +206,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
                   </td>
                   <td style={{ padding: '14px 16px' }}>
                     <p style={{ margin: 0, color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(p.total || 0)}</p>
+                    {p.descuento_valor > 0 && <p style={{ margin: '2px 0 0', color: '#10b981', fontSize: 11 }}>- {fmt(p.descuento_tipo === 'porcentaje' ? Math.round(p.total * p.descuento_valor / 100) : p.descuento_valor)} desc.</p>}
                     {p.costo_envio > 0 && <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 11 }}>+ {fmt(p.costo_envio)} envio</p>}
                   </td>
                   <td style={{ padding: '14px 16px', color: s?.saldo > 0 ? '#E8531D' : '#9ca3af', fontSize: 13, fontWeight: 600, fontFamily: 'monospace' }}>{s ? fmt(s.saldo) : '--'}</td>
@@ -320,11 +321,12 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
             <p style={SL}>Desglose de cobro</p>
             <div style={{ ...CARD, fontSize: 13 }}>
               {[{ l: 'Subtotal productos', v: fmt(itemsSubtotal) },
+                ...(dp.descuento_valor > 0 ? [{ l: `Descuento${dp.descuento_tipo === 'porcentaje' ? ` (${dp.descuento_valor}%)` : ''}${dp.descuento_motivo ? ' — ' + dp.descuento_motivo : ''}`, v: '-' + fmt(dp.descuento_tipo === 'porcentaje' ? Math.round((dp.total || 0) * dp.descuento_valor / 100) : dp.descuento_valor), color: '#10b981' }] : []),
                 ...(dp.costo_envio > 0 ? [{ l: `Envio (${dp.paqueteria || ''}${dp.guia_envio ? ' — guia ' + dp.guia_envio : ''})`, v: fmt(dp.costo_envio) }] : []),
-                { l: 'Total', v: fmt(dp.total || 0), b: true }, { l: 'Pagado', v: fmt(dpS ? (dp.total || 0) - dpS.saldo : 0) },
+                { l: 'Total', v: fmt(dp.total || 0), b: true }, { l: 'Pagado', v: fmt(dpS?.pagado || 0) },
               ].map((r: any, i) => (
                 <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontWeight: r.b ? 700 : 400 }}>
-                  <span style={{ color: '#6b7280' }}>{r.l}</span><span style={{ color: '#1a1a1a', fontFamily: 'monospace' }}>{r.v}</span>
+                  <span style={{ color: r.color || '#6b7280' }}>{r.l}</span><span style={{ color: r.color || '#1a1a1a', fontFamily: 'monospace' }}>{r.v}</span>
                 </div>
               ))}
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0 0', borderTop: '1px solid #e5e7eb', marginTop: 6, fontWeight: 700 }}>

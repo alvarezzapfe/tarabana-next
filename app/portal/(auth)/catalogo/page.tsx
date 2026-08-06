@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
+import MixBuilder, { type MixResult, type MixProduct } from '../../../../src/components/MixBuilder'
 
 type Producto = {
   id: string; nombre: string; estilo: string; abv: number; descripcion: string; imagen_url: string;
@@ -51,7 +52,7 @@ export default function CatalogoPage() {
   const [pedidoOk, setPedidoOk] = useState(false)
   const [notas, setNotas] = useState('')
   const [stockError, setStockError] = useState('')
-  const [mixLatas, setMixLatas] = useState<Record<string, number>>({})
+  // Mix builder uses shared component — no local state needed
 
   useEffect(() => {
     const load = async () => {
@@ -90,25 +91,14 @@ export default function CatalogoPage() {
     setShowCart(true)
   }
 
-  const addMixFlexible = () => {
-    const totalLatas = Object.values(mixLatas).reduce((s, n) => s + n, 0)
-    if (totalLatas !== 24) return
-    const estilos = Object.entries(mixLatas).filter(([_, n]) => n > 0).map(([id, latas]) => {
-      const p = productos.find(pr => pr.id === id)!
-      return { producto_id: id, nombre: p.nombre, latas }
-    })
-    const precioMix = Math.round(estilos.reduce((s, e) => {
-      const pCaja = getP(productos.find(p => p.id === e.producto_id)!, 'caja24')
-      return s + (pCaja / 24) * e.latas
-    }, 0))
-    const names = estilos.map(e => `${e.nombre} x${e.latas}`).sort().join(', ')
+  const handleMixAdd = (result: MixResult) => {
+    const names = result.estilos.map(e => `${e.nombre} x${e.latas}`).sort().join(', ')
     const key = `mix24-${names}`
     setCart(prev => [...prev, {
-      key, tipo: 'mix24' as const, nombre: `Mix: ${names}`, cantidad: 1, precio: precioMix,
-      producto_id: estilos[0].producto_id,
-      metadata: { tipo: 'mix24' as const, estilos },
+      key, tipo: 'mix24' as const, nombre: `Mix: ${names}`, cantidad: 1, precio: result.precio,
+      producto_id: result.estilos[0].producto_id,
+      metadata: { tipo: 'mix24' as const, estilos: result.estilos },
     }])
-    setMixLatas({})
     setShowCart(true)
   }
 
@@ -118,7 +108,6 @@ export default function CatalogoPage() {
 
   const total = cart.reduce((s, i) => s + i.precio * i.cantidad, 0)
   const totalItems = cart.reduce((s, i) => s + i.cantidad, 0)
-  const totalMixLatas = Object.values(mixLatas).reduce((s, n) => s + n, 0)
 
   // ── Checkout ──
   const handleCheckout = async () => {
@@ -178,6 +167,11 @@ export default function CatalogoPage() {
   const prodsCaja12 = productos.filter(p => p.stock_caja12 > 0 && getP(p, 'caja12'))
   const prodsBarril = productos.filter(p => p.stock_barril_pet > 0 && getP(p, 'barril_pet'))
   const prodsMix = productos.filter(p => (p.stock_latas || 0) > 0 && getP(p, 'caja24'))
+  const mixProducts: MixProduct[] = prodsMix.map(p => ({
+    id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
+    stock_latas: p.stock_latas || 0,
+    precio_por_lata: Math.round(getP(p, 'caja24') / 24),
+  }))
 
   // ── Product card renderer ──
   const ProductCard = ({ p, tipo, label }: { p: Producto; tipo: 'caja24' | 'caja12' | 'barril_pet'; label: string }) => {
@@ -339,108 +333,15 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* SECTION 4: Arma tu caja (mix builder) */}
-      {prodsMix.length > 0 && (
+      {/* SECTION 4: Arma tu caja (shared MixBuilder) */}
+      {mixProducts.length > 0 && (
         <div style={{ padding: '0 48px 48px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <h3 style={{ margin: 0, color: '#374151', fontSize: 16, fontWeight: 700 }}>Arma tu caja</h3>
             <span style={{ color: '#9ca3af', fontSize: 14 }}>Elige cualquier combinacion de 24 latas</span>
           </div>
-
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 24 }}>
-            {/* Progress header */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <p style={{ margin: 0, color: '#374151', fontSize: 14, fontWeight: 600 }}>
-                  {totalMixLatas} de 24 latas
-                </p>
-                {totalMixLatas === 24 && <span style={{ color: '#059669', fontSize: 13, fontWeight: 600 }}>Listo</span>}
-              </div>
-              <div style={{ height: 8, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${Math.min((totalMixLatas / 24) * 100, 100)}%`, background: '#E8531D', borderRadius: 99, transition: 'width 0.2s' }} />
-              </div>
-            </div>
-
-            {/* Product rows */}
-            <div className="portal-products-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 10, marginBottom: 20 }}>
-              {prodsMix.map(p => {
-                const count = mixLatas[p.id] || 0
-                const maxLatas = p.stock_latas || 0
-                const canAdd = totalMixLatas < 24 && count < maxLatas
-                return (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: '#f9fafb', borderRadius: 10, padding: '10px 14px' }}>
-                    {p.imagen_url && (
-                      <img src={p.imagen_url} alt={p.nombre} style={{ width: 40, height: 40, objectFit: 'contain', flexShrink: 0 }} />
-                    )}
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: 14, color: '#111', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.nombre}</p>
-                      <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>${Math.round(getP(p, 'caja24') / 24).toLocaleString('es-MX')}/lata · {maxLatas} disp.</p>
-                    </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-                      <button
-                        onClick={() => setMixLatas(prev => {
-                          const next = { ...prev }
-                          if ((next[p.id] || 0) <= 1) delete next[p.id]
-                          else next[p.id] = (next[p.id] || 0) - 1
-                          return next
-                        })}
-                        disabled={count === 0}
-                        style={{ width: 28, height: 28, borderRadius: '50%', background: count > 0 ? '#f3f4f6' : '#fafafa', border: 'none', cursor: count > 0 ? 'pointer' : 'default', fontSize: 16, color: count > 0 ? '#374151' : '#d1d5db' }}
-                      >-</button>
-                      <span style={{ fontWeight: 700, fontSize: 15, minWidth: 20, textAlign: 'center', color: count > 0 ? '#111' : '#d1d5db' }}>{count}</span>
-                      <button
-                        onClick={() => {
-                          if (!canAdd) return
-                          setMixLatas(prev => ({ ...prev, [p.id]: (prev[p.id] || 0) + 1 }))
-                        }}
-                        disabled={!canAdd}
-                        style={{ width: 28, height: 28, borderRadius: '50%', background: !canAdd ? '#fafafa' : '#E8531D', border: 'none', cursor: !canAdd ? 'not-allowed' : 'pointer', fontSize: 16, color: !canAdd ? '#d1d5db' : '#fff' }}
-                      >+</button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Price estimate */}
-            {totalMixLatas > 0 && (
-              <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 18px', marginBottom: 16 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
-                  <span style={{ color: '#6b7280', fontSize: 13 }}>Precio estimado:</span>
-                  <span style={{ color: '#E8531D', fontSize: 20, fontWeight: 700 }}>
-                    ${Math.round(Object.entries(mixLatas).reduce((s, [id, n]) => {
-                      const p = productos.find(pr => pr.id === id)
-                      if (!p) return s
-                      return s + (getP(p, 'caja24') / 24) * n
-                    }, 0)).toLocaleString('es-MX')}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {Object.entries(mixLatas).filter(([_, n]) => n > 0).map(([id, n]) => {
-                    const p = productos.find(pr => pr.id === id)
-                    if (!p) return null
-                    const perLata = Math.round(getP(p, 'caja24') / 24)
-                    return (
-                      <p key={id} style={{ margin: 0, color: '#9ca3af', fontSize: 12 }}>
-                        {p.nombre}: {n} latas x ${perLata.toLocaleString('es-MX')} = ${(perLata * n).toLocaleString('es-MX')}
-                      </p>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
-
-            <button
-              onClick={addMixFlexible}
-              disabled={totalMixLatas !== 24}
-              style={{
-                padding: '12px 28px', background: totalMixLatas === 24 ? '#E8531D' : '#e5e7eb', border: 'none', borderRadius: 8,
-                color: totalMixLatas === 24 ? '#fff' : '#9ca3af', fontSize: 14, fontWeight: 600,
-                cursor: totalMixLatas === 24 ? 'pointer' : 'not-allowed',
-              }}
-            >
-              Agregar al carrito
-            </button>
+            <MixBuilder productos={mixProducts} onAdd={handleMixAdd} />
           </div>
         </div>
       )}

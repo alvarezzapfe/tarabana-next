@@ -2,8 +2,9 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
+import MixBuilder, { type MixResult, type MixProduct } from '../../../../src/components/MixBuilder'
 
-type Producto = { id: string; nombre: string; estilo: string; precio_caja12_publico: number; precio_caja12_taproom: number; precio_caja24_publico: number; precio_caja24_taproom: number; precio_barril_pet_publico: number; precio_barril_pet_taproom: number; precio_barril_acero_taproom: number; stock_caja12: number; stock_caja24: number; stock_barril_pet: number; stock_barril_acero: number; imagen_url: string }
+type Producto = { id: string; nombre: string; estilo: string; precio_caja12_publico: number; precio_caja12_taproom: number; precio_caja24_publico: number; precio_caja24_taproom: number; precio_barril_pet_publico: number; precio_barril_pet_taproom: number; precio_barril_acero_taproom: number; stock_caja12: number; stock_caja24: number; stock_barril_pet: number; stock_barril_acero: number; stock_latas: number; imagen_url: string }
 type Cliente = { id: string; full_name: string; email: string; tipo_consumidor: string; nivel_precio: string }
 type Item = { producto_id: string; nombre: string; unidad: string; cantidad: number; precio: number }
 
@@ -27,6 +28,10 @@ export default function NuevoPedidoPage() {
   const [items, setItems] = useState<Item[]>([])
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
+  const [showMixModal, setShowMixModal] = useState(false)
+  const [descuentoTipo, setDescuentoTipo] = useState<'' | 'porcentaje' | 'monto'>('')
+  const [descuentoValor, setDescuentoValor] = useState('')
+  const [descuentoMotivo, setDescuentoMotivo] = useState('')
   const [clienteSearch, setClienteSearch] = useState('')
   const [vendedores, setVendedores] = useState<any[]>([])
   const [vendedorId, setVendedorId] = useState('')
@@ -88,15 +93,48 @@ export default function NuevoPedidoPage() {
     setItems(items.map(i => i.producto_id === key ? { ...i, cantidad: Math.max(0, i.cantidad + delta) } : i).filter(i => i.cantidad > 0))
   }
 
-  const total = items.reduce((s, i) => s + i.precio * i.cantidad, 0)
+  // Mix builder products — use client's precio level
+  const mixProducts: MixProduct[] = productos
+    .filter(p => (p.stock_latas || 0) > 0 && getPrecio(p, 'caja24') > 0)
+    .map(p => ({
+      id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
+      stock_latas: p.stock_latas || 0,
+      precio_por_lata: Math.round(getPrecio(p, 'caja24') / 24),
+    }))
+
+  const handleMixAdd = (result: MixResult) => {
+    const names = result.estilos.map(e => `${e.nombre} x${e.latas}`).sort().join(', ')
+    const firstId = result.estilos[0].producto_id
+    setItems(prev => [...prev, {
+      producto_id: `${firstId}-mix24`,
+      nombre: `Mix: ${names}`,
+      unidad: 'mix24',
+      cantidad: 1,
+      precio: result.precio,
+      metadata: { tipo: 'mix24', estilos: result.estilos },
+    } as any])
+    setShowMixModal(false)
+  }
+
+  const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0)
+  const descVal = parseFloat(descuentoValor) || 0
+  const descuentoMonto = descuentoTipo === 'porcentaje' ? Math.round(subtotal * descVal / 100) : descuentoTipo === 'monto' ? descVal : 0
+  const total = subtotal // total = subtotal (discount applied in pedidos_saldo view, NOT subtracted here)
 
   const handleConfirmar = async () => {
     if (!clienteId || items.length === 0) return
+    if (descuentoTipo && !descuentoMotivo.trim()) { alert('El motivo del descuento es obligatorio'); return }
     setLoading(true)
     const res = await fetch('/api/admin/pedidos/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cliente_id: clienteId, tipo_precio: tipoPrecio, condiciones_pago: condicionesPago, items, notas, total, vendedor_id: vendedorId || null })
+      body: JSON.stringify({
+        cliente_id: clienteId, condiciones_pago: condicionesPago, items, notas,
+        vendedor_id: vendedorId || null,
+        descuento_tipo: descuentoTipo || null,
+        descuento_valor: descuentoTipo ? descVal : null,
+        descuento_motivo: descuentoTipo ? descuentoMotivo : null,
+      })
     })
     if (res.ok) { router.push('/admin/pedidos'); router.refresh() }
     else { alert('Error al crear pedido'); setLoading(false) }
@@ -184,7 +222,14 @@ export default function NuevoPedidoPage() {
 
         {/* Productos */}
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
-          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Productos</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>Productos</p>
+            {mixProducts.length > 0 && (
+              <button onClick={() => setShowMixModal(true)} style={{ padding: '6px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, color: '#6b7280', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+                Armar caja mixta
+              </button>
+            )}
+          </div>
           {productos.length === 0 ? (
             <p style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', padding: 20 }}>No hay productos en inventario</p>
           ) : (
@@ -263,9 +308,50 @@ export default function NuevoPedidoPage() {
 
           <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 12, marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Total</p>
-              <p style={{ margin: 0, color: '#1a1a1a', fontSize: 20, fontWeight: 700 }}>${total.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Subtotal</p>
+              <p style={{ margin: 0, color: '#1a1a1a', fontSize: 15, fontWeight: 600 }}>${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
             </div>
+            {descuentoMonto > 0 && (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
+                <p style={{ margin: 0, color: '#10b981', fontSize: 13 }}>Descuento {descuentoTipo === 'porcentaje' ? `(${descVal}%)` : ''}</p>
+                <p style={{ margin: 0, color: '#10b981', fontSize: 15, fontWeight: 600 }}>-${descuentoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+              </div>
+            )}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, paddingTop: 6, borderTop: '1px solid #e5e7eb' }}>
+              <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>Total</p>
+              <p style={{ margin: 0, color: '#E8531D', fontSize: 20, fontWeight: 700 }}>${(subtotal - descuentoMonto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+            </div>
+          </div>
+
+          {/* Descuento */}
+          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 14 }}>
+            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Descuento</p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: descuentoTipo ? 12 : 0 }}>
+              {[{ key: '', label: 'Sin descuento' }, { key: 'porcentaje', label: 'Porcentaje' }, { key: 'monto', label: 'Monto fijo' }].map(t => (
+                <button key={t.key} onClick={() => { setDescuentoTipo(t.key as any); setDescuentoValor(''); setDescuentoMotivo('') }} style={{
+                  flex: 1, padding: '8px', background: descuentoTipo === t.key ? '#1e1e1e' : '#f9fafb',
+                  border: `1.5px solid ${descuentoTipo === t.key ? '#E8531D' : '#e5e7eb'}`,
+                  borderRadius: 7, cursor: 'pointer', color: descuentoTipo === t.key ? '#fff' : '#6b7280', fontSize: 12, fontWeight: 500,
+                }}>{t.label}</button>
+              ))}
+            </div>
+            {descuentoTipo && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div>
+                  <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                    {descuentoTipo === 'porcentaje' ? 'Porcentaje (0-100)' : 'Monto fijo'}
+                  </label>
+                  <input type="number" value={descuentoValor} onChange={e => setDescuentoValor(e.target.value)} placeholder="0"
+                    min="0" max={descuentoTipo === 'porcentaje' ? '100' : String(subtotal)}
+                    style={{ width: '100%', padding: '9px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, color: '#1a1a1a', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const, outline: 'none' }} />
+                </div>
+                <div>
+                  <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Motivo (obligatorio)</label>
+                  <input value={descuentoMotivo} onChange={e => setDescuentoMotivo(e.target.value)} placeholder="Volumen, cliente nuevo, ajuste..."
+                    style={{ width: '100%', padding: '9px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const, outline: 'none' }} />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Vendedor */}
@@ -294,6 +380,16 @@ export default function NuevoPedidoPage() {
           }}>{loading ? 'Confirmando...' : 'Confirmar pedido'}</button>
         </div>
       </div>
+
+      {/* Mix Builder Modal */}
+      {showMixModal && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowMixModal(false)}>
+          <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', width: 640, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
+            <h3 style={{ color: '#1a1a1a', fontSize: 17, fontWeight: 700, margin: '0 0 20px' }}>Armar caja mixta</h3>
+            <MixBuilder productos={mixProducts} onAdd={handleMixAdd} onCancel={() => setShowMixModal(false)} showCancel />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
