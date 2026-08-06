@@ -2,15 +2,11 @@
  * Shared order calculation logic.
  * Used by both portal and admin pedido creation endpoints.
  * Recalculates prices server-side — never trusts body prices.
+ *
+ * PRICE MODEL:
+ * - Latas (caja12, caja24, mix24): derived from precio_lata_* × quantity
+ * - Barriles: use their own price columns directly
  */
-
-const PRECIO_COL: Record<string, string> = {
-  caja12: 'precio_caja12',
-  caja24: 'precio_caja24',
-  barril_pet: 'precio_barril_pet',
-  barril_acero: 'precio_barril_acero',
-  pieza: 'precio',
-}
 
 const STOCK_COL: Record<string, string> = {
   caja12: 'stock_caja12',
@@ -21,10 +17,28 @@ const STOCK_COL: Record<string, string> = {
 
 const MAYORISTA_ONLY = new Set(['barril_pet', 'barril_acero'])
 
-function precioColumn(unidad: string, sufijo: 'taproom' | 'publico'): string {
-  const base = PRECIO_COL[unidad]
-  if (!base) return `precio_caja24_${sufijo}`
-  return base === 'precio' ? `precio_${sufijo}` : `${base}_${sufijo}`
+/**
+ * Returns the unit price for a product + presentation + price level.
+ * Lata-based presentations derive from precio_lata_*.
+ * Barriles use their own columns.
+ * Returns 0 if the base price is missing.
+ */
+export function precioUnitario(prod: Record<string, any>, unidad: string, sufijo: 'taproom' | 'publico'): number {
+  const precioLata = prod[`precio_lata_${sufijo}`] as number || 0
+
+  switch (unidad) {
+    case 'caja12': return Math.round(precioLata * 12)
+    case 'caja24': return Math.round(precioLata * 24)
+    case 'lata':   return Math.round(precioLata)
+    case 'barril_pet':   return (prod[`precio_barril_pet_${sufijo}`] as number) || 0
+    case 'barril_acero': return (prod[`precio_barril_acero_${sufijo}`] as number) || (prod.precio_barril_acero_taproom as number) || 0
+    default: return Math.round(precioLata * 24) // fallback to caja24
+  }
+}
+
+/** Price per lata for mix prorrateo */
+export function precioLata(prod: Record<string, any>, sufijo: 'taproom' | 'publico'): number {
+  return Math.round(prod[`precio_lata_${sufijo}`] as number || 0)
 }
 
 export interface PedidoItem {
@@ -47,16 +61,6 @@ export interface CalcError {
   status: number
 }
 
-/**
- * Validates and calculates order items server-side.
- *
- * @param rawItems - items from the request body
- * @param stockMap - Map<producto_id, producto_row> loaded with service_role
- * @param sufijo - 'taproom' | 'publico', derived from client's nivel_precio
- * @param esMayorista - whether the client has taproom/distribuidor nivel
- * @param parseProductoId - function to extract (producto_id, unidad) from the raw item.
- *   Portal sends { tipo, producto_id }, admin sends { producto_id: "uuid-unidad" }.
- */
 export function calcularPedido(
   rawItems: any[],
   stockMap: Map<string, Record<string, any>>,
@@ -80,7 +84,6 @@ export function calcularPedido(
         return { error: `El mix debe sumar exactamente 24 latas, tiene ${totalLatas}.`, status: 400 }
       }
 
-      const col = precioColumn('caja24', sufijo)
       for (const estilo of estilos) {
         const prod = stockMap.get(estilo.producto_id)
         if (!prod) return { error: `Producto ${estilo.nombre || estilo.producto_id} no encontrado.`, status: 400 }
@@ -88,16 +91,19 @@ export function calcularPedido(
         if ((prod.stock_latas || 0) < latasNecesarias) {
           return { error: `Stock de latas insuficiente de ${prod.nombre}. Disponible: ${prod.stock_latas || 0}, necesitas ${latasNecesarias}.`, status: 400 }
         }
+        if (precioLata(prod, sufijo) <= 0) {
+          return { error: `${prod.nombre} no tiene precio por lata configurado.`, status: 400 }
+        }
       }
 
-      const precioUnitario = Math.round(estilos.reduce((s, e) => {
-        const prod = stockMap.get(e.producto_id)
-        const precioCaja = prod ? (prod[col] as number || 0) : 0
-        return s + (precioCaja / 24) * e.latas
+      // Price: prorrateo por lata using precio_lata_*
+      const precioMix = Math.round(estilos.reduce((s, e) => {
+        const prod = stockMap.get(e.producto_id)!
+        return s + precioLata(prod, sufijo) * e.latas
       }, 0))
 
-      const subtotal = cantidad * precioUnitario
-      pedidoItems.push({ producto_id: estilos[0].producto_id, unidad: 'mix24', cantidad, precio_unitario: precioUnitario, subtotal, metadata: item.metadata })
+      const subtotal = cantidad * precioMix
+      pedidoItems.push({ producto_id: estilos[0].producto_id, unidad: 'mix24', cantidad, precio_unitario: precioMix, subtotal, metadata: item.metadata })
       totalCalculado += subtotal
 
     } else {
@@ -117,14 +123,13 @@ export function calcularPedido(
         return { error: `Stock insuficiente para ${prod.nombre}. Disponible: ${stockDisponible}.`, status: 400 }
       }
 
-      const colPrecio = precioColumn(unidad, sufijo)
-      const precioUnitario = (prod[colPrecio] as number) ?? 0
-      if (precioUnitario <= 0) {
+      const precio = precioUnitario(prod, unidad, sufijo)
+      if (precio <= 0) {
         return { error: `${prod.nombre} no tiene precio configurado para ${unidad}.`, status: 400 }
       }
 
-      const subtotal = cantidad * precioUnitario
-      pedidoItems.push({ producto_id: productoId, unidad, cantidad, precio_unitario: precioUnitario, subtotal, metadata: item.metadata || null })
+      const subtotal = cantidad * precio
+      pedidoItems.push({ producto_id: productoId, unidad, cantidad, precio_unitario: precio, subtotal, metadata: item.metadata || null })
       totalCalculado += subtotal
     }
   }

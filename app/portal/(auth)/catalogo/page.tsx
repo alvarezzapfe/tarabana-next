@@ -5,11 +5,9 @@ import MixBuilder, { type MixResult, type MixProduct } from '../../../../src/com
 
 type Producto = {
   id: string; nombre: string; estilo: string; abv: number; descripcion: string; imagen_url: string;
-  precio_caja24_publico: number; precio_caja24_taproom: number; stock_caja24: number;
-  precio_caja12_publico: number; precio_caja12_taproom: number; stock_caja12: number;
-  precio_barril_pet_publico: number; precio_barril_pet_taproom: number; stock_barril_pet: number;
-  precio_barril_acero_publico: number; precio_barril_acero_taproom: number; stock_barril_acero: number;
-  stock_latas: number;
+  precio_lata_publico: number; precio_lata_taproom: number;
+  precio_barril_pet_publico: number; precio_barril_pet_taproom: number;
+  stock_caja24: number; stock_caja12: number; stock_barril_pet: number; stock_latas: number;
 }
 
 type CartItem = {
@@ -60,7 +58,7 @@ export default function CatalogoPage() {
       if (!user) return
       const [{ data: p }, { data: prods }, { data: peds }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
-        supabase.from('productos').select('id, nombre, estilo, abv, descripcion, imagen_url, precio_caja24_publico, precio_caja24_taproom, stock_caja24, precio_caja12_publico, precio_caja12_taproom, stock_caja12, precio_barril_pet_publico, precio_barril_pet_taproom, stock_barril_pet, precio_barril_acero_publico, precio_barril_acero_taproom, stock_barril_acero, stock_latas').eq('activo', true).order('nombre'),
+        supabase.from('productos').select('id, nombre, estilo, abv, descripcion, imagen_url, precio_lata_publico, precio_lata_taproom, precio_barril_pet_publico, precio_barril_pet_taproom, stock_caja24, stock_caja12, stock_barril_pet, stock_latas').eq('activo', true).order('nombre'),
         supabase.from('pedidos').select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre))').eq('cliente_id', user.id).order('created_at', { ascending: false }),
       ])
       setProfile(p)
@@ -73,10 +71,15 @@ export default function CatalogoPage() {
 
   const esMayorista = profile?.nivel_precio === 'taproom' || profile?.nivel_precio === 'distribuidor'
 
-  const getP = (p: Producto, pres: string) => {
-    const sufijo = esMayorista ? 'taproom' : 'publico'
-    return (p as any)[`precio_${pres}_${sufijo}`] as number
+  const sufijo = esMayorista ? 'taproom' : 'publico'
+  const getP = (p: Producto, pres: string): number => {
+    const precioLata = (p as any)[`precio_lata_${sufijo}`] as number || 0
+    if (pres === 'caja24') return Math.round(precioLata * 24)
+    if (pres === 'caja12') return Math.round(precioLata * 12)
+    if (pres === 'barril_pet') return (p as any)[`precio_barril_pet_${sufijo}`] as number || 0
+    return Math.round(precioLata * 24) // fallback
   }
+  const getPrecioLata = (p: Producto): number => (p as any)[`precio_lata_${sufijo}`] as number || 0
 
   // ── Cart helpers ──
   const addItem = (p: Producto, tipo: 'caja24' | 'caja12' | 'barril_pet', label: string) => {
@@ -166,11 +169,11 @@ export default function CatalogoPage() {
   const prodsCaja24 = productos.filter(p => p.stock_caja24 > 0 && getP(p, 'caja24'))
   const prodsCaja12 = productos.filter(p => p.stock_caja12 > 0 && getP(p, 'caja12'))
   const prodsBarril = productos.filter(p => p.stock_barril_pet > 0 && getP(p, 'barril_pet'))
-  const prodsMix = productos.filter(p => (p.stock_latas || 0) > 0 && getP(p, 'caja24'))
+  const prodsMix = productos.filter(p => (p.stock_latas || 0) > 0 && getPrecioLata(p) > 0)
   const mixProducts: MixProduct[] = prodsMix.map(p => ({
     id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
     stock_latas: p.stock_latas || 0,
-    precio_por_lata: Math.round(getP(p, 'caja24') / 24),
+    precio_por_lata: Math.round(getPrecioLata(p)),
   }))
 
   // ── Product card renderer ──
@@ -372,7 +375,7 @@ export default function CatalogoPage() {
                         <div style={{ marginTop: 6 }}>
                           {item.metadata.estilos.map(e => {
                             const prod = productos.find(pr => pr.id === e.producto_id)
-                            const perLata = prod ? Math.round(getP(prod, 'caja24') / 24) : 0
+                            const perLata = prod ? Math.round(getPrecioLata(prod)) : 0
                             return (
                               <p key={e.producto_id} style={{ margin: '1px 0', color: '#9ca3af', fontSize: 11 }}>
                                 {e.nombre}: {e.latas} latas · ${(perLata * e.latas).toLocaleString('es-MX')}

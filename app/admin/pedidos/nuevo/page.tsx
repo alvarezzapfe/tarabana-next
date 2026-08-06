@@ -4,7 +4,7 @@ import { createClient } from '../../../../src/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import MixBuilder, { type MixResult, type MixProduct } from '../../../../src/components/MixBuilder'
 
-type Producto = { id: string; nombre: string; estilo: string; precio_caja12_publico: number; precio_caja12_taproom: number; precio_caja24_publico: number; precio_caja24_taproom: number; precio_barril_pet_publico: number; precio_barril_pet_taproom: number; precio_barril_acero_taproom: number; stock_caja12: number; stock_caja24: number; stock_barril_pet: number; stock_barril_acero: number; stock_latas: number; imagen_url: string }
+type Producto = { id: string; nombre: string; estilo: string; precio_lata_publico: number; precio_lata_taproom: number; precio_barril_pet_publico: number; precio_barril_pet_taproom: number; precio_barril_acero_taproom: number; stock_caja12: number; stock_caja24: number; stock_barril_pet: number; stock_barril_acero: number; stock_latas: number; imagen_url: string }
 type Cliente = { id: string; full_name: string; email: string; tipo_consumidor: string; nivel_precio: string }
 type Item = { producto_id: string; nombre: string; unidad: string; cantidad: number; precio: number }
 
@@ -60,11 +60,12 @@ export default function NuevoPedidoPage() {
   const esMayorista = clienteSeleccionado?.nivel_precio === 'taproom' || clienteSeleccionado?.nivel_precio === 'distribuidor'
 
   const getPrecio = (p: Producto, unidad: string): number => {
-    const isTap = tipoPrecio === 'taproom'
-    if (unidad === 'caja12') return isTap ? p.precio_caja12_taproom : p.precio_caja12_publico
-    if (unidad === 'caja24') return isTap ? p.precio_caja24_taproom : p.precio_caja24_publico
-    if (unidad === 'barril_pet') return isTap ? p.precio_barril_pet_taproom : p.precio_barril_pet_publico
-    if (unidad === 'barril_acero') return p.precio_barril_acero_taproom
+    const suf = tipoPrecio === 'taproom' ? 'taproom' : 'publico'
+    const precioLata = (p as any)[`precio_lata_${suf}`] as number || 0
+    if (unidad === 'caja12') return Math.round(precioLata * 12)
+    if (unidad === 'caja24') return Math.round(precioLata * 24)
+    if (unidad === 'barril_pet') return (p as any)[`precio_barril_pet_${suf}`] as number || 0
+    if (unidad === 'barril_acero') return p.precio_barril_acero_taproom || 0
     return 0
   }
 
@@ -94,12 +95,13 @@ export default function NuevoPedidoPage() {
   }
 
   // Mix builder products — use client's precio level
+  const suf = tipoPrecio === 'taproom' ? 'taproom' : 'publico'
   const mixProducts: MixProduct[] = productos
-    .filter(p => (p.stock_latas || 0) > 0 && getPrecio(p, 'caja24') > 0)
+    .filter(p => (p.stock_latas || 0) > 0 && ((p as any)[`precio_lata_${suf}`] || 0) > 0)
     .map(p => ({
       id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
       stock_latas: p.stock_latas || 0,
-      precio_por_lata: Math.round(getPrecio(p, 'caja24') / 24),
+      precio_por_lata: Math.round((p as any)[`precio_lata_${suf}`] || 0),
     }))
 
   const handleMixAdd = (result: MixResult) => {

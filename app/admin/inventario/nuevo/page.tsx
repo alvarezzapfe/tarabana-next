@@ -14,8 +14,7 @@ export default function NuevoProductoPage() {
   const [imgPreview, setImgPreview] = useState<string | null>(null)
   const [form, setForm] = useState({
     nombre: '', estilo: '', abv: '', ibu: '', descripcion: '', descripcion_larga: '',
-    precio_caja12_publico: '', precio_caja12_taproom: '',
-    precio_caja24_publico: '', precio_caja24_taproom: '',
+    precio_lata_publico: '', precio_lata_taproom: '',
     precio_barril_pet_publico: '', precio_barril_pet_taproom: '',
     precio_barril_acero_publico: '', precio_barril_acero_taproom: '',
     precio_barril10_pet_publico: '', precio_barril10_pet_taproom: '',
@@ -56,12 +55,8 @@ export default function NuevoProductoPage() {
       descripcion: form.descripcion,
       descripcion_larga: form.descripcion_larga,
       imagen_url,
-      precio_publico: parseFloat(form.precio_caja12_publico) || 0,
-      precio_taproom: parseFloat(form.precio_caja12_taproom) || 0,
-      precio_caja12_publico: parseFloat(form.precio_caja12_publico) || null,
-      precio_caja12_taproom: parseFloat(form.precio_caja12_taproom) || null,
-      precio_caja24_publico: parseFloat(form.precio_caja24_publico) || null,
-      precio_caja24_taproom: parseFloat(form.precio_caja24_taproom) || null,
+      precio_lata_publico: parseFloat(form.precio_lata_publico) || null,
+      precio_lata_taproom: parseFloat(form.precio_lata_taproom) || null,
       precio_barril_pet_publico: parseFloat(form.precio_barril_pet_publico) || null,
       precio_barril_pet_taproom: parseFloat(form.precio_barril_pet_taproom) || null,
       precio_barril_acero_publico: parseFloat(form.precio_barril_acero_publico) || null,
@@ -187,14 +182,19 @@ export default function NuevoProductoPage() {
               style={{ width: '100%', padding: '10px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13.5, boxSizing: 'border-box' as const, resize: 'vertical' }} />
           </div>
 
-          <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 14 }}>
-            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios y stock</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-              {priceRow('Caja 12 latas (355ml)', 'precio_caja12_publico', 'precio_caja12_taproom')}
-              {priceRow('Caja 24 latas (355ml)', 'precio_caja24_publico', 'precio_caja24_taproom')}
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 14 }}>
+            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios</p>
+            {priceRow('Precio por lata', 'precio_lata_publico', 'precio_lata_taproom')}
+            <div style={{ marginTop: 14 }}>
               {priceRow('Barril 20L PET', 'precio_barril_pet_publico', 'precio_barril_pet_taproom')}
-{priceRow('Barril 20L Acero (solo CDMX tap)', 'precio_barril_acero_publico', 'precio_barril_acero_taproom')}
+            </div>
+            <div style={{ marginTop: 14 }}>
+              {priceRow('Barril 20L Acero', 'precio_barril_acero_publico', 'precio_barril_acero_taproom')}
+            </div>
+            <div style={{ marginTop: 14 }}>
               {priceRow('Barril 10L PET', 'precio_barril10_pet_publico', 'precio_barril10_pet_taproom')}
+            </div>
+            <div style={{ marginTop: 14 }}>
               {priceRow('Barril 10L Acero', 'precio_barril10_acero_publico', 'precio_barril10_acero_taproom')}
             </div>
           </div>

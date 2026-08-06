@@ -19,8 +19,7 @@ export default function EditProductoPage() {
   const [userRole, setUserRole] = useState<string>('')
   const [form, setForm] = useState({
     nombre: '', estilo: '', abv: '', ibu: '', descripcion: '', descripcion_larga: '',
-    precio_caja12_publico: '', precio_caja12_taproom: '',
-    precio_caja24_publico: '', precio_caja24_taproom: '',
+    precio_lata_publico: '', precio_lata_taproom: '',
     precio_barril_pet_publico: '', precio_barril_pet_taproom: '',
     precio_barril_acero_publico: '', precio_barril_acero_taproom: '',
     precio_barril10_pet_publico: '', precio_barril10_pet_taproom: '',
@@ -47,10 +46,8 @@ export default function EditProductoPage() {
         nombre: p.nombre || '', estilo: p.estilo || '',
         abv: p.abv?.toString() || '', ibu: p.ibu?.toString() || '',
         descripcion: p.descripcion || '', descripcion_larga: p.descripcion_larga || '',
-        precio_caja12_publico: p.precio_caja12_publico?.toString() || '',
-        precio_caja12_taproom: p.precio_caja12_taproom?.toString() || '',
-        precio_caja24_publico: p.precio_caja24_publico?.toString() || '',
-        precio_caja24_taproom: p.precio_caja24_taproom?.toString() || '',
+        precio_lata_publico: p.precio_lata_publico?.toString() || '',
+        precio_lata_taproom: p.precio_lata_taproom?.toString() || '',
         precio_barril_pet_publico: p.precio_barril_pet_publico?.toString() || '',
         precio_barril_pet_taproom: p.precio_barril_pet_taproom?.toString() || '',
         precio_barril_acero_publico: p.precio_barril_acero_publico?.toString() || '',
@@ -115,12 +112,8 @@ export default function EditProductoPage() {
         ibu: form.ibu ? parseInt(form.ibu) : null,
         descripcion: form.descripcion, descripcion_larga: form.descripcion_larga,
         imagen_url,
-        precio_publico: parseFloat(form.precio_caja12_publico) || 0,
-        precio_taproom: parseFloat(form.precio_caja12_taproom) || 0,
-        precio_caja12_publico: parseFloat(form.precio_caja12_publico) || null,
-        precio_caja12_taproom: parseFloat(form.precio_caja12_taproom) || null,
-        precio_caja24_publico: parseFloat(form.precio_caja24_publico) || null,
-        precio_caja24_taproom: parseFloat(form.precio_caja24_taproom) || null,
+        precio_lata_publico: parseFloat(form.precio_lata_publico) || null,
+        precio_lata_taproom: parseFloat(form.precio_lata_taproom) || null,
         precio_barril_pet_publico: parseFloat(form.precio_barril_pet_publico) || null,
         precio_barril_pet_taproom: parseFloat(form.precio_barril_pet_taproom) || null,
         precio_barril_acero_publico: parseFloat(form.precio_barril_acero_publico) || null,
@@ -248,34 +241,76 @@ export default function EditProductoPage() {
           )}
 
           <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 14 }}>
-            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios por presentación</p>
+            <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Precios</p>
+
+            {/* Precio por lata (editable) */}
+            <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Precio por lata</p>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+              <div>
+                <label style={{ color: '#6b7280', fontSize: 12, display: 'block', marginBottom: 4 }}>Publico</label>
+                <input type="number" step="0.01" value={form.precio_lata_publico} onChange={e => set('precio_lata_publico', e.target.value)} disabled={!isSuperAdmin}
+                  placeholder="0.00" style={{ width: '100%', padding: '10px 12px', background: !isSuperAdmin ? '#f3f4f6' : '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: '#1a1a1a', fontSize: 15, fontWeight: 700, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }} />
+              </div>
+              <div>
+                <label style={{ color: '#f59e0b', fontSize: 12, display: 'block', marginBottom: 4 }}>Mayorista</label>
+                <input type="number" step="0.01" value={form.precio_lata_taproom} onChange={e => set('precio_lata_taproom', e.target.value)} disabled={!isSuperAdmin}
+                  placeholder="0.00" style={{ width: '100%', padding: '10px 12px', background: !isSuperAdmin ? '#f3f4f6' : '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: '#f59e0b', fontSize: 15, fontWeight: 700, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }} />
+              </div>
+            </div>
+
+            {/* Derivados (solo lectura) */}
+            {(parseFloat(form.precio_lata_publico) > 0 || parseFloat(form.precio_lata_taproom) > 0) && (
+              <>
+                <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Derivados <span style={{ fontWeight: 400, textTransform: 'none' }}>(calculados)</span></p>
+                <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', marginBottom: 16 }}>
+                  {[
+                    { label: 'Caja 12', mult: 12 },
+                    { label: 'Caja 24', mult: 24 },
+                  ].map(d => {
+                    const pub = Math.round((parseFloat(form.precio_lata_publico) || 0) * d.mult)
+                    const tap = Math.round((parseFloat(form.precio_lata_taproom) || 0) * d.mult)
+                    return (
+                      <div key={d.label} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0' }}>
+                        <span style={{ color: '#6b7280', fontSize: 13 }}>{d.label}</span>
+                        <span style={{ fontSize: 13 }}>
+                          <span style={{ color: '#1a1a1a' }}>${pub.toLocaleString('es-MX')}</span>
+                          <span style={{ color: '#9ca3af', margin: '0 6px' }}>/</span>
+                          <span style={{ color: '#f59e0b' }}>${tap.toLocaleString('es-MX')}</span>
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* Barriles (editables, precio propio) */}
+            <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Barriles</p>
             <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <th style={{ padding: '10px 14px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Presentación</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Público</th>
-                    <th style={{ padding: '10px 14px', textAlign: 'center', color: '#f59e0b', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Mayorista</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>Presentacion</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>Publico</th>
+                    <th style={{ padding: '8px 10px', textAlign: 'center', color: '#f59e0b', fontSize: 11, textTransform: 'uppercase' }}>Mayorista</th>
                   </tr>
                 </thead>
                 <tbody>
                   {([
-                    ['Caja 12 latas', 'precio_caja12_publico', 'precio_caja12_taproom'],
-                    ['Caja 24 latas', 'precio_caja24_publico', 'precio_caja24_taproom'],
-                    ['Barril 20L PET', 'precio_barril_pet_publico', 'precio_barril_pet_taproom'],
-                    ['Barril 20L Acero', 'precio_barril_acero_publico', 'precio_barril_acero_taproom'],
-                    ['Barril 10L PET', 'precio_barril10_pet_publico', 'precio_barril10_pet_taproom'],
-                    ['Barril 10L Acero', 'precio_barril10_acero_publico', 'precio_barril10_acero_taproom'],
+                    ['20L PET', 'precio_barril_pet_publico', 'precio_barril_pet_taproom'],
+                    ['20L Acero', 'precio_barril_acero_publico', 'precio_barril_acero_taproom'],
+                    ['10L PET', 'precio_barril10_pet_publico', 'precio_barril10_pet_taproom'],
+                    ['10L Acero', 'precio_barril10_acero_publico', 'precio_barril10_acero_taproom'],
                   ] as const).map(([label, pubKey, tapKey]) => (
                     <tr key={pubKey} style={{ borderBottom: '1px solid #e5e7eb' }}>
-                      <td style={{ padding: '8px 14px', color: '#374151', fontSize: 13, fontWeight: 500 }}>{label}</td>
-                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '8px 14px', color: '#374151', fontSize: 13 }}>{label}</td>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
                         <input type="number" value={(form as any)[pubKey]} onChange={e => set(pubKey, e.target.value)} disabled={!isSuperAdmin}
-                          placeholder="—" style={{ width: 90, padding: '6px 8px', background: !isSuperAdmin ? '#f3f4f6' : '#fff', border: '1px solid #d1d5db', borderRadius: 6, color: (form as any)[pubKey] ? '#1a1a1a' : '#d1d5db', fontSize: 13, textAlign: 'right', outline: 'none' }} />
+                          placeholder="—" style={{ width: 90, padding: '6px 8px', background: !isSuperAdmin ? '#f3f4f6' : '#fff', border: '1px solid #d1d5db', borderRadius: 6, color: '#1a1a1a', fontSize: 13, textAlign: 'right', outline: 'none' }} />
                       </td>
-                      <td style={{ padding: '8px 10px', textAlign: 'center' }}>
+                      <td style={{ padding: '6px 10px', textAlign: 'center' }}>
                         <input type="number" value={(form as any)[tapKey]} onChange={e => set(tapKey, e.target.value)} disabled={!isSuperAdmin}
-                          placeholder="—" style={{ width: 90, padding: '6px 8px', background: !isSuperAdmin ? '#f3f4f6' : '#fff', border: '1px solid #d1d5db', borderRadius: 6, color: (form as any)[tapKey] ? '#f59e0b' : '#d1d5db', fontSize: 13, textAlign: 'right', outline: 'none' }} />
+                          placeholder="—" style={{ width: 90, padding: '6px 8px', background: !isSuperAdmin ? '#f3f4f6' : '#fff', border: '1px solid #d1d5db', borderRadius: 6, color: '#f59e0b', fontSize: 13, textAlign: 'right', outline: 'none' }} />
                       </td>
                     </tr>
                   ))}

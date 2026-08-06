@@ -54,8 +54,9 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       totalBblAcero += ba
       totalBblPet10 += bp10
       totalBblAcero10 += ba10
-      valorTotal += c12 * (p[`precio_caja12_${pk}`] || p[`precio_${pk === 'publico' ? 'publico' : 'taproom'}`] || 0)
-      valorTotal += c24 * (p[`precio_caja24_${pk}`] || 0)
+      const precioLata = p[`precio_lata_${pk}`] || 0
+      valorTotal += c12 * Math.round(precioLata * 12)
+      valorTotal += c24 * Math.round(precioLata * 24)
       valorTotal += bp * (p[`precio_barril_pet_${pk}`] || 0)
       valorTotal += ba * (p[`precio_barril_acero_${pk}`] || 0)
       valorTotal += bp10 * (p[`precio_barril10_pet_${pk}`] || 0)
@@ -104,56 +105,51 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
   const getPrice = (p: any) => {
     const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
-    const price = p[`precio_caja12_${pk}`] || p[`precio_${pk === 'publico' ? 'publico' : 'taproom'}`]
-    return price ? '$' + Math.round(price).toLocaleString('es-MX') : '—'
+    const precioLata = p[`precio_lata_${pk}`]
+    return precioLata ? '$' + Math.round(precioLata).toLocaleString('es-MX') + '/lata' : '—'
   }
 
   const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
 
-  // Price check helpers per presentation with stock
-  const PRES = [
-    { stock: 'stock_caja24', pub: 'precio_caja24_publico', tap: 'precio_caja24_taproom' },
-    { stock: 'stock_caja12', pub: 'precio_caja12_publico', tap: 'precio_caja12_taproom' },
-    { stock: 'stock_barril_pet', pub: 'precio_barril_pet_publico', tap: 'precio_barril_pet_taproom' },
-    { stock: 'stock_barril_acero', pub: 'precio_barril_acero_publico', tap: 'precio_barril_acero_taproom' },
-  ]
-
   /** Returns 'none' | 'mayorista' | 'ok' */
   const priceStatus = (p: any): 'none' | 'mayorista' | 'ok' => {
     let missingPub = false, missingTap = false
-    for (const pr of PRES) {
-      if ((p[pr.stock] || 0) > 0) {
-        if (!p[pr.pub]) missingPub = true
-        if (!p[pr.tap]) missingTap = true
-      }
+    // Lata-based: any lata/caja stock needs precio_lata_*
+    const hasLataStock = (p.stock_caja24 || 0) > 0 || (p.stock_caja12 || 0) > 0 || (p.stock_latas || 0) > 0
+    if (hasLataStock) {
+      if (!p.precio_lata_publico) missingPub = true
+      if (!p.precio_lata_taproom) missingTap = true
     }
-    // Latas sueltas need caja24 price for mix
-    if ((p.stock_latas || 0) > 0) {
-      if (!p.precio_caja24_publico) missingPub = true
-      if (!p.precio_caja24_taproom) missingTap = true
+    // Barriles: own prices
+    if ((p.stock_barril_pet || 0) > 0) {
+      if (!p.precio_barril_pet_publico) missingPub = true
+      if (!p.precio_barril_pet_taproom) missingTap = true
     }
-    if (missingPub) return 'none'      // missing public = can't sell to anyone
-    if (missingTap) return 'mayorista' // has public but missing taproom
+    if ((p.stock_barril_acero || 0) > 0) {
+      if (!p.precio_barril_acero_publico) missingPub = true
+      if (!p.precio_barril_acero_taproom) missingTap = true
+    }
+    if (missingPub) return 'none'
+    if (missingTap) return 'mayorista'
     return 'ok'
   }
 
   const hasMissingPrice = (p: any): boolean => priceStatus(p) !== 'ok'
 
-  // Detect products with price issues
   const missingAll = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'none'), [productos])
   const missingMayo = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'mayorista'), [productos])
   const hasAlert = missingAll.length > 0 || missingMayo.length > 0
 
   const priceTooltip = (p: any): string => {
+    const lp = p.precio_lata_publico || 0, lt = p.precio_lata_taproom || 0
     const rows = [
-      ['Caja 12', p.precio_caja12_publico, p.precio_caja12_taproom],
-      ['Caja 24', p.precio_caja24_publico, p.precio_caja24_taproom],
-      ['Bbl PET', p.precio_barril_pet_publico, p.precio_barril_pet_taproom],
-      ['Bbl Acero', p.precio_barril_acero_publico, p.precio_barril_acero_taproom],
+      `Lata: $${lp || '—'} / $${lt || '—'}`,
+      `Caja 12: $${lp ? Math.round(lp * 12) : '—'} / $${lt ? Math.round(lt * 12) : '—'}`,
+      `Caja 24: $${lp ? Math.round(lp * 24) : '—'} / $${lt ? Math.round(lt * 24) : '—'}`,
+      `Bbl PET: $${p.precio_barril_pet_publico || '—'} / $${p.precio_barril_pet_taproom || '—'}`,
+      `Bbl Acero: $${p.precio_barril_acero_publico || '—'} / $${p.precio_barril_acero_taproom || '—'}`,
     ]
-    return rows.map(([label, pub, tap]) =>
-      `${label}: $${pub || '—'} / $${tap || '—'}`
-    ).join('\n')
+    return rows.join('\n')
   }
 
   const pillActive = { background: '#E8531D', color: '#1a1a1a', border: '1px solid #E8531D' }
@@ -344,8 +340,8 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                       const ps = priceStatus(p)
                       if (ps === 'none') return <span style={{ background: '#fee2e2', color: '#dc2626', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Sin precio</span>
                       if (ps === 'mayorista') return <span style={{ background: '#fef3c7', color: '#d97706', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Falta mayorista</span>
-                      return p.precio_caja24_publico
-                        ? <span style={{ color: '#E8531D', fontSize: 13, cursor: 'help' }}>${Math.round(p.precio_caja24_publico).toLocaleString('es-MX')}</span>
+                      return p.precio_lata_publico
+                        ? <span style={{ color: '#E8531D', fontSize: 13, cursor: 'help' }}>${Math.round(p.precio_lata_publico).toLocaleString('es-MX')}/lata</span>
                         : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>
                     })()}
                   </td>

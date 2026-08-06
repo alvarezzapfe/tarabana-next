@@ -108,6 +108,18 @@ saldo sobre `total + costo_envio`. Al agregar flete a un pedido ya pagado,
 el saldo se vuelve positivo, lo que es correcto (se necesita un pago
 adicional por el envio).
 
+## Modelo de precios (precio por lata)
+
+Los precios de latas se derivan de `precio_lata_publico` y `precio_lata_taproom`:
+- Caja 12 = precio_lata × 12
+- Caja 24 = precio_lata × 24
+- Mix = precio_lata × latas de cada estilo
+- Barriles mantienen sus propias columnas (`precio_barril_*`)
+
+Las columnas `precio_caja12_*` y `precio_caja24_*` quedan como legado en la tabla
+`productos` — no se leen ni se escriben desde el código, pero existen porque hay
+pedidos historicos que las referencian. No borrar.
+
 ## nivel_precio (sin grant para authenticated)
 
 `profiles.nivel_precio` determina qué columna de precio ve el cliente en el

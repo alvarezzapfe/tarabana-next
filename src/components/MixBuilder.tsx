@@ -6,7 +6,7 @@ export interface MixProduct {
   nombre: string
   imagen_url?: string
   stock_latas: number
-  precio_por_lata: number // already calculated: precio_caja24 / 24
+  precio_por_lata: number // from precio_lata_* column
 }
 
 export interface MixResult {
