@@ -88,11 +88,11 @@ export default function NuevoProductoPage() {
 
   const inp = (label: string, key: string, placeholder = '', type = 'text') => (
     <div>
-      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>{label}</label>
+      <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>{label}</label>
       <input
         type={type} value={(form as any)[key]} onChange={e => set(key, e.target.value)}
         placeholder={placeholder}
-        style={{ width: '100%', padding: '10px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13.5, boxSizing: 'border-box' as const }}
+        style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }}
       />
     </div>
   )
@@ -199,22 +199,50 @@ export default function NuevoProductoPage() {
             </div>
           </div>
 
-          <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 14 }}>
-            <p style={{ color: '#6b7280', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 12 }}>Stock inicial</p>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 10 }}>
+          <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 14 }}>
+            <style>{`@media (max-width: 768px) { .stock-grid-3, .stock-grid-2 { grid-template-columns: 1fr !important; } }`}</style>
+            <p style={{ color: '#1a1a1a', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 16 }}>Stock inicial</p>
+
+            <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Latas</p>
+            <div className="stock-grid-3" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 16 }}>
               {[
-                { label: 'Latas sueltas', key: 'stock_latas' },
-                { label: 'Cajas 12', key: 'stock_caja12' },
-                { label: 'Cajas 24', key: 'stock_caja24' },
-                { label: 'Bbl 20L PET', key: 'stock_barril_pet' },
-                { label: 'Bbl 20L Acero', key: 'stock_barril_acero' },
-                { label: 'Bbl 10L PET', key: 'stock_barril10_pet' },
-                { label: 'Bbl 10L Acero', key: 'stock_barril10_acero' },
+                { label: 'Sueltas', key: 'stock_latas', hint: 'Para armar mix' },
+                { label: 'Caja 12', key: 'stock_caja12' },
+                { label: 'Caja 24', key: 'stock_caja24' },
+              ].map((s: any) => (
+                <div key={s.key}>
+                  <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>{s.label}</label>
+                  <input type="number" value={(form as any)[s.key]} onChange={e => set(s.key, e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: '#10b981', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }} />
+                  {s.hint && <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 10 }}>{s.hint}</p>}
+                </div>
+              ))}
+            </div>
+
+            <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Barriles 20L</p>
+            <div className="stock-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginBottom: 16 }}>
+              {[
+                { label: 'PET', key: 'stock_barril_pet' },
+                { label: 'Acero', key: 'stock_barril_acero' },
               ].map(s => (
                 <div key={s.key}>
                   <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>{s.label}</label>
                   <input type="number" value={(form as any)[s.key]} onChange={e => set(s.key, e.target.value)}
-                    style={{ width: '100%', padding: '9px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const }} />
+                    style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: '#10b981', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }} />
+                </div>
+              ))}
+            </div>
+
+            <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>Barriles 10L</p>
+            <div className="stock-grid-2" style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
+              {[
+                { label: 'PET', key: 'stock_barril10_pet' },
+                { label: 'Acero', key: 'stock_barril10_acero' },
+              ].map(s => (
+                <div key={s.key}>
+                  <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 4 }}>{s.label}</label>
+                  <input type="number" value={(form as any)[s.key]} onChange={e => set(s.key, e.target.value)}
+                    style={{ width: '100%', padding: '10px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: '#10b981', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }} />
                 </div>
               ))}
             </div>
