@@ -110,11 +110,6 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
   const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
 
-  // Detect products with stock but no price
-  const missingPrices = useMemo(() => {
-    return productos.filter(p => p.activo && hasMissingPrice(p))
-  }, [productos])
-
   const hasMissingPrice = (p: any): boolean => {
     if ((p.stock_caja24 || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
     if ((p.stock_caja12 || 0) > 0 && (!p.precio_caja12_publico || !p.precio_caja12_taproom)) return true
@@ -124,6 +119,11 @@ export default function InventarioClient({ productos, canEdit }: Props) {
     if ((p.stock_latas || 0) > 0 && (!p.precio_caja24_publico || !p.precio_caja24_taproom)) return true
     return false
   }
+
+  // Detect products with stock but no price
+  const missingPrices = useMemo(() => {
+    return productos.filter(p => p.activo && hasMissingPrice(p))
+  }, [productos])
 
   const priceTooltip = (p: any): string => {
     const rows = [
