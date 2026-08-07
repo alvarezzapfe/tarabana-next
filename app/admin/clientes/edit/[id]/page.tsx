@@ -42,24 +42,30 @@ export default function EditClientePage() {
 
   const handleSave = async (data: ClienteData & { full_name: string }) => {
     setSaving(true)
-    const { error } = await supabase.from('profiles').update({
-      full_name: data.full_name,
-      nombre_pila: data.nombre_pila || null, apellido_paterno: data.apellido_paterno || null, apellido_materno: data.apellido_materno || null,
-      razon_social: data.razon_social || null, marca_negocio: data.marca_negocio || null, contacto_nombre: data.contacto_nombre || null,
-      tipo_persona_registro: data.tipo_persona_registro || null,
-      phone: data.phone ? data.phone.replace(/\D/g, '') : null,
-      tipo_consumidor: data.tipo_consumidor,
-      ...data.direccion,
-      direccion_entrega: [data.direccion.calle, data.direccion.num_ext].filter(Boolean).join(' ') || null,
-      ciudad: data.direccion.municipio || null,
-      requiere_factura: data.requiere_factura,
-      rfc: data.requiere_factura ? data.rfc : null,
-      regimen_fiscal: data.requiere_factura ? data.regimen_fiscal : null,
-      uso_cfdi: data.requiere_factura ? data.uso_cfdi : null,
-      cp_fiscal: data.requiere_factura ? data.cp_fiscal : null,
-    }).eq('id', id)
+    const res = await fetch(`/api/admin/clientes/${id}/actualizar`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        full_name: data.full_name,
+        email: data.email,
+        tipo_persona_registro: data.tipo_persona_registro || null,
+        nombre_pila: data.nombre_pila || null, apellido_paterno: data.apellido_paterno || null, apellido_materno: data.apellido_materno || null,
+        razon_social: data.razon_social || null, marca_negocio: data.marca_negocio || null, contacto_nombre: data.contacto_nombre || null,
+        phone: data.phone ? data.phone.replace(/\D/g, '') : null,
+        tipo_consumidor: data.tipo_consumidor,
+        ...data.direccion,
+        direccion_entrega: [data.direccion.calle, data.direccion.num_ext].filter(Boolean).join(' ') || null,
+        ciudad: data.direccion.municipio || null,
+        requiere_factura: data.requiere_factura,
+        rfc: data.requiere_factura ? data.rfc : null,
+        regimen_fiscal: data.requiere_factura ? data.regimen_fiscal : null,
+        uso_cfdi: data.requiere_factura ? data.uso_cfdi : null,
+        cp_fiscal: data.requiere_factura ? data.cp_fiscal : null,
+      }),
+    })
+    const d = await res.json()
     setSaving(false)
-    if (error) return { error: error.message }
+    if (!res.ok) return { error: d.error || 'Error al guardar' }
     router.push('/admin/clientes'); router.refresh()
     return {}
   }
