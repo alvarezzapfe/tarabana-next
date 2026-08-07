@@ -18,14 +18,17 @@ export async function GET(request: NextRequest) {
     type: type as any,
   })
 
+  const isNuevo = url.searchParams.get('nuevo') === '1'
   url.search = ''
+
   if (error) {
     url.pathname = '/portal/reset-password'
     url.searchParams.set('error', error.message)
     return NextResponse.redirect(url)
   }
 
-  // Session is now in the cookie — redirect to the form
+  // Session is now in the cookie — redirect to the password form
   url.pathname = '/portal/reset-password'
+  if (isNuevo) url.searchParams.set('nuevo', '1')
   return NextResponse.redirect(url)
 }

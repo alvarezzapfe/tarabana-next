@@ -27,6 +27,7 @@ function ResetPasswordInner() {
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [done, setDone] = useState(false)
+  const isNuevo = searchParams.get('nuevo') === '1'
 
   useEffect(() => {
     // Diagnostic log — remove after confirming flow works
@@ -204,14 +205,16 @@ function ResetPasswordInner() {
             <path d="M20 6L9 17l-5-5"/>
           </svg>
         </div>
-        <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Contraseña actualizada</h2>
+        <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, marginBottom: 8 }}>
+          {isNuevo ? 'Contraseña creada' : 'Contraseña actualizada'}
+        </h2>
         <p style={{ color: '#888', fontSize: 14, lineHeight: 1.7, marginBottom: 24 }}>
-          Ya puedes iniciar sesión.
+          {isNuevo ? 'Inicia sesion con tu correo y la contraseña que acabas de crear.' : 'Ya puedes iniciar sesion.'}
         </p>
         <button onClick={() => router.push('/portal')} style={{
           width: '100%', padding: '12px', background: '#E8531D',
           border: 'none', borderRadius: 9, color: '#fff', fontSize: 14, fontWeight: 600, cursor: 'pointer'
-        }}>Iniciar sesión</button>
+        }}>{isNuevo ? 'Iniciar sesion' : 'Iniciar sesion'}</button>
       </div>
     </div>
   )
@@ -225,8 +228,12 @@ function ResetPasswordInner() {
           <a href="/">
             <img src="/tarabana_logo_negro.jpg" alt="Tarabaña" style={{ height: 52, objectFit: 'contain', display: 'block', margin: '0 auto 16px' }} />
           </a>
-          <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, margin: '0 0 4px' }}>Nueva contraseña</h2>
-          <p style={{ color: '#aaa', fontSize: 13, margin: 0 }}>Ingresa tu nueva contraseña</p>
+          <h2 style={{ color: '#111', fontSize: 20, fontWeight: 800, margin: '0 0 4px' }}>
+            {isNuevo ? 'Crea tu contraseña' : 'Nueva contraseña'}
+          </h2>
+          <p style={{ color: '#aaa', fontSize: 13, margin: 0 }}>
+            {isNuevo ? 'Elige una contraseña para acceder a tu portal' : 'Ingresa tu nueva contraseña'}
+          </p>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

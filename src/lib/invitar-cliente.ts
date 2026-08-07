@@ -43,19 +43,23 @@ export async function enviarInvitacionCliente(
       if (Date.now() - lastSent < 24 * 60 * 60 * 1000) return { skipped: 'reciente' }
     }
 
-    // Generate recovery link (lets client set password)
+    // Generate recovery link using hashed_token to build URL manually.
+    // action_link goes through Supabase's verify endpoint which gets consumed
+    // by Gmail's link scanner before the user clicks. hashed_token + our
+    // /auth/confirm route handler avoids that.
+    const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://www.tarabana.mx'
     const { data: linkData, error: linkError } = await service.auth.admin.generateLink({
       type: 'recovery',
       email: profile.email,
-      options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://tarabana.mx'}/auth/confirm` },
     })
 
-    if (linkError || !linkData?.properties?.action_link) {
+    if (linkError || !linkData?.properties?.hashed_token) {
       console.error('[invitar-cliente] generateLink failed:', linkError?.message)
       return { error: linkError?.message || 'No se pudo generar el link' }
     }
 
-    const actionLink = linkData.properties.action_link
+    const tokenHash = linkData.properties.hashed_token
+    const actionLink = `${SITE_URL}/auth/confirm?token_hash=${tokenHash}&type=recovery&nuevo=1`
     const nombre = profile.full_name?.split(' ')[0] || 'cliente'
     const pedidoRef = options?.pedidoId ? `#${options.pedidoId.slice(-6).toUpperCase()}` : ''
     const pedidoMonto = options?.pedidoTotal ? `$${options.pedidoTotal.toLocaleString('es-MX')}` : ''
