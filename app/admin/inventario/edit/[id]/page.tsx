@@ -102,7 +102,6 @@ export default function EditProductoPage() {
       stock_barril10_pet: parseInt(form.stock_barril10_pet) || 0,
       stock_barril10_acero: parseInt(form.stock_barril10_acero) || 0,
       stock_latas: parseInt(form.stock_latas) || 0,
-      stock_barriles: (parseInt(form.stock_barril_pet) || 0) + (parseInt(form.stock_barril_acero) || 0),
     }
 
     if (isSuperAdmin) {

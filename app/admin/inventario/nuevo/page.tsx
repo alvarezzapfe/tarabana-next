@@ -72,7 +72,6 @@ export default function NuevoProductoPage() {
       stock_barril_pet: parseInt(form.stock_barril_pet) || 0,
       stock_barril_acero: parseInt(form.stock_barril_acero) || 0,
       stock_latas: parseInt(form.stock_latas) || 0,
-      stock_barriles: (parseInt(form.stock_barril_pet) || 0) + (parseInt(form.stock_barril_acero) || 0),
       activo: form.activo,
     })
 

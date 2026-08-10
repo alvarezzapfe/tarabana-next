@@ -1,3 +1,5 @@
+import { precioUnitario } from './calcular-pedido'
+
 export type TipoPrecio = 'mayorista' | 'minorista'
 
 export interface ProductoPrompt {
@@ -8,22 +10,18 @@ export interface ProductoPrompt {
   stock_caja24: number
   stock_barril_pet: number
   stock_barril_acero: number
-  precio_caja12_publico: number | null
-  precio_caja12_taproom: number | null
-  precio_caja24_publico: number | null
-  precio_caja24_taproom: number | null
+  stock_barril10_pet: number | null
+  stock_barril10_acero: number | null
+  precio_lata_publico: number | null
+  precio_lata_taproom: number | null
   precio_barril_pet_publico: number | null
   precio_barril_pet_taproom: number | null
   precio_barril_acero_publico: number | null
   precio_barril_acero_taproom: number | null
-  stock_barril10_pet: number | null
-  stock_barril10_acero: number | null
   precio_barril10_pet_publico: number | null
   precio_barril10_pet_taproom: number | null
   precio_barril10_acero_publico: number | null
   precio_barril10_acero_taproom: number | null
-  precio_publico: number | null
-  precio_taproom: number | null
 }
 
 interface PromptOptions {
@@ -56,15 +54,14 @@ function buildProductBlock(p: ProductoPrompt, tipoPrecio: TipoPrecio, single: bo
     lines.push(`— ${p.nombre.toUpperCase()} · ${p.estilo}${abvStr}`)
   }
 
-  // Prices — only units with stock > 0 AND price defined
-  const priceKey = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
-
-  const c12Price = (p as any)[`precio_caja12_${priceKey}`] || (tipoPrecio === 'mayorista' ? p.precio_publico : p.precio_taproom)
-  const c24Price = (p as any)[`precio_caja24_${priceKey}`]
-  const bpPrice = (p as any)[`precio_barril_pet_${priceKey}`]
-  const baPrice = (p as any)[`precio_barril_acero_${priceKey}`]
-  const bp10Price = (p as any)[`precio_barril10_pet_${priceKey}`]
-  const ba10Price = (p as any)[`precio_barril10_acero_${priceKey}`]
+  // Prices from the canonical helper (precioUnitario in calcular-pedido.ts)
+  const sufijo = tipoPrecio === 'mayorista' ? 'publico' as const : 'taproom' as const
+  const c12Price = precioUnitario(p as any, 'caja12', sufijo)
+  const c24Price = precioUnitario(p as any, 'caja24', sufijo)
+  const bpPrice = precioUnitario(p as any, 'barril_pet', sufijo)
+  const baPrice = precioUnitario(p as any, 'barril_acero', sufijo)
+  const bp10Price = (p as any)[`precio_barril10_pet_${sufijo}`] || 0
+  const ba10Price = (p as any)[`precio_barril10_acero_${sufijo}`] || 0
 
   // Line 1: cajas + PET
   const line1: string[] = []
