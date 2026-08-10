@@ -40,7 +40,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
   }, [productos, search, soloConStock, estiloFilter])
 
   const kpis = useMemo(() => {
-    let totalLatas = 0, totalBblPet = 0, totalBblAcero = 0, totalBblPet10 = 0, totalBblAcero10 = 0, valorTotal = 0
+    let totalLatas = 0, totalSueltas = 0, totalBblPet = 0, totalBblAcero = 0, totalBblPet10 = 0, totalBblAcero10 = 0, valorTotal = 0
     const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
     productos.forEach(p => {
       const c12 = p.stock_caja12 || 0
@@ -49,7 +49,9 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       const ba = p.stock_barril_acero || 0
       const bp10 = p.stock_barril10_pet || 0
       const ba10 = p.stock_barril10_acero || 0
-      totalLatas += p.stock_latas || 0
+      const sueltas = p.stock_latas || 0
+      totalSueltas += sueltas
+      totalLatas += sueltas + (c12 * 12) + (c24 * 24)
       totalBblPet += bp
       totalBblAcero += ba
       totalBblPet10 += bp10
@@ -62,7 +64,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       valorTotal += bp10 * (p[`precio_barril10_pet_${pk}`] || 0)
       valorTotal += ba10 * (p[`precio_barril10_acero_${pk}`] || 0)
     })
-    return { totalLatas, totalBblPet, totalBblAcero, totalBblPet10, totalBblAcero10, valorTotal }
+    return { totalLatas, totalSueltas, totalBblPet, totalBblAcero, totalBblPet10, totalBblAcero10, valorTotal }
   }, [productos, tipoPrecio])
 
   // Sync header checkbox indeterminate state
@@ -204,16 +206,17 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       {/* KPI GRID */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
         {[
-          { label: 'Latas en stock', value: kpis.totalLatas.toLocaleString(), unit: 'latas', color: '#E8531D' },
+          { label: 'Latas totales', value: kpis.totalLatas.toLocaleString(), unit: 'latas', color: '#E8531D', sub: `de las cuales ${kpis.totalSueltas.toLocaleString()} sueltas` },
           { label: 'Barriles 20L PET', value: kpis.totalBblPet.toString(), unit: 'uds', color: '#f59e0b' },
           { label: 'Barriles 20L Acero', value: kpis.totalBblAcero.toString(), unit: 'uds', color: '#10b981' },
           { label: 'Barriles 10L PET', value: kpis.totalBblPet10.toString(), unit: 'uds', color: '#eab308' },
           { label: 'Barriles 10L Acero', value: kpis.totalBblAcero10.toString(), unit: 'uds', color: '#06b6d4' },
           { label: 'Valor total', value: '$' + Math.round(kpis.valorTotal).toLocaleString('es-MX'), unit: 'MXN', color: '#3b82f6' },
-        ].map(s => (
+        ].map((s: any) => (
           <div key={s.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '18px 22px' }}>
             <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>{s.label}</p>
             <p style={{ color: s.color, fontSize: 26, fontWeight: 700, margin: '6px 0 0' }}>{s.value} <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 400 }}>{s.unit}</span></p>
+            {s.sub && <p style={{ color: '#9ca3af', fontSize: 11, margin: '4px 0 0' }}>{s.sub}</p>}
           </div>
         ))}
       </div>
@@ -295,7 +298,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
               <th style={{ padding: '10px 14px', textAlign: 'left', width: 36 }}>
                 <input ref={headerCheckRef} type="checkbox" checked={allFilteredSelected} onChange={toggleAll} />
               </th>
-              {['Producto', 'ABV', 'Latas', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Bbl 10L PET', 'Bbl 10L Acero', 'Precio', 'Estado', ''].map(h => (
+              {['Producto', 'ABV', 'Sueltas', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Bbl 10L PET', 'Bbl 10L Acero', 'Total latas', 'Precio', 'Estado', ''].map(h => (
                 <th key={h} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 14px', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
               ))}
             </tr>
@@ -335,6 +338,18 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                   <td style={{ color: (p.stock_barril_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_acero || 0}</td>
                   <td style={{ color: (p.stock_barril10_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_pet || 0}</td>
                   <td style={{ color: (p.stock_barril10_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_acero || 0}</td>
+                  {(() => {
+                    const sueltas = p.stock_latas || 0
+                    const enC12 = (p.stock_caja12 || 0) * 12
+                    const enC24 = (p.stock_caja24 || 0) * 24
+                    const totalL = sueltas + enC12 + enC24
+                    return (
+                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: totalL > 0 ? '#1a1a1a' : '#ef4444' }}
+                        title={`${sueltas} sueltas + ${enC12} en cajas 12 + ${enC24} en cajas 24`}>
+                        {totalL}
+                      </td>
+                    )
+                  })()}
                   <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }} title={priceTooltip(p)}>
                     {(() => {
                       const ps = priceStatus(p)
@@ -367,7 +382,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                 </tr>
               )
             }) : (
-              <tr><td colSpan={13} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
+              <tr><td colSpan={14} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
             )}
           </tbody>
         </table>
