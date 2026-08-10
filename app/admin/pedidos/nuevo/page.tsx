@@ -23,11 +23,12 @@ export default function NuevoPedidoPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
   const [clienteId, setClienteId] = useState(searchParams.get('cliente') || '')
-  const [tipoPrecio, setTipoPrecio] = useState<'publico' | 'taproom'>('publico')
+  // tipoPrecio derived from client's nivel_precio, not selectable
   const [condicionesPago, setCondicionesPago] = useState('contado')
   const [items, setItems] = useState<Item[]>([])
   const [notas, setNotas] = useState('')
   const [loading, setLoading] = useState(false)
+  const [crearError, setCrearError] = useState('')
   const [showMixModal, setShowMixModal] = useState(false)
   const [descuentoTipo, setDescuentoTipo] = useState<'' | 'porcentaje' | 'monto'>('')
   const [descuentoValor, setDescuentoValor] = useState('')
@@ -58,9 +59,11 @@ export default function NuevoPedidoPage() {
 
   const clienteSeleccionado = clientes.find(c => c.id === clienteId)
   const esMayorista = clienteSeleccionado?.nivel_precio === 'taproom' || clienteSeleccionado?.nivel_precio === 'distribuidor'
+  const sufijoPrecio = esMayorista ? 'taproom' : 'publico'
+  const nivelLabel = esMayorista ? 'Precios mayoristas' : 'Precios al publico'
 
   const getPrecio = (p: Producto, unidad: string): number => {
-    const suf = tipoPrecio === 'taproom' ? 'taproom' : 'publico'
+    const suf = sufijoPrecio
     const precioLata = (p as any)[`precio_lata_${suf}`] as number || 0
     if (unidad === 'caja12') return Math.round(precioLata * 12)
     if (unidad === 'caja24') return Math.round(precioLata * 24)
@@ -94,14 +97,13 @@ export default function NuevoPedidoPage() {
     setItems(items.map(i => i.producto_id === key ? { ...i, cantidad: Math.max(0, i.cantidad + delta) } : i).filter(i => i.cantidad > 0))
   }
 
-  // Mix builder products — use client's precio level
-  const suf = tipoPrecio === 'taproom' ? 'taproom' : 'publico'
+  // Mix builder products — use client's nivel_precio
   const mixProducts: MixProduct[] = productos
-    .filter(p => (p.stock_latas || 0) > 0 && ((p as any)[`precio_lata_${suf}`] || 0) > 0)
+    .filter(p => (p.stock_latas || 0) > 0 && ((p as any)[`precio_lata_${sufijoPrecio}`] || 0) > 0)
     .map(p => ({
       id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
       stock_latas: p.stock_latas || 0,
-      precio_por_lata: Math.round((p as any)[`precio_lata_${suf}`] || 0),
+      precio_por_lata: Math.round((p as any)[`precio_lata_${sufijoPrecio}`] || 0),
     }))
 
   const handleMixAdd = (result: MixResult) => {
@@ -125,8 +127,8 @@ export default function NuevoPedidoPage() {
 
   const handleConfirmar = async () => {
     if (!clienteId || items.length === 0) return
-    if (descuentoTipo && !descuentoMotivo.trim()) { alert('El motivo del descuento es obligatorio'); return }
-    setLoading(true)
+    if (descuentoTipo && !descuentoMotivo.trim()) { setCrearError('El motivo del descuento es obligatorio'); return }
+    setLoading(true); setCrearError('')
     const res = await fetch('/api/admin/pedidos/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -139,7 +141,7 @@ export default function NuevoPedidoPage() {
       })
     })
     if (res.ok) { router.push('/admin/pedidos'); router.refresh() }
-    else { alert('Error al crear pedido'); setLoading(false) }
+    else { const d = await res.json().catch(() => ({})); setCrearError(d.error || 'Error al crear pedido'); setLoading(false) }
   }
 
   const filteredClientes = clientes.filter(c =>
@@ -190,20 +192,12 @@ export default function NuevoPedidoPage() {
           )}
         </div>
 
-        {/* Tipo precio */}
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Tipo de precio</p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {(['publico', 'taproom'] as const).map(t => (
-              <button key={t} onClick={() => setTipoPrecio(t)} style={{
-                flex: 1, padding: '9px', background: tipoPrecio === t ? '#1e1e1e' : '#0a0a0a',
-                border: `1.5px solid ${tipoPrecio === t ? '#E8531D' : '#1e1e1e'}`,
-                borderRadius: 8, cursor: 'pointer', color: tipoPrecio === t ? '#fff' : '#555', fontSize: 13, fontWeight: tipoPrecio === t ? 600 : 400
-              }}>
-                {t === 'publico' ? 'Precio público' : 'Precio taproom'}
-              </button>
-            ))}
-          </div>
+        {/* Nivel de precio (informativo, no seleccionable) */}
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>Nivel de precio</p>
+          <span style={{ background: esMayorista ? '#dbeafe' : '#f3f4f6', color: esMayorista ? '#3b82f6' : '#6b7280', padding: '5px 14px', borderRadius: 99, fontSize: 13, fontWeight: 600 }}>
+            {clienteSeleccionado ? nivelLabel : 'Selecciona un cliente'}
+          </span>
         </div>
 
         {/* Condiciones de pago */}
@@ -259,7 +253,7 @@ export default function NuevoPedidoPage() {
                       if (!precio || stock === 0) return (
                         <div key={u.key} style={{ padding: '7px 8px', background: '#fff', borderRadius: 7, textAlign: 'center', opacity: 0.4 }}>
                           <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>{u.label}</p>
-                          <p style={{ margin: '2px 0 0', color: '#9ca3af', fontSize: 10 }}>{!precio ? 'Sin precio' : 'Sin stock'}</p>
+                          <p style={{ margin: '2px 0 0', color: !precio ? '#d97706' : '#9ca3af', fontSize: 10 }}>{!precio ? `Sin precio ${esMayorista ? 'mayorista' : 'publico'}` : 'Sin stock'}</p>
                         </div>
                       )
                       return (
@@ -374,6 +368,11 @@ export default function NuevoPedidoPage() {
               style={{ width: '100%', padding: '9px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
           </div>
 
+          {crearError && (
+            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+              <p style={{ color: '#ef4444', fontSize: 13, margin: 0, lineHeight: 1.5 }}>{crearError}</p>
+            </div>
+          )}
           <button onClick={handleConfirmar} disabled={loading || !clienteId || items.length === 0} style={{
             width: '100%', padding: '13px', background: clienteId && items.length > 0 ? '#E8531D' : '#1a1a1a',
             border: 'none', borderRadius: 8, color: clienteId && items.length > 0 ? '#fff' : '#444',
