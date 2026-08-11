@@ -3,12 +3,22 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import WhatsAppModal from './WhatsAppModal'
 import type { TipoPrecio } from '../../../src/lib/whatsappPrompt'
 
-interface Props { productos: any[]; canEdit: boolean }
+interface Props { productos: any[]; canEdit: boolean; pedidoCounts: Record<string, number> }
 
 const stockColor = (n: number) => n === 0 ? '#9ca3af' : n <= 10 ? '#d97706' : '#10b981'
 const NS: React.CSSProperties = { fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '10px 10px', fontSize: 13, fontWeight: 600 }
+const STOCK_FIELDS = [
+  { key: 'stock_latas', label: 'Sueltas', group: 'latas' },
+  { key: 'stock_caja12', label: 'Caja 12', group: 'latas' },
+  { key: 'stock_caja24', label: 'Caja 24', group: 'latas' },
+  { key: 'stock_barril_pet', label: '20L PET', group: 'barriles' },
+  { key: 'stock_barril_acero', label: '20L Acero', group: 'barriles' },
+  { key: 'stock_barril10_pet', label: '10L PET', group: 'barriles' },
+  { key: 'stock_barril10_acero', label: '10L Acero', group: 'barriles' },
+]
 
-export default function InventarioClient({ productos, canEdit }: Props) {
+export default function InventarioClient({ productos, canEdit, pedidoCounts }: Props) {
+  const [data, setData] = useState(productos)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
   const [soloConStock, setSoloConStock] = useState(false)
@@ -16,21 +26,31 @@ export default function InventarioClient({ productos, canEdit }: Props) {
   const [tipoPrecio, setTipoPrecio] = useState<TipoPrecio>('mayorista')
   const [modalOpen, setModalOpen] = useState(false)
   const [modalProductos, setModalProductos] = useState<any[]>([])
+  const [menuId, setMenuId] = useState<string | null>(null)
+  const [stockModalId, setStockModalId] = useState<string | null>(null)
+  const [stockForm, setStockForm] = useState<Record<string, number>>({})
+  const [stockMotivo, setStockMotivo] = useState('')
+  const [stockSaving, setStockSaving] = useState(false)
+  const [stockError, setStockError] = useState('')
+  const [filterEstado, setFilterEstado] = useState<'activos' | 'desc' | 'todos'>('activos')
+  const [actionLoading, setActionLoading] = useState<string | null>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
 
-  const estilos = useMemo(() => [...new Set(productos.map(p => p.estilo).filter(Boolean))].sort(), [productos])
+  const estilos = useMemo(() => [...new Set(data.map(p => p.estilo).filter(Boolean))].sort(), [data])
 
-  const filtered = useMemo(() => productos.filter(p => {
+  const filtered = useMemo(() => data.filter(p => {
+    if (filterEstado === 'activos' && !p.activo) return false
+    if (filterEstado === 'desc' && p.activo) return false
     if (search) { const q = search.toLowerCase(); if (!p.nombre?.toLowerCase().includes(q) && !p.estilo?.toLowerCase().includes(q)) return false }
     if (soloConStock && totalStock(p) === 0) return false
     if (estiloFilter !== 'todos' && p.estilo !== estiloFilter) return false
     return true
-  }), [productos, search, soloConStock, estiloFilter])
+  }), [data, search, soloConStock, estiloFilter, filterEstado])
 
   const kpis = useMemo(() => {
     let totalLatas = 0, totalSueltas = 0, totalBbl = 0, bp20 = 0, ba20 = 0, bp10 = 0, ba10 = 0, valorTotal = 0
     const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
-    productos.forEach(p => {
+    data.forEach(p => {
       const c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0, s = p.stock_latas || 0
       const bbp = p.stock_barril_pet || 0, bba = p.stock_barril_acero || 0, bbp10 = p.stock_barril10_pet || 0, bba10 = p.stock_barril10_acero || 0
       totalSueltas += s; totalLatas += s + c12 * 12 + c24 * 24
@@ -41,7 +61,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       valorTotal += bbp10 * (p[`precio_barril10_pet_${pk}`] || 0) + bba10 * (p[`precio_barril10_acero_${pk}`] || 0)
     })
     return { totalLatas, totalSueltas, totalBbl, bp20, ba20, bp10, ba10, valorTotal }
-  }, [productos, tipoPrecio])
+  }, [data, tipoPrecio])
 
   const allSel = filtered.length > 0 && filtered.every(p => selected.has(p.id))
   const someSel = filtered.some(p => selected.has(p.id))
@@ -51,6 +71,39 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
   const openModal = (ps: any[]) => { setModalProductos(ps); setModalOpen(true) }
 
+  // ── Actions ──
+  const openStockModal = (p: any) => {
+    setStockForm(Object.fromEntries(STOCK_FIELDS.map(f => [f.key, p[f.key] || 0])))
+    setStockMotivo(''); setStockError(''); setStockModalId(p.id); setMenuId(null)
+  }
+  const saveStock = async () => {
+    if (!stockModalId) return; setStockSaving(true); setStockError('')
+    const res = await fetch(`/api/admin/inventario/${stockModalId}/stock`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...stockForm, motivo: stockMotivo }) })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); setStockError(d.error || 'Error'); setStockSaving(false); return }
+    setData(prev => prev.map(p => p.id === stockModalId ? { ...p, ...stockForm } : p))
+    setStockModalId(null); setStockSaving(false)
+  }
+  const handleBaja = async (id: string) => {
+    setActionLoading(id); setMenuId(null)
+    await fetch(`/api/admin/inventario/${id}/baja`, { method: 'POST' })
+    setData(prev => prev.map(p => p.id === id ? { ...p, activo: false, descontinuado_at: new Date().toISOString() } : p))
+    setActionLoading(null)
+  }
+  const handleReactivar = async (id: string) => {
+    setActionLoading(id); setMenuId(null)
+    await fetch(`/api/admin/inventario/${id}/reactivar`, { method: 'POST' })
+    setData(prev => prev.map(p => p.id === id ? { ...p, activo: true, descontinuado_at: null } : p))
+    setActionLoading(null)
+  }
+  const handleEliminar = async (id: string) => {
+    if (!confirm('Eliminar este producto permanentemente?')) return
+    setActionLoading(id); setMenuId(null)
+    const res = await fetch(`/api/admin/inventario/${id}/eliminar`, { method: 'DELETE' })
+    if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Error'); setActionLoading(null); return }
+    setData(prev => prev.filter(p => p.id !== id))
+    setActionLoading(null)
+  }
+
   const priceStatus = (p: any): 'none' | 'mayorista' | 'ok' => {
     let mp = false, mt = false
     if ((p.stock_caja24 || 0) > 0 || (p.stock_caja12 || 0) > 0 || (p.stock_latas || 0) > 0) { if (!p.precio_lata_publico) mp = true; if (!p.precio_lata_taproom) mt = true }
@@ -58,8 +111,8 @@ export default function InventarioClient({ productos, canEdit }: Props) {
     if ((p.stock_barril_acero || 0) > 0) { if (!p.precio_barril_acero_publico) mp = true; if (!p.precio_barril_acero_taproom) mt = true }
     return mp ? 'none' : mt ? 'mayorista' : 'ok'
   }
-  const missingAll = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'none'), [productos])
-  const missingMayo = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'mayorista'), [productos])
+  const missingAll = useMemo(() => data.filter(p => p.activo && priceStatus(p) === 'none'), [data])
+  const missingMayo = useMemo(() => data.filter(p => p.activo && priceStatus(p) === 'mayorista'), [data])
   const hasAlert = missingAll.length > 0 || missingMayo.length > 0
 
   const priceTooltip = (p: any): string => {
@@ -92,7 +145,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Inventario</h1>
-          <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>{productos.filter(p => p.activo).length} productos activos</p>
+          <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>{data.filter(p => p.activo).length} productos activos</p>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
           <div style={{ display: 'flex' }}>
@@ -100,7 +153,7 @@ export default function InventarioClient({ productos, canEdit }: Props) {
               <button key={t} onClick={() => setTipoPrecio(t)} style={{ ...(tipoPrecio === t ? pillAct : pillIn), padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: t === 'mayorista' ? '7px 0 0 7px' : '0 7px 7px 0', textTransform: 'capitalize' }}>{t}</button>
             ))}
           </div>
-          <button onClick={() => { const ws = productos.filter(p => p.activo && totalStock(p) > 0); if (ws.length) openModal(ws); }} style={{ padding: '8px 16px', background: 'var(--brand-primary, #E8531D)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={() => { const ws = data.filter(p => p.activo && totalStock(p) > 0); if (ws.length) openModal(ws); }} style={{ padding: '8px 16px', background: 'var(--brand-primary, #E8531D)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
             Prompt WhatsApp
           </button>
           {canEdit && <a href="/admin/inventario/nuevo" style={{ padding: '8px 16px', background: 'var(--brand-primary, #E8531D)', color: '#fff', borderRadius: 7, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>Nuevo producto</a>}
@@ -136,6 +189,11 @@ export default function InventarioClient({ productos, canEdit }: Props) {
 
       {/* FILTERS */}
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 0 }}>
+          {([['activos', 'Activos'], ['desc', 'Descontinuados'], ['todos', 'Todos']] as const).map(([k, l]) => (
+            <button key={k} onClick={() => setFilterEstado(k)} style={{ padding: '6px 12px', fontSize: 11, fontWeight: 600, cursor: 'pointer', background: filterEstado === k ? '#1a1a1a' : '#f9fafb', color: filterEstado === k ? '#fff' : '#6b7280', border: '1px solid #e5e7eb', borderRadius: k === 'activos' ? '7px 0 0 7px' : k === 'todos' ? '0 7px 7px 0' : '0' }}>{l}</button>
+          ))}
+        </div>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." style={{ flex: 1, minWidth: 160, background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: '#1a1a1a', outline: 'none' }} />
         <select value={estiloFilter} onChange={e => setEstiloFilter(e.target.value)} style={{ background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: '#1a1a1a', cursor: 'pointer', outline: 'none' }}>
           <option value="todos">Todos los estilos</option>
@@ -219,15 +277,38 @@ export default function InventarioClient({ productos, canEdit }: Props) {
                   </td>
                   <td style={{ padding: '10px 10px', textAlign: 'center' }}>
                     {isZeroActive ? <span style={{ background: '#fee2e2', color: '#ef4444', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Sin stock</span>
-                      : <span style={{ background: p.activo ? '#d1fae5' : '#f3f4f6', color: p.activo ? '#10b981' : '#9ca3af', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 500 }}>{p.activo ? 'Activo' : 'Inactivo'}</span>}
+                      : !p.activo ? <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 500 }}>Descontinuado</span>
+                      : <span style={{ background: '#d1fae5', color: '#10b981', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 500 }}>Activo</span>}
                   </td>
-                  <td style={{ padding: '10px 10px' }}>
-                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
-                      <button onClick={() => openModal([p])} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(37,211,102,0.1)', color: '#25D366', border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }} title="WhatsApp">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492l4.574-1.2A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/></svg>
+                  <td style={{ padding: '10px 10px', position: 'relative' }}>
+                    <div style={{ display: 'flex', gap: 4, alignItems: 'center', justifyContent: 'center' }}>
+                      <button onClick={() => openModal([p])} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(37,211,102,0.1)', color: '#25D366', border: 'none', borderRadius: 5, cursor: 'pointer', padding: 0 }} title="WhatsApp">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492l4.574-1.2A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/></svg>
                       </button>
-                      {canEdit && <a href={`/admin/inventario/edit/${p.id}`} style={{ color: '#9ca3af', display: 'flex' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></a>}
+                      {canEdit && (
+                        <button onClick={e => { e.stopPropagation(); setMenuId(menuId === p.id ? null : p.id) }} style={{ width: 24, height: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: '#9ca3af' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                        </button>
+                      )}
                     </div>
+                    {menuId === p.id && canEdit && (
+                      <div style={{ position: 'absolute', right: 10, top: 36, background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,0.08)', zIndex: 50, minWidth: 160 }}>
+                        <a href={`/admin/inventario/edit/${p.id}`} style={{ display: 'block', padding: '9px 14px', fontSize: 13, color: '#374151', textDecoration: 'none' }}>Editar ficha</a>
+                        <button onClick={() => openStockModal(p)} style={{ display: 'block', width: '100%', padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#374151', cursor: 'pointer' }}>Ajustar stock</button>
+                        {p.activo ? (
+                          <button onClick={() => handleBaja(p.id)} disabled={actionLoading === p.id} style={{ display: 'block', width: '100%', padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#d97706', cursor: 'pointer', borderTop: '1px solid #f3f4f6' }}>Dar de baja</button>
+                        ) : (
+                          <button onClick={() => handleReactivar(p.id)} disabled={actionLoading === p.id} style={{ display: 'block', width: '100%', padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: '#10b981', cursor: 'pointer', borderTop: '1px solid #f3f4f6' }}>Reactivar</button>
+                        )}
+                        {(() => { const cnt = pedidoCounts[p.id] || 0; return (
+                          <button onClick={() => cnt === 0 && handleEliminar(p.id)} disabled={cnt > 0 || actionLoading === p.id}
+                            title={cnt > 0 ? `Tiene ${cnt} pedidos, solo puede darse de baja` : 'Eliminar permanentemente'}
+                            style={{ display: 'block', width: '100%', padding: '9px 14px', background: 'none', border: 'none', textAlign: 'left', fontSize: 13, color: cnt > 0 ? '#d1d5db' : '#ef4444', cursor: cnt > 0 ? 'not-allowed' : 'pointer', borderTop: '1px solid #f3f4f6' }}>
+                            Eliminar{cnt > 0 ? ` (${cnt} pedidos)` : ''}
+                          </button>
+                        )})()}
+                      </div>
+                    )}
                   </td>
                 </tr>
               )
@@ -259,6 +340,60 @@ export default function InventarioClient({ productos, canEdit }: Props) {
           )
         })}
       </div>
+
+      {/* Click outside to close menu */}
+      {menuId && <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 40 }} onClick={() => setMenuId(null)} />}
+
+      {/* Stock adjustment modal */}
+      {stockModalId && (() => {
+        const prod = data.find(p => p.id === stockModalId)
+        if (!prod) return null
+        return (
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setStockModalId(null)}>
+            <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', width: 480, maxHeight: '80vh', overflowY: 'auto' }} onClick={e => e.stopPropagation()}>
+              <h3 style={{ color: '#1a1a1a', fontSize: 17, fontWeight: 700, margin: '0 0 4px' }}>Ajustar stock</h3>
+              <p style={{ color: '#9ca3af', fontSize: 13, margin: '0 0 20px' }}>{prod.nombre}</p>
+
+              {['latas', 'barriles'].map(group => (
+                <div key={group} style={{ marginBottom: 16 }}>
+                  <p style={{ color: '#9ca3af', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>{group === 'latas' ? 'Latas' : 'Barriles'}</p>
+                  <div style={{ display: 'grid', gridTemplateColumns: group === 'latas' ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)', gap: 10 }}>
+                    {STOCK_FIELDS.filter(f => f.group === group).map(f => (
+                      <div key={f.key}>
+                        <label style={{ color: '#6b7280', fontSize: 12, display: 'block', marginBottom: 4 }}>{f.label}</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <button onClick={() => setStockForm(prev => ({ ...prev, [f.key]: Math.max(0, (prev[f.key] || 0) - 1) }))}
+                            style={{ width: 28, height: 28, borderRadius: 6, background: '#f3f4f6', border: 'none', cursor: 'pointer', fontSize: 16, color: '#374151' }}>-</button>
+                          <input type="number" value={stockForm[f.key] ?? 0} onChange={e => setStockForm(prev => ({ ...prev, [f.key]: Math.max(0, parseInt(e.target.value) || 0) }))}
+                            style={{ flex: 1, padding: '6px 8px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 6, fontSize: 14, fontWeight: 600, textAlign: 'center', color: '#1a1a1a', outline: 'none', minHeight: 36 }} />
+                          <button onClick={() => setStockForm(prev => ({ ...prev, [f.key]: (prev[f.key] || 0) + 1 }))}
+                            style={{ width: 28, height: 28, borderRadius: 6, background: 'var(--brand-primary, #E8531D)', border: 'none', cursor: 'pointer', fontSize: 16, color: '#fff' }}>+</button>
+                        </div>
+                        <p style={{ margin: '2px 0 0', color: '#d1d5db', fontSize: 10, textAlign: 'center' }}>antes: {prod[f.key] || 0}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+
+              <div style={{ marginBottom: 16 }}>
+                <label style={{ color: '#6b7280', fontSize: 12, display: 'block', marginBottom: 4 }}>Motivo (opcional)</label>
+                <input value={stockMotivo} onChange={e => setStockMotivo(e.target.value)} placeholder="Produccion, correccion, merma..."
+                  style={{ width: '100%', padding: '8px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#1a1a1a', boxSizing: 'border-box', outline: 'none' }} />
+              </div>
+
+              {stockError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{stockError}</p>}
+
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                <button onClick={() => setStockModalId(null)} style={{ padding: '9px 16px', background: '#f3f4f6', border: 'none', borderRadius: 8, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Cancelar</button>
+                <button onClick={saveStock} disabled={stockSaving} style={{ padding: '9px 20px', background: 'var(--brand-primary, #E8531D)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: stockSaving ? 0.6 : 1 }}>
+                  {stockSaving ? 'Guardando...' : 'Guardar stock'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       <WhatsAppModal isOpen={modalOpen} onClose={() => { setModalOpen(false); setModalProductos([]) }} productos={modalProductos} tipoPrecio={tipoPrecio} />
     </div>
