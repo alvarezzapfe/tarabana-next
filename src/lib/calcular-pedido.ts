@@ -13,9 +13,20 @@ const STOCK_COL: Record<string, string> = {
   caja24: 'stock_caja24',
   barril_pet: 'stock_barril_pet',
   barril_acero: 'stock_barril_acero',
+  barril10_pet: 'stock_barril10_pet',
+  barril10_acero: 'stock_barril10_acero',
 }
 
-const MAYORISTA_ONLY = new Set(['barril_pet', 'barril_acero'])
+const UNIDAD_LABEL: Record<string, string> = {
+  caja12: 'Caja 12',
+  caja24: 'Caja 24',
+  barril_pet: 'Barril 20L PET',
+  barril_acero: 'Barril 20L Acero',
+  barril10_pet: 'Barril 10L PET',
+  barril10_acero: 'Barril 10L Acero',
+  lata: 'Lata',
+  mix24: 'Mix 24',
+}
 
 /**
  * Returns the unit price for a product + presentation + price level.
@@ -30,8 +41,10 @@ export function precioUnitario(prod: Record<string, any>, unidad: string, sufijo
     case 'caja12': return Math.round(precioLata * 12)
     case 'caja24': return Math.round(precioLata * 24)
     case 'lata':   return Math.round(precioLata)
-    case 'barril_pet':   return (prod[`precio_barril_pet_${sufijo}`] as number) || 0
-    case 'barril_acero': return (prod[`precio_barril_acero_${sufijo}`] as number) || (prod.precio_barril_acero_taproom as number) || 0
+    case 'barril_pet':    return (prod[`precio_barril_pet_${sufijo}`] as number) || 0
+    case 'barril_acero':  return (prod[`precio_barril_acero_${sufijo}`] as number) || 0
+    case 'barril10_pet':  return (prod[`precio_barril10_pet_${sufijo}`] as number) || 0
+    case 'barril10_acero': return (prod[`precio_barril10_acero_${sufijo}`] as number) || 0
     default: return Math.round(precioLata * 24) // fallback to caja24
   }
 }
@@ -110,22 +123,19 @@ export function calcularPedido(
       // ── ITEM NORMAL ──
       if (!productoId) return { error: 'Item sin producto_id', status: 400 }
 
-      if (MAYORISTA_ONLY.has(unidad) && !esMayorista) {
-        return { error: `La presentacion ${unidad} no esta disponible para este nivel de precio.`, status: 403 }
-      }
-
       const prod = stockMap.get(productoId)
       if (!prod) return { error: 'Producto no encontrado', status: 400 }
+
+      const label = UNIDAD_LABEL[unidad] || unidad
+      const precio = precioUnitario(prod, unidad, sufijo)
+      if (precio <= 0) {
+        return { error: `${prod.nombre} no tiene precio ${sufijo === 'taproom' ? 'mayorista' : 'publico'} configurado para ${label}.`, status: 400 }
+      }
 
       const stockKey = STOCK_COL[unidad] || `stock_${unidad}`
       const stockDisponible = (prod[stockKey] as number) ?? 0
       if (stockDisponible < cantidad) {
-        return { error: `Stock insuficiente para ${prod.nombre}. Disponible: ${stockDisponible}.`, status: 400 }
-      }
-
-      const precio = precioUnitario(prod, unidad, sufijo)
-      if (precio <= 0) {
-        return { error: `${prod.nombre} no tiene precio configurado para ${unidad}.`, status: 400 }
+        return { error: `Stock insuficiente de ${label} para ${prod.nombre}. Disponible: ${stockDisponible}.`, status: 400 }
       }
 
       const subtotal = cantidad * precio

@@ -68,7 +68,7 @@ export default function NuevoPedidoPage() {
     if (unidad === 'caja12') return Math.round(precioLata * 12)
     if (unidad === 'caja24') return Math.round(precioLata * 24)
     if (unidad === 'barril_pet') return (p as any)[`precio_barril_pet_${suf}`] as number || 0
-    if (unidad === 'barril_acero') return p.precio_barril_acero_taproom || 0
+    if (unidad === 'barril_acero') return (p as any)[`precio_barril_acero_${suf}`] as number || 0
     return 0
   }
 
@@ -92,6 +92,56 @@ export default function NuevoPedidoPage() {
       setItems([...items, { producto_id: key, nombre: `${producto.nombre} — ${uLabel}`, unidad, cantidad: 1, precio }])
     }
   }
+
+  // Recalculate cart prices when the price level changes (client switch)
+  const [prevSufijo, setPrevSufijo] = useState(sufijoPrecio)
+  const [removedWarning, setRemovedWarning] = useState('')
+  useEffect(() => {
+    if (sufijoPrecio === prevSufijo) return
+    setPrevSufijo(sufijoPrecio)
+    if (items.length === 0) return
+
+    const kept: Item[] = []
+    const dropped: string[] = []
+    for (const item of items) {
+      if (item.unidad === 'mix24') {
+        // Mix: recalculate prorrateo per lata
+        const meta = (item as any).metadata
+        if (meta?.estilos) {
+          let mixTotal = 0
+          let valid = true
+          for (const e of meta.estilos) {
+            const prod = productos.find(p => p.id === e.producto_id)
+            const lataPrice = prod ? ((prod as any)[`precio_lata_${sufijoPrecio}`] || 0) : 0
+            if (lataPrice <= 0) { valid = false; break }
+            mixTotal += Math.round(lataPrice) * e.latas
+          }
+          if (valid) {
+            kept.push({ ...item, precio: mixTotal })
+          } else {
+            dropped.push(item.nombre)
+          }
+        } else {
+          dropped.push(item.nombre)
+        }
+      } else {
+        const realId = item.producto_id.split('-').slice(0, -1).join('-')
+        const prod = productos.find(p => p.id === realId)
+        const newPrice = prod ? getPrecio(prod, item.unidad) : 0
+        if (newPrice > 0) {
+          kept.push({ ...item, precio: newPrice })
+        } else {
+          dropped.push(item.nombre)
+        }
+      }
+    }
+    setItems(kept)
+    if (dropped.length > 0) {
+      setRemovedWarning(`Se removieron del carrito (sin precio ${sufijoPrecio === 'taproom' ? 'mayorista' : 'publico'}): ${dropped.join(', ')}`)
+    } else {
+      setRemovedWarning('')
+    }
+  }, [sufijoPrecio])
 
   const updateCantidad = (key: string, delta: number) => {
     setItems(items.map(i => i.producto_id === key ? { ...i, cantidad: Math.max(0, i.cantidad + delta) } : i).filter(i => i.cantidad > 0))
@@ -368,6 +418,11 @@ export default function NuevoPedidoPage() {
               style={{ width: '100%', padding: '9px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
           </div>
 
+          {removedWarning && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+              <p style={{ color: '#92400e', fontSize: 13, margin: 0, lineHeight: 1.5 }}>{removedWarning}</p>
+            </div>
+          )}
           {crearError && (
             <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
               <p style={{ color: '#ef4444', fontSize: 13, margin: 0, lineHeight: 1.5 }}>{crearError}</p>

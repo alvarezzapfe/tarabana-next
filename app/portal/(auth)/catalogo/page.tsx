@@ -323,8 +323,8 @@ export default function CatalogoPage() {
         </div>
       )}
 
-      {/* SECTION 3: Barril 20L PET (mayoristas only) */}
-      {esMayorista && prodsBarril.length > 0 && (
+      {/* SECTION 3: Barril 20L PET */}
+      {prodsBarril.length > 0 && (
         <div style={{ padding: '0 48px 40px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
             <h3 style={{ margin: 0, color: '#374151', fontSize: 16, fontWeight: 700 }}>Barril 20L PET</h3>
