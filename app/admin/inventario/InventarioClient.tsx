@@ -3,10 +3,10 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import WhatsAppModal from './WhatsAppModal'
 import type { TipoPrecio } from '../../../src/lib/whatsappPrompt'
 
-interface Props {
-  productos: any[]
-  canEdit: boolean
-}
+interface Props { productos: any[]; canEdit: boolean }
+
+const stockColor = (n: number) => n === 0 ? '#9ca3af' : n <= 10 ? '#d97706' : '#10b981'
+const NS: React.CSSProperties = { fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '10px 10px', fontSize: 13, fontWeight: 600 }
 
 export default function InventarioClient({ productos, canEdit }: Props) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -18,382 +18,251 @@ export default function InventarioClient({ productos, canEdit }: Props) {
   const [modalProductos, setModalProductos] = useState<any[]>([])
   const headerCheckRef = useRef<HTMLInputElement>(null)
 
-  const estilos = useMemo(() => {
-    const set = new Set<string>()
-    productos.forEach(p => { if (p.estilo) set.add(p.estilo) })
-    return Array.from(set).sort()
-  }, [productos])
+  const estilos = useMemo(() => [...new Set(productos.map(p => p.estilo).filter(Boolean))].sort(), [productos])
 
-  const filtered = useMemo(() => {
-    return productos.filter(p => {
-      if (search) {
-        const q = search.toLowerCase()
-        if (!p.nombre?.toLowerCase().includes(q) && !p.estilo?.toLowerCase().includes(q)) return false
-      }
-      if (soloConStock) {
-        const total = (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
-        if (total === 0) return false
-      }
-      if (estiloFilter !== 'todos' && p.estilo !== estiloFilter) return false
-      return true
-    })
-  }, [productos, search, soloConStock, estiloFilter])
+  const filtered = useMemo(() => productos.filter(p => {
+    if (search) { const q = search.toLowerCase(); if (!p.nombre?.toLowerCase().includes(q) && !p.estilo?.toLowerCase().includes(q)) return false }
+    if (soloConStock && totalStock(p) === 0) return false
+    if (estiloFilter !== 'todos' && p.estilo !== estiloFilter) return false
+    return true
+  }), [productos, search, soloConStock, estiloFilter])
 
   const kpis = useMemo(() => {
-    let totalLatas = 0, totalSueltas = 0, totalBblPet = 0, totalBblAcero = 0, totalBblPet10 = 0, totalBblAcero10 = 0, valorTotal = 0
+    let totalLatas = 0, totalSueltas = 0, totalBbl = 0, bp20 = 0, ba20 = 0, bp10 = 0, ba10 = 0, valorTotal = 0
     const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
     productos.forEach(p => {
-      const c12 = p.stock_caja12 || 0
-      const c24 = p.stock_caja24 || 0
-      const bp = p.stock_barril_pet || 0
-      const ba = p.stock_barril_acero || 0
-      const bp10 = p.stock_barril10_pet || 0
-      const ba10 = p.stock_barril10_acero || 0
-      const sueltas = p.stock_latas || 0
-      totalSueltas += sueltas
-      totalLatas += sueltas + (c12 * 12) + (c24 * 24)
-      totalBblPet += bp
-      totalBblAcero += ba
-      totalBblPet10 += bp10
-      totalBblAcero10 += ba10
-      const precioLata = p[`precio_lata_${pk}`] || 0
-      valorTotal += c12 * Math.round(precioLata * 12)
-      valorTotal += c24 * Math.round(precioLata * 24)
-      valorTotal += bp * (p[`precio_barril_pet_${pk}`] || 0)
-      valorTotal += ba * (p[`precio_barril_acero_${pk}`] || 0)
-      valorTotal += bp10 * (p[`precio_barril10_pet_${pk}`] || 0)
-      valorTotal += ba10 * (p[`precio_barril10_acero_${pk}`] || 0)
+      const c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0, s = p.stock_latas || 0
+      const bbp = p.stock_barril_pet || 0, bba = p.stock_barril_acero || 0, bbp10 = p.stock_barril10_pet || 0, bba10 = p.stock_barril10_acero || 0
+      totalSueltas += s; totalLatas += s + c12 * 12 + c24 * 24
+      bp20 += bbp; ba20 += bba; bp10 += bbp10; ba10 += bba10; totalBbl += bbp + bba + bbp10 + bba10
+      const pl = p[`precio_lata_${pk}`] || 0
+      valorTotal += c12 * Math.round(pl * 12) + c24 * Math.round(pl * 24)
+      valorTotal += bbp * (p[`precio_barril_pet_${pk}`] || 0) + bba * (p[`precio_barril_acero_${pk}`] || 0)
+      valorTotal += bbp10 * (p[`precio_barril10_pet_${pk}`] || 0) + bba10 * (p[`precio_barril10_acero_${pk}`] || 0)
     })
-    return { totalLatas, totalSueltas, totalBblPet, totalBblAcero, totalBblPet10, totalBblAcero10, valorTotal }
+    return { totalLatas, totalSueltas, totalBbl, bp20, ba20, bp10, ba10, valorTotal }
   }, [productos, tipoPrecio])
 
-  // Sync header checkbox indeterminate state
-  const filteredIds = useMemo(() => new Set(filtered.map((p: any) => p.id)), [filtered])
-  const allFilteredSelected = filtered.length > 0 && filtered.every((p: any) => selected.has(p.id))
-  const someFilteredSelected = filtered.some((p: any) => selected.has(p.id))
+  const allSel = filtered.length > 0 && filtered.every(p => selected.has(p.id))
+  const someSel = filtered.some(p => selected.has(p.id))
+  useEffect(() => { if (headerCheckRef.current) headerCheckRef.current.indeterminate = someSel && !allSel }, [someSel, allSel])
+  const toggleAll = () => setSelected(allSel ? new Set() : new Set(filtered.map(p => p.id)))
+  const toggleOne = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
 
-  useEffect(() => {
-    if (headerCheckRef.current) {
-      headerCheckRef.current.indeterminate = someFilteredSelected && !allFilteredSelected
-    }
-  }, [someFilteredSelected, allFilteredSelected])
+  const openModal = (ps: any[]) => { setModalProductos(ps); setModalOpen(true) }
 
-  const toggleAll = () => {
-    if (allFilteredSelected) {
-      setSelected(new Set())
-    } else {
-      setSelected(new Set(filtered.map((p: any) => p.id)))
-    }
-  }
-
-  const toggleOne = (id: string) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  const openModalForSelection = () => {
-    setModalProductos(filtered.filter((p: any) => selected.has(p.id)))
-    setModalOpen(true)
-  }
-
-  const openModalForOne = (p: any) => {
-    setModalProductos([p])
-    setModalOpen(true)
-  }
-
-  const getPrice = (p: any) => {
-    const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
-    const precioLata = p[`precio_lata_${pk}`]
-    return precioLata ? '$' + Math.round(precioLata).toLocaleString('es-MX') + '/lata' : '—'
-  }
-
-  const totalStock = (p: any) => (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0)
-
-  /** Returns 'none' | 'mayorista' | 'ok' */
   const priceStatus = (p: any): 'none' | 'mayorista' | 'ok' => {
-    let missingPub = false, missingTap = false
-    // Lata-based: any lata/caja stock needs precio_lata_*
-    const hasLataStock = (p.stock_caja24 || 0) > 0 || (p.stock_caja12 || 0) > 0 || (p.stock_latas || 0) > 0
-    if (hasLataStock) {
-      if (!p.precio_lata_publico) missingPub = true
-      if (!p.precio_lata_taproom) missingTap = true
-    }
-    // Barriles: own prices
-    if ((p.stock_barril_pet || 0) > 0) {
-      if (!p.precio_barril_pet_publico) missingPub = true
-      if (!p.precio_barril_pet_taproom) missingTap = true
-    }
-    if ((p.stock_barril_acero || 0) > 0) {
-      if (!p.precio_barril_acero_publico) missingPub = true
-      if (!p.precio_barril_acero_taproom) missingTap = true
-    }
-    if (missingPub) return 'none'
-    if (missingTap) return 'mayorista'
-    return 'ok'
+    let mp = false, mt = false
+    if ((p.stock_caja24 || 0) > 0 || (p.stock_caja12 || 0) > 0 || (p.stock_latas || 0) > 0) { if (!p.precio_lata_publico) mp = true; if (!p.precio_lata_taproom) mt = true }
+    if ((p.stock_barril_pet || 0) > 0) { if (!p.precio_barril_pet_publico) mp = true; if (!p.precio_barril_pet_taproom) mt = true }
+    if ((p.stock_barril_acero || 0) > 0) { if (!p.precio_barril_acero_publico) mp = true; if (!p.precio_barril_acero_taproom) mt = true }
+    return mp ? 'none' : mt ? 'mayorista' : 'ok'
   }
-
-  const hasMissingPrice = (p: any): boolean => priceStatus(p) !== 'ok'
-
   const missingAll = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'none'), [productos])
   const missingMayo = useMemo(() => productos.filter(p => p.activo && priceStatus(p) === 'mayorista'), [productos])
   const hasAlert = missingAll.length > 0 || missingMayo.length > 0
 
   const priceTooltip = (p: any): string => {
     const lp = p.precio_lata_publico || 0, lt = p.precio_lata_taproom || 0
-    const rows = [
-      `Lata: $${lp || '—'} / $${lt || '—'}`,
-      `Caja 12: $${lp ? Math.round(lp * 12) : '—'} / $${lt ? Math.round(lt * 12) : '—'}`,
+    return [`Lata: $${lp || '—'} / $${lt || '—'}`, `Caja 12: $${lp ? Math.round(lp * 12) : '—'} / $${lt ? Math.round(lt * 12) : '—'}`,
       `Caja 24: $${lp ? Math.round(lp * 24) : '—'} / $${lt ? Math.round(lt * 24) : '—'}`,
-      `Bbl PET: $${p.precio_barril_pet_publico || '—'} / $${p.precio_barril_pet_taproom || '—'}`,
-      `Bbl Acero: $${p.precio_barril_acero_publico || '—'} / $${p.precio_barril_acero_taproom || '—'}`,
-    ]
-    return rows.join('\n')
+      `Bbl 20L PET: $${p.precio_barril_pet_publico || '—'} / $${p.precio_barril_pet_taproom || '—'}`,
+      `Bbl 20L Acero: $${p.precio_barril_acero_publico || '—'} / $${p.precio_barril_acero_taproom || '—'}`].join('\n')
   }
 
-  const pillActive = { background: '#E8531D', color: '#1a1a1a', border: '1px solid #E8531D' }
-  const pillInactive = { background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db' }
+  const pillAct = { background: 'var(--brand-primary, #E8531D)', color: '#fff', border: '1px solid var(--brand-primary, #E8531D)' }
+  const pillIn = { background: 'transparent', color: '#6b7280', border: '1px solid #d1d5db' }
+
+  const bblStr = (pet: number, acero: number) => {
+    if (pet === 0 && acero === 0) return '—'
+    const parts = []
+    if (pet > 0) parts.push(`${pet}P`)
+    if (acero > 0) parts.push(`${acero}A`)
+    return parts.join(' · ')
+  }
 
   return (
     <div>
+      <style>{`
+        @media (max-width: 768px) { .inv-table { display: none; } .inv-cards { display: flex !important; } .inv-kpi { grid-template-columns: 1fr !important; } }
+        @media (min-width: 769px) { .inv-cards { display: none !important; } }
+      `}</style>
+
       {/* TOPBAR */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Inventario</h1>
-          <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>Stock listo para venta</p>
+          <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>{productos.filter(p => p.activo).length} productos activos</p>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-          {/* Precio toggle */}
-          <div style={{ display: 'flex', gap: 0 }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <div style={{ display: 'flex' }}>
             {(['mayorista', 'minorista'] as TipoPrecio[]).map(t => (
-              <button key={t} onClick={() => setTipoPrecio(t)} style={{
-                ...(tipoPrecio === t ? pillActive : pillInactive),
-                padding: '8px 16px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
-                borderRadius: t === 'mayorista' ? '7px 0 0 7px' : '0 7px 7px 0',
-                textTransform: 'capitalize',
-              }}>{t}</button>
+              <button key={t} onClick={() => setTipoPrecio(t)} style={{ ...(tipoPrecio === t ? pillAct : pillIn), padding: '7px 14px', fontSize: 12, fontWeight: 600, cursor: 'pointer', borderRadius: t === 'mayorista' ? '7px 0 0 7px' : '0 7px 7px 0', textTransform: 'capitalize' }}>{t}</button>
             ))}
           </div>
-          <button onClick={() => {
-            const withStock = productos.filter((p: any) => p.activo !== false && totalStock(p) > 0)
-            if (withStock.length === 0) { alert('No hay productos con stock disponible'); return }
-            setModalProductos(withStock)
-            setModalOpen(true)
-          }} style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: '#E8531D', color: '#1a1a1a', padding: '10px 20px',
-            borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none',
-          }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><polyline points="14 2 14 8 20 8" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><polyline points="10 9 9 9 8 9" /></svg>
-            Generar prompt de inventario →
+          <button onClick={() => { const ws = productos.filter(p => p.activo && totalStock(p) > 0); if (ws.length) openModal(ws); }} style={{ padding: '8px 16px', background: 'var(--brand-primary, #E8531D)', color: '#fff', border: 'none', borderRadius: 7, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+            Prompt WhatsApp
           </button>
-          {canEdit && (
-            <a href="/admin/inventario/nuevo" style={{
-              display: 'flex', alignItems: 'center', gap: 8,
-              background: '#E8531D', color: '#1a1a1a', padding: '9px 18px',
-              borderRadius: 7, textDecoration: 'none', fontSize: 13.5, fontWeight: 600
-            }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14" /></svg>
-              Nuevo producto
-            </a>
-          )}
+          {canEdit && <a href="/admin/inventario/nuevo" style={{ padding: '8px 16px', background: 'var(--brand-primary, #E8531D)', color: '#fff', borderRadius: 7, textDecoration: 'none', fontSize: 12, fontWeight: 600 }}>Nuevo producto</a>}
         </div>
       </div>
 
-      {/* KPI GRID */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 24 }}>
-        {[
-          { label: 'Latas totales', value: kpis.totalLatas.toLocaleString(), unit: 'latas', color: '#E8531D', sub: `de las cuales ${kpis.totalSueltas.toLocaleString()} sueltas` },
-          { label: 'Barriles 20L PET', value: kpis.totalBblPet.toString(), unit: 'uds', color: '#f59e0b' },
-          { label: 'Barriles 20L Acero', value: kpis.totalBblAcero.toString(), unit: 'uds', color: '#10b981' },
-          { label: 'Barriles 10L PET', value: kpis.totalBblPet10.toString(), unit: 'uds', color: '#eab308' },
-          { label: 'Barriles 10L Acero', value: kpis.totalBblAcero10.toString(), unit: 'uds', color: '#06b6d4' },
-          { label: 'Valor total', value: '$' + Math.round(kpis.valorTotal).toLocaleString('es-MX'), unit: 'MXN', color: '#3b82f6' },
-        ].map((s: any) => (
-          <div key={s.label} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '18px 22px' }}>
-            <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>{s.label}</p>
-            <p style={{ color: s.color, fontSize: 26, fontWeight: 700, margin: '6px 0 0' }}>{s.value} <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 400 }}>{s.unit}</span></p>
-            {s.sub && <p style={{ color: '#9ca3af', fontSize: 11, margin: '4px 0 0' }}>{s.sub}</p>}
-          </div>
-        ))}
+      {/* KPIs — 3 cards */}
+      <div className="inv-kpi" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
+          <p style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Latas totales</p>
+          <p style={{ color: 'var(--brand-primary, #E8531D)', fontSize: 28, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>{kpis.totalLatas.toLocaleString()}</p>
+          <p style={{ color: '#9ca3af', fontSize: 11, margin: '2px 0 0' }}>de las cuales {kpis.totalSueltas.toLocaleString()} sueltas</p>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
+          <p style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Barriles</p>
+          <p style={{ color: '#f59e0b', fontSize: 28, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>{kpis.totalBbl}</p>
+          <p style={{ color: '#9ca3af', fontSize: 11, margin: '2px 0 0' }}>20L: {kpis.bp20} PET · {kpis.ba20} acero  |  10L: {kpis.bp10} PET · {kpis.ba10} acero</p>
+        </div>
+        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
+          <p style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Valor total</p>
+          <p style={{ color: '#3b82f6', fontSize: 28, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>${Math.round(kpis.valorTotal).toLocaleString('es-MX')}</p>
+          <p style={{ color: '#9ca3af', fontSize: 11, margin: '2px 0 0' }}>MXN</p>
+        </div>
       </div>
 
-      {/* MISSING PRICE ALERT */}
+      {/* ALERT */}
       {hasAlert && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '14px 20px', marginBottom: 20 }}>
-          {missingAll.length > 0 && (
-            <div style={{ marginBottom: missingMayo.length > 0 ? 10 : 0 }}>
-              <p style={{ margin: '0 0 4px', color: '#dc2626', fontSize: 13, fontWeight: 600 }}>
-                {missingAll.length} producto{missingAll.length > 1 ? 's' : ''} sin ningún precio — no se pueden vender
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {missingAll.map((p, i) => (
-                  <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: '#E8531D', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>
-                    {p.nombre}{i < missingAll.length - 1 ? ',' : ''}
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
-          {missingMayo.length > 0 && (
-            <div>
-              <p style={{ margin: '0 0 4px', color: '#d97706', fontSize: 13, fontWeight: 600 }}>
-                {missingMayo.length} producto{missingMayo.length > 1 ? 's' : ''} sin precio mayorista — clientes mayoristas no pueden comprarlos
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                {missingMayo.map((p, i) => (
-                  <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: '#E8531D', fontSize: 12, textDecoration: 'none', fontWeight: 500 }}>
-                    {p.nombre}{i < missingMayo.length - 1 ? ',' : ''}
-                  </a>
-                ))}
-              </div>
-            </div>
-          )}
+        <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '12px 18px', marginBottom: 16 }}>
+          {missingAll.length > 0 && <p style={{ margin: '0 0 4px', color: '#dc2626', fontSize: 12, fontWeight: 600 }}>{missingAll.length} sin precio — {missingAll.map((p, i) => <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: 'var(--brand-primary, #E8531D)', textDecoration: 'none' }}>{p.nombre}{i < missingAll.length - 1 ? ', ' : ''}</a>)}</p>}
+          {missingMayo.length > 0 && <p style={{ margin: 0, color: '#d97706', fontSize: 12, fontWeight: 600 }}>{missingMayo.length} sin mayorista — {missingMayo.map((p, i) => <a key={p.id} href={`/admin/inventario/edit/${p.id}`} style={{ color: 'var(--brand-primary, #E8531D)', textDecoration: 'none' }}>{p.nombre}{i < missingMayo.length - 1 ? ', ' : ''}</a>)}</p>}
         </div>
       )}
 
       {/* FILTERS */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 16, alignItems: 'center' }}>
-        <input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar por nombre o estilo..."
-          style={{ flex: 1, background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '9px 12px', fontSize: 13, color: '#1a1a1a', outline: 'none' }}
-        />
-        <select
-          value={estiloFilter}
-          onChange={e => setEstiloFilter(e.target.value)}
-          style={{ background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '9px 12px', fontSize: 13, color: '#1a1a1a', cursor: 'pointer', minWidth: 160, outline: 'none' }}
-        >
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." style={{ flex: 1, minWidth: 160, background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: '#1a1a1a', outline: 'none' }} />
+        <select value={estiloFilter} onChange={e => setEstiloFilter(e.target.value)} style={{ background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 7, padding: '8px 12px', fontSize: 13, color: '#1a1a1a', cursor: 'pointer', outline: 'none' }}>
           <option value="todos">Todos los estilos</option>
           {estilos.map(e => <option key={e} value={e}>{e}</option>)}
         </select>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, color: '#999', cursor: 'pointer', padding: '9px 14px', whiteSpace: 'nowrap' }}>
-          <input type="checkbox" checked={soloConStock} onChange={e => setSoloConStock(e.target.checked)} />
-          Solo con stock
+        <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: '#9ca3af', cursor: 'pointer', whiteSpace: 'nowrap' }}>
+          <input type="checkbox" checked={soloConStock} onChange={e => setSoloConStock(e.target.checked)} /> Solo con stock
         </label>
       </div>
 
       {/* SELECTION BAR */}
       {selected.size > 0 && (
-        <div style={{ background: 'rgba(232,83,29,0.08)', border: '1px solid rgba(232,83,29,0.3)', borderRadius: 8, padding: '12px 16px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
-            <span style={{ color: '#E8531D', fontWeight: 600, fontSize: 14 }}>{selected.size} seleccionado{selected.size > 1 ? 's' : ''}</span>
-            <span onClick={() => setSelected(new Set())} style={{ color: '#6b7280', textDecoration: 'underline', cursor: 'pointer', fontSize: 13 }}>Deseleccionar todos</span>
-          </div>
-          <button onClick={openModalForSelection} style={{ background: '#E8531D', color: '#1a1a1a', border: 'none', padding: '10px 20px', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: 13 }}>
-            Generar WhatsApp →
-          </button>
+        <div style={{ background: 'rgba(232,83,29,0.06)', border: '1px solid rgba(232,83,29,0.2)', borderRadius: 8, padding: '10px 16px', marginBottom: 14, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: 'var(--brand-primary, #E8531D)', fontWeight: 600, fontSize: 13 }}>{selected.size} seleccionado{selected.size > 1 ? 's' : ''} <span onClick={() => setSelected(new Set())} style={{ color: '#6b7280', textDecoration: 'underline', cursor: 'pointer', fontWeight: 400, marginLeft: 8 }}>Limpiar</span></span>
+          <button onClick={() => openModal(filtered.filter(p => selected.has(p.id)))} style={{ background: 'var(--brand-primary, #E8531D)', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: 7, fontWeight: 600, cursor: 'pointer', fontSize: 12 }}>WhatsApp</button>
         </div>
       )}
 
-      {/* TABLE */}
-      <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+      {/* TABLE — desktop */}
+      <div className="inv-table" style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 900 }}>
           <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              <th style={{ padding: '10px 14px', textAlign: 'left', width: 36 }}>
-                <input ref={headerCheckRef} type="checkbox" checked={allFilteredSelected} onChange={toggleAll} />
+            {/* Level 1 */}
+            <tr style={{ borderBottom: '1px solid #e5e7eb', background: '#f9fafb', position: 'sticky', top: 0, zIndex: 2 }}>
+              <th rowSpan={2} style={{ padding: '8px 10px', width: 36, position: 'sticky', left: 0, background: '#f9fafb', zIndex: 3 }}>
+                <input ref={headerCheckRef} type="checkbox" checked={allSel} onChange={toggleAll} />
               </th>
-              {['Producto', 'ABV', 'Sueltas', 'Caja 12', 'Caja 24', 'Bbl 20L PET', 'Bbl 20L Acero', 'Bbl 10L PET', 'Bbl 10L Acero', 'Total latas', 'Precio', 'Estado', ''].map(h => (
-                <th key={h} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 14px', textTransform: 'uppercase', letterSpacing: '0.06em', whiteSpace: 'nowrap' }}>{h}</th>
-              ))}
+              <th rowSpan={2} style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', position: 'sticky', left: 36, background: '#f9fafb', zIndex: 3, minWidth: 180 }}>Producto</th>
+              <th colSpan={4} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb' }}>Latas</th>
+              <th colSpan={2} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb', borderLeft: '1px solid #e5e7eb' }}>Barriles</th>
+              <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'right', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio</th>
+              <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Estado</th>
+              <th rowSpan={2} style={{ padding: '8px 10px', width: 60 }}></th>
+            </tr>
+            {/* Level 2 */}
+            <tr style={{ borderBottom: '1px solid #e5e7eb', background: '#f9fafb', position: 'sticky', top: 28, zIndex: 2 }}>
+              {['Sueltas', 'Caja 12', 'Caja 24', 'Total'].map(h => <th key={h} style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>{h}</th>)}
+              <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500, borderLeft: '1px solid #e5e7eb' }}>20L</th>
+              <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>10L</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length ? filtered.map((p: any) => {
-              const stock0 = totalStock(p) === 0
+              const sl = p.stock_latas || 0, c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0
+              const tl = sl + c12 * 12 + c24 * 24
+              const bp20 = p.stock_barril_pet || 0, ba20 = p.stock_barril_acero || 0
+              const bp10 = p.stock_barril10_pet || 0, ba10 = p.stock_barril10_acero || 0
+              const ps = priceStatus(p)
+              const isZeroActive = p.activo && totalStock(p) === 0
               return (
-                <tr key={p.id} style={{
-                  borderBottom: '1px solid #f3f4f6',
-                  borderLeft: !p.activo ? '2px solid rgba(232,83,29,0.5)' : 'none',
-                  opacity: stock0 ? 0.5 : 1,
-                  transition: 'background 0.15s',
-                }}>
-                  <td style={{ padding: '12px 14px' }}>
+                <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6', opacity: !p.activo ? 0.5 : 1 }}>
+                  <td style={{ padding: '10px 10px', position: 'sticky', left: 0, background: '#fff', zIndex: 1 }}>
                     <input type="checkbox" checked={selected.has(p.id)} onChange={() => toggleOne(p.id)} />
                   </td>
-                  <td style={{ padding: '12px 14px' }}>
+                  <td style={{ padding: '10px 12px', position: 'sticky', left: 36, background: '#fff', zIndex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       {p.imagen_url
-                        ? <img src={p.imagen_url} alt={p.nombre} style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 6 }} />
-                        : <div style={{ width: 36, height: 36, background: '#f3f4f6', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8"><path d="M17 11h1a3 3 0 010 6h-1M9 12v6M13 12v6M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4L18 8z"/></svg>
-                          </div>
-                      }
+                        ? <img src={p.imagen_url} alt={p.nombre} style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }} />
+                        : <div style={{ width: 40, height: 40, background: '#f3f4f6', borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.8"><path d="M17 11h1a3 3 0 010 6h-1M9 12v6M13 12v6M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4L18 8z"/></svg></div>}
                       <div>
-                        <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13.5, fontWeight: 600 }}>{p.nombre}</p>
-                        <p style={{ color: '#6b7280', margin: 0, fontSize: 13 }}>{p.estilo}</p>
+                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#1a1a1a' }}>{p.nombre}</p>
+                        <p style={{ margin: 0, fontSize: 11, color: '#9ca3af' }}>{p.estilo}{p.abv ? ` · ${p.abv}%` : ''}</p>
                       </div>
                     </div>
                   </td>
-                  <td style={{ color: '#6b7280', padding: '12px 14px', fontSize: 13 }}>{p.abv ? `${p.abv}%` : '—'}</td>
-                  <td style={{ color: (p.stock_latas || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_latas || 0}</td>
-                  <td style={{ color: (p.stock_caja12 || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_caja12 || 0}</td>
-                  <td style={{ color: (p.stock_caja24 || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_caja24 || 0}</td>
-                  <td style={{ color: (p.stock_barril_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_pet || 0}</td>
-                  <td style={{ color: (p.stock_barril_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril_acero || 0}</td>
-                  <td style={{ color: (p.stock_barril10_pet || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_pet || 0}</td>
-                  <td style={{ color: (p.stock_barril10_acero || 0) > 0 ? '#10b981' : '#ef4444', padding: '12px 14px', fontSize: 13, fontWeight: 600 }}>{p.stock_barril10_acero || 0}</td>
-                  {(() => {
-                    const sueltas = p.stock_latas || 0
-                    const enC12 = (p.stock_caja12 || 0) * 12
-                    const enC24 = (p.stock_caja24 || 0) * 24
-                    const totalL = sueltas + enC12 + enC24
-                    return (
-                      <td style={{ padding: '12px 14px', fontSize: 13, fontWeight: 700, color: totalL > 0 ? '#1a1a1a' : '#ef4444' }}
-                        title={`${sueltas} sueltas + ${enC12} en cajas 12 + ${enC24} en cajas 24`}>
-                        {totalL}
-                      </td>
-                    )
-                  })()}
-                  <td style={{ padding: '12px 14px', whiteSpace: 'nowrap' }} title={priceTooltip(p)}>
-                    {(() => {
-                      const ps = priceStatus(p)
-                      if (ps === 'none') return <span style={{ background: '#fee2e2', color: '#dc2626', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Sin precio</span>
-                      if (ps === 'mayorista') return <span style={{ background: '#fef3c7', color: '#d97706', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, whiteSpace: 'nowrap' }}>Falta mayorista</span>
-                      return p.precio_lata_publico
-                        ? <span style={{ color: '#E8531D', fontSize: 13, cursor: 'help' }}>${Math.round(p.precio_lata_publico).toLocaleString('es-MX')}/lata</span>
-                        : <span style={{ color: '#9ca3af', fontSize: 13 }}>—</span>
-                    })()}
+                  <td style={{ ...NS, color: stockColor(sl) }}>{sl}</td>
+                  <td style={{ ...NS, color: stockColor(c12) }}>{c12}</td>
+                  <td style={{ ...NS, color: stockColor(c24) }}>{c24}</td>
+                  <td style={{ ...NS, color: tl > 0 ? '#1a1a1a' : '#9ca3af', fontWeight: 700 }} title={`${sl} sueltas + ${c12 * 12} en C12 + ${c24 * 24} en C24`}>{tl}</td>
+                  <td style={{ ...NS, borderLeft: '1px solid #f3f4f6' }} title={`PET: ${bp20}, Acero: ${ba20}`}>
+                    <span style={{ color: stockColor(bp20 + ba20) }}>{bblStr(bp20, ba20)}</span>
                   </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{
-                      background: p.activo ? '#d1fae5' : '#f3f4f6',
-                      color: p.activo ? '#10b981' : '#555',
-                      padding: '3px 10px', borderRadius: 99, fontSize: 11
-                    }}>{p.activo ? 'Activo' : 'Inactivo'}</span>
+                  <td style={NS} title={`PET: ${bp10}, Acero: ${ba10}`}>
+                    <span style={{ color: stockColor(bp10 + ba10) }}>{bblStr(bp10, ba10)}</span>
                   </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      <button onClick={() => openModalForOne(p)} style={{ width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(37,211,102,0.1)', color: '#25D366', border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }} title="WhatsApp">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492l4.574-1.2A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z" /></svg>
+                  <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }} title={priceTooltip(p)}>
+                    {ps === 'none' ? <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Sin precio</span>
+                      : ps === 'mayorista' ? <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Falta may.</span>
+                      : p.precio_lata_publico ? <span style={{ color: 'var(--brand-primary, #E8531D)', fontSize: 13, cursor: 'help', fontVariantNumeric: 'tabular-nums' }}>${Math.round(p.precio_lata_publico).toLocaleString('es-MX')}/lata</span>
+                      : <span style={{ color: '#9ca3af' }}>—</span>}
+                  </td>
+                  <td style={{ padding: '10px 10px', textAlign: 'center' }}>
+                    {isZeroActive ? <span style={{ background: '#fee2e2', color: '#ef4444', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Sin stock</span>
+                      : <span style={{ background: p.activo ? '#d1fae5' : '#f3f4f6', color: p.activo ? '#10b981' : '#9ca3af', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 500 }}>{p.activo ? 'Activo' : 'Inactivo'}</span>}
+                  </td>
+                  <td style={{ padding: '10px 10px' }}>
+                    <div style={{ display: 'flex', gap: 6, alignItems: 'center', justifyContent: 'center' }}>
+                      <button onClick={() => openModal([p])} style={{ width: 26, height: 26, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(37,211,102,0.1)', color: '#25D366', border: 'none', borderRadius: 6, cursor: 'pointer', padding: 0 }} title="WhatsApp">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347zM12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492l4.574-1.2A11.94 11.94 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0z"/></svg>
                       </button>
-                      {canEdit && (
-                        <a href={`/admin/inventario/edit/${p.id}`} style={{ color: '#6b7280', display: 'flex', alignItems: 'center' }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                        </a>
-                      )}
+                      {canEdit && <a href={`/admin/inventario/edit/${p.id}`} style={{ color: '#9ca3af', display: 'flex' }}><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></a>}
                     </div>
                   </td>
                 </tr>
               )
-            }) : (
-              <tr><td colSpan={14} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>No hay productos que coincidan con los filtros</td></tr>
-            )}
+            }) : <tr><td colSpan={11} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin productos</td></tr>}
           </tbody>
         </table>
       </div>
 
-      <WhatsAppModal
-        isOpen={modalOpen}
-        onClose={() => { setModalOpen(false); setModalProductos([]) }}
-        productos={modalProductos}
-        tipoPrecio={tipoPrecio}
-      />
+      {/* MOBILE CARDS */}
+      <div className="inv-cards" style={{ display: 'none', flexDirection: 'column', gap: 10 }}>
+        {filtered.map((p: any) => {
+          const sl = p.stock_latas || 0, c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0
+          const bp = p.stock_barril_pet || 0, ba = p.stock_barril_acero || 0
+          return (
+            <div key={p.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', opacity: p.activo ? 1 : 0.5 }}>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                {p.imagen_url && <img src={p.imagen_url} style={{ width: 44, height: 44, borderRadius: 6, objectFit: 'cover' }} />}
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 14, color: '#1a1a1a' }}>{p.nombre}</p>
+                  <p style={{ margin: 0, fontSize: 12, color: '#9ca3af' }}>{p.estilo}{p.abv ? ` · ${p.abv}%` : ''}</p>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                {[{ l: 'Sueltas', v: sl }, { l: 'C12', v: c12 }, { l: 'C24', v: c24 }, { l: 'Bbl', v: bp + ba }].map(s => (
+                  <span key={s.l} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: s.v === 0 ? '#f3f4f6' : s.v <= 10 ? '#fef3c7' : '#d1fae5', color: stockColor(s.v) }}>{s.l}: {s.v}</span>
+                ))}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      <WhatsAppModal isOpen={modalOpen} onClose={() => { setModalOpen(false); setModalProductos([]) }} productos={modalProductos} tipoPrecio={tipoPrecio} />
     </div>
   )
 }
+
+function totalStock(p: any) { return (p.stock_caja12 || 0) + (p.stock_caja24 || 0) + (p.stock_barril_pet || 0) + (p.stock_barril_acero || 0) + (p.stock_barril10_pet || 0) + (p.stock_barril10_acero || 0) }
