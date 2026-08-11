@@ -1,10 +1,10 @@
 'use client'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { canManageInventory, isSuperAdmin as checkSuperAdmin } from '../../../../../src/lib/roles'
 
-const estilos = ['IPA', 'Double IPA', 'Session IPA', 'New England IPA', 'West Coast IPA', 'Red IPA', 'Lager', 'Lager Mexicana', 'Czech Pale Lager', 'Stout', 'Porter', 'Wheat', 'Sour', 'Pale Ale', 'Amber Ale', 'Otro']
+interface EstiloDB { id: string; nombre: string; familia: string | null; orden: number }
 
 export default function EditProductoPage() {
   const router = useRouter()
@@ -17,6 +17,8 @@ export default function EditProductoPage() {
   const [imgFile, setImgFile] = useState<File | null>(null)
   const [imgPreview, setImgPreview] = useState<string | null>(null)
   const [userRole, setUserRole] = useState<string>('')
+  const [estilos, setEstilos] = useState<EstiloDB[]>([])
+
   const [form, setForm] = useState({
     nombre: '', estilo: '', abv: '', ibu: '', descripcion: '', descripcion_larga: '',
     precio_lata_publico: '', precio_lata_taproom: '',
@@ -28,6 +30,20 @@ export default function EditProductoPage() {
     stock_barril10_pet: '0', stock_barril10_acero: '0',
     activo: true, imagen_url: '',
   })
+
+  const estilosByFamilia = useMemo(() => {
+    const groups: Record<string, EstiloDB[]> = {}
+    for (const e of estilos) {
+      const fam = e.familia || 'Otros'
+      if (!groups[fam]) groups[fam] = []
+      groups[fam].push(e)
+    }
+    return groups
+  }, [estilos])
+
+  useEffect(() => {
+    fetch('/api/admin/inventario/estilos').then(r => r.json()).then(data => { if (Array.isArray(data)) setEstilos(data) })
+  }, [])
 
   useEffect(() => {
     const load = async () => {
@@ -225,7 +241,15 @@ export default function EditProductoPage() {
             <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Estilo</label>
             <select value={form.estilo} onChange={e => set('estilo', e.target.value)} disabled={!isSuperAdmin}
               style={{ width: '100%', padding: '10px 12px', background: !isSuperAdmin ? '#f3f4f6' : '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, color: form.estilo ? '#1a1a1a' : '#9ca3af', fontSize: 14, boxSizing: 'border-box' as const, minHeight: 44, outline: 'none' }}>
-              {estilos.map(e => <option key={e} value={e}>{e}</option>)}
+              <option value="">Selecciona estilo</option>
+              {Object.entries(estilosByFamilia).map(([familia, items]) => (
+                <optgroup key={familia} label={familia}>
+                  {items.map(e => <option key={e.id} value={e.nombre}>{e.nombre}</option>)}
+                </optgroup>
+              ))}
+              {form.estilo && !estilos.some(e => e.nombre === form.estilo) && (
+                <option value={form.estilo}>{form.estilo}</option>
+              )}
             </select>
           </div>
 
