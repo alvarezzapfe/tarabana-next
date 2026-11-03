@@ -1,6 +1,7 @@
 'use client'
 import { useState, useMemo } from 'react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts'
+import KpiCard from '../KpiCard'
 
 interface Props { pedidos: any[]; saldos: any[]; clientes: any[] }
 
@@ -222,21 +223,19 @@ export default function ReportesClient({ pedidos, saldos, clientes }: Props) {
         <span style={{ marginLeft: 'auto', color: '#6b7280', fontSize: 12 }}>{pedidosFiltrados.length} pedidos en periodo</span>
       </div>
 
-      {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 12, marginBottom: 20 }}>
+      {/* KPIs — mismo estilo neutro que el dashboard: el color solo marca
+          lo que hay que atender (por cobrar y vencido). */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total ventas', value: fmt(resumen.totalVentas), color: '#E8531D' },
-          { label: 'Cobrado', value: fmt(resumen.cobrado), color: '#10b981' },
-          { label: 'Por cobrar', value: fmt(resumen.porCobrar), color: '#f59e0b' },
-          { label: 'Vencido', value: fmt(resumen.vencido), color: '#ef4444' },
-          { label: 'Pedidos', value: resumen.pedidos, color: '#3b82f6' },
-          { label: 'Ticket promedio', value: fmt(Math.round(resumen.ticket)), color: '#8b5cf6' },
-          { label: 'Clientes unicos', value: resumen.clientesUnicos, color: '#ec4899' },
+          { label: 'Total ventas', valor: fmt(resumen.totalVentas) },
+          { label: 'Cobrado', valor: fmt(resumen.cobrado) },
+          { label: 'Por cobrar', valor: fmt(resumen.porCobrar), senal: 'alerta' as const },
+          { label: 'Vencido', valor: fmt(resumen.vencido), senal: 'alerta' as const },
+          { label: 'Pedidos', valor: resumen.pedidos.toLocaleString('es-MX') },
+          { label: 'Ticket promedio', valor: fmt(Math.round(resumen.ticket)) },
+          { label: 'Clientes únicos', valor: resumen.clientesUnicos.toLocaleString('es-MX') },
         ].map(s => (
-          <div key={s.label} style={card}>
-            <p style={title}>{s.label}</p>
-            <p style={{ color: s.color, fontSize: 20, fontWeight: 700, margin: 0 }}>{s.value}</p>
-          </div>
+          <KpiCard key={s.label} label={s.label} valor={s.valor} senal={s.senal} />
         ))}
       </div>
 

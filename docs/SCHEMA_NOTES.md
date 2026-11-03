@@ -74,3 +74,38 @@ en cero (0 == 0). En las 7 filas con datos reales no coincide.
 **Tratarla como derivada y omitirla subestima el stock; sumarla ademas de un
 total ya derivado lo duplica.** Los factores de conversion viven en
 `src/lib/unidades.ts`; usar esos y no reimplementarlos.
+
+## La vista `pedidos_saldo` viva NO es la del archivo de migración
+
+Verificado contra producción con el service client (solo lectura) el
+2026-11-02, sobre las 15 filas de la vista.
+
+`supabase/migrations/20260803200000_pagos_cobranza.sql:61` define
+`saldo = total - pagado`. **En producción no es así.** La definición viva es:
+
+```
+saldo = total - descuento + costo_envio - pagado
+```
+
+donde `descuento` sale de `pedidos.descuento_tipo` / `descuento_valor`
+(`'porcentaje'` aplica sobre `total`, `'monto'` resta directo). La hipótesis
+explica **15/15 filas**, incluyendo las 4 con descuento porcentual
+(22.45 %, 9 %, 24.32 %, 10 %) y la que trae `costo_envio` de 100.
+
+Esto quedó así por la migración `20260806100000_descuento_pedidos.sql`, que
+anota "pedidos_saldo ya calcula descuento_monto y lo resta" pero no reescribe
+el archivo original.
+
+### Consecuencia para cualquier métrica de dinero
+
+- **`total` es el importe BRUTO**, antes de descuento y de envío.
+- **El importe realmente facturado es `pagado + saldo`.**
+
+Con los datos actuales la diferencia no es trivial: la suma de `total` da
+$48,569 y la de `pagado + saldo` da $45,916.33. Usar `total` sobreestima lo
+facturado por el monto de los descuentos y no cuadra con los KPIs de Cobrado
+ni de Por cobrar.
+
+Los helpers de `src/lib/metricas.ts` ya trabajan sobre la base neta
+(`netoDe`, `netoTotal`, `serieFacturada`); usar esos y no volver a sumar
+`total` a mano.

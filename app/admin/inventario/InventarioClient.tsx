@@ -2,6 +2,8 @@
 import { useState, useMemo, useRef, useEffect } from 'react'
 import WhatsAppModal from './WhatsAppModal'
 import type { TipoPrecio } from '../../../src/lib/whatsappPrompt'
+import KpiCard from '../KpiCard'
+import { formatLitros, latasEquivalentes, litrosDeProducto } from '../../../src/lib/unidades'
 
 interface Props { productos: any[]; canEdit: boolean; pedidoCounts: Record<string, number> }
 
@@ -48,19 +50,20 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
   }), [data, search, soloConStock, estiloFilter, filterEstado])
 
   const kpis = useMemo(() => {
-    let totalLatas = 0, totalSueltas = 0, totalBbl = 0, bp20 = 0, ba20 = 0, bp10 = 0, ba10 = 0, valorTotal = 0
+    let totalLatas = 0, totalSueltas = 0, totalBbl = 0, bp20 = 0, ba20 = 0, bp10 = 0, ba10 = 0, valorTotal = 0, totalLitros = 0
     const pk = tipoPrecio === 'mayorista' ? 'publico' : 'taproom'
     data.forEach(p => {
       const c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0, s = p.stock_latas || 0
       const bbp = p.stock_barril_pet || 0, bba = p.stock_barril_acero || 0, bbp10 = p.stock_barril10_pet || 0, bba10 = p.stock_barril10_acero || 0
-      totalSueltas += s; totalLatas += s + c12 * 12 + c24 * 24
+      // Los factores viven en src/lib/unidades.ts; aqui no se reimplementan.
+      totalSueltas += s; totalLatas += latasEquivalentes(p); totalLitros += litrosDeProducto(p)
       bp20 += bbp; ba20 += bba; bp10 += bbp10; ba10 += bba10; totalBbl += bbp + bba + bbp10 + bba10
       const pl = p[`precio_lata_${pk}`] || 0
       valorTotal += c12 * Math.round(pl * 12) + c24 * Math.round(pl * 24)
       valorTotal += bbp * (p[`precio_barril_pet_${pk}`] || 0) + bba * (p[`precio_barril_acero_${pk}`] || 0)
       valorTotal += bbp10 * (p[`precio_barril10_pet_${pk}`] || 0) + bba10 * (p[`precio_barril10_acero_${pk}`] || 0)
     })
-    return { totalLatas, totalSueltas, totalBbl, bp20, ba20, bp10, ba10, valorTotal }
+    return { totalLatas, totalSueltas, totalBbl, bp20, ba20, bp10, ba10, valorTotal, totalLitros }
   }, [data, tipoPrecio])
 
   const allSel = filtered.length > 0 && filtered.every(p => selected.has(p.id))
@@ -160,23 +163,28 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
         </div>
       </div>
 
-      {/* KPIs — 3 cards */}
-      <div className="inv-kpi" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 14, marginBottom: 20 }}>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
-          <p style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Latas totales</p>
-          <p style={{ color: 'var(--brand-primary, #E8531D)', fontSize: 28, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>{kpis.totalLatas.toLocaleString()}</p>
-          <p style={{ color: '#9ca3af', fontSize: 11, margin: '2px 0 0' }}>de las cuales {kpis.totalSueltas.toLocaleString()} sueltas</p>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
-          <p style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Barriles</p>
-          <p style={{ color: '#f59e0b', fontSize: 28, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>{kpis.totalBbl}</p>
-          <p style={{ color: '#9ca3af', fontSize: 11, margin: '2px 0 0' }}>20L: {kpis.bp20} PET · {kpis.ba20} acero  |  10L: {kpis.bp10} PET · {kpis.ba10} acero</p>
-        </div>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '16px 20px' }}>
-          <p style={{ color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', margin: 0 }}>Valor total</p>
-          <p style={{ color: '#3b82f6', fontSize: 28, fontWeight: 700, margin: '4px 0 0', fontVariantNumeric: 'tabular-nums' }}>${Math.round(kpis.valorTotal).toLocaleString('es-MX')}</p>
-          <p style={{ color: '#9ca3af', fontSize: 11, margin: '2px 0 0' }}>MXN</p>
-        </div>
+      {/* KPIs */}
+      <div className="inv-kpi" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 20 }}>
+        <KpiCard
+          label="Latas totales"
+          valor={kpis.totalLatas.toLocaleString('es-MX')}
+          detalle={`de las cuales ${kpis.totalSueltas.toLocaleString('es-MX')} sueltas`}
+        />
+        <KpiCard
+          label="Litros en stock"
+          valor={formatLitros(kpis.totalLitros)}
+          detalle="latas de 355 ml, barriles de 20 L y 10 L"
+        />
+        <KpiCard
+          label="Barriles"
+          valor={kpis.totalBbl.toLocaleString('es-MX')}
+          detalle={`20 L: ${kpis.bp20} PET · ${kpis.ba20} acero  |  10 L: ${kpis.bp10} PET · ${kpis.ba10} acero`}
+        />
+        <KpiCard
+          label="Valor total"
+          valor={`$${Math.round(kpis.valorTotal).toLocaleString('es-MX')}`}
+          detalle="MXN"
+        />
       </div>
 
       {/* ALERT */}

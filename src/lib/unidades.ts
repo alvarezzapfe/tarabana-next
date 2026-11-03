@@ -34,7 +34,7 @@ export type ColumnaStock = keyof typeof LITROS_POR_UNIDAD
 
 export const COLUMNAS_STOCK = Object.keys(LITROS_POR_UNIDAD) as ColumnaStock[]
 
-type FilaStock = Partial<Record<ColumnaStock, number | null>>
+export type FilaStock = Partial<Record<ColumnaStock, number | null>>
 
 /** Litros de un producto. */
 export function litrosDeProducto(p: FilaStock): number {
