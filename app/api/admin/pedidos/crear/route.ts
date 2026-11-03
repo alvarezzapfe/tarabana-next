@@ -1,6 +1,6 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { canWrite } from '../../../../../src/lib/roles'
+import { canWrite, isVendedor } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
 import { enviarInvitacionCliente } from '../../../../../src/lib/invitar-cliente'
 import { calcularPedido } from '../../../../../src/lib/calcular-pedido'
@@ -11,12 +11,19 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canWrite(profile?.role))
+  const esVendedor = isVendedor(profile?.role)
+  if (!canWrite(profile?.role) && !esVendedor)
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const { cliente_id, condiciones_pago, items, notas, vendedor_id, descuento_tipo, descuento_valor, descuento_motivo } = await request.json()
 
   if (!cliente_id) return NextResponse.json({ error: 'cliente_id requerido' }, { status: 400 })
+
+  // El vendedor no pone descuentos. Se rechaza en vez de ignorarlo en silencio
+  // para que un cliente manipulado no crea que el descuento se aplico.
+  if (esVendedor && (descuento_tipo || descuento_valor)) {
+    return NextResponse.json({ error: 'Un vendedor no puede aplicar descuentos' }, { status: 403 })
+  }
 
   // Validate discount server-side
   if (descuento_tipo) {
@@ -28,6 +35,38 @@ export async function POST(request: Request) {
   if (!Array.isArray(items) || items.length === 0) return NextResponse.json({ error: 'Sin productos' }, { status: 400 })
 
   const service = createServiceClient()
+
+  // Un vendedor solo puede levantar pedidos a su nombre: se ignora el
+  // vendedor_id del body y se resuelve desde su ficha. Las policies de
+  // pedidos tambien lo exigen (vendedor_id = mi_vendedor_id()), asi que un
+  // valor ajeno fallaria igual en el insert; aqui se resuelve antes para dar
+  // un error claro.
+  let vendedorFinal: string | null = vendedor_id || null
+  if (esVendedor) {
+    const { data: ficha } = await service
+      .from('vendedores')
+      .select('id')
+      .eq('profile_id', user.id)
+      .eq('activo', true)
+      .maybeSingle()
+    if (!ficha) {
+      return NextResponse.json(
+        { error: 'Tu usuario no esta ligado a una ficha de vendedor activa. Pide a un super admin que la asigne.' },
+        { status: 403 }
+      )
+    }
+    vendedorFinal = ficha.id
+
+    // Y solo a clientes de su cartera.
+    const { data: cli } = await service
+      .from('profiles')
+      .select('vendedor_id')
+      .eq('id', cliente_id)
+      .maybeSingle()
+    if (!cli || cli.vendedor_id !== ficha.id) {
+      return NextResponse.json({ error: 'Ese cliente no esta en tu cartera' }, { status: 403 })
+    }
+  }
 
   // Derive price suffix from CLIENT's nivel_precio, not from body
   const { data: clienteProfile } = await service.from('profiles').select('nivel_precio').eq('id', cliente_id).single()
@@ -56,7 +95,7 @@ export async function POST(request: Request) {
   }
 
   const { data: pedido, error } = await supabase.from('pedidos').insert({
-    cliente_id, vendedor_id: vendedor_id || null, tipo_precio: result.sufijo,
+    cliente_id, vendedor_id: vendedorFinal, tipo_precio: result.sufijo,
     condiciones_pago: condiciones_pago || 'contado', notas: notas || null,
     total: result.total, status: 'confirmado',
     descuento_tipo: descuento_tipo || null,
@@ -70,22 +109,18 @@ export async function POST(request: Request) {
     result.items.map(i => ({ ...i, pedido_id: pedido.id }))
   )
 
-  // Generar comision si hay vendedor asignado
-  if (vendedor_id) {
-    const { data: vendedor } = await supabase.from('vendedores').select('comision_pct').eq('id', vendedor_id).single()
-    if (vendedor) {
-      const monto_comision = (result.total * vendedor.comision_pct) / 100
-      await supabase.from('comisiones').insert({
-        pedido_id: pedido.id, vendedor_id, monto_pedido: result.total,
-        porcentaje: vendedor.comision_pct, monto_comision,
-      })
-    }
-  }
+  // La comision NO se genera aqui. Lo que habia era comision_pct fijo (12%)
+  // sobre lo VENDIDO, y eso esta mal: en Fase 3 pasa a tramos marginales sobre
+  // lo COBRADO. El pedido solo guarda vendedor_id; `comisiones` no se toca
+  // hasta que ese calculo este definido.
 
-  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pedido.crear', entidad: 'pedidos', entidadId: pedido.id, detalle: { cliente_id, total: result.total, vendedor_id: vendedor_id || null }, request })
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'pedido.crear', entidad: 'pedidos', entidadId: pedido.id, detalle: { cliente_id, total: result.total, vendedor_id: vendedorFinal }, request })
 
   // Fire-and-forget: invite client on first order
-  const { count: pedidoCount } = await supabase.from('pedidos').select('id', { count: 'exact', head: true }).eq('cliente_id', cliente_id)
+  // Con el service client a proposito: con el del usuario, RLS le muestra al
+  // vendedor solo sus propios pedidos, asi que un cliente que ya tenia pedidos
+  // de otro vendedor contaria 1 y se le reenviaria la invitacion.
+  const { count: pedidoCount } = await service.from('pedidos').select('id', { count: 'exact', head: true }).eq('cliente_id', cliente_id)
   if (pedidoCount === 1) {
     enviarInvitacionCliente(cliente_id, { pedidoId: pedido.id, pedidoTotal: result.total }).then(r => {
       if (r.sent) logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'cliente.invitacion', entidad: 'profiles', entidadId: cliente_id, detalle: { pedido_id: pedido.id, trigger: 'primer_pedido' }, request })

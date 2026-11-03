@@ -10,6 +10,7 @@ const roleLabel: Record<string, string> = {
   admin: 'Administrador',
   produccion: 'Jefe de Producción',
   ventas: 'Ventas',
+  vendedor: 'Vendedor',
   contabilidad: 'Lector / Contabilidad',
 }
 

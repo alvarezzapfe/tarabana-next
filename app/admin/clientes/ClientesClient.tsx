@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '../../../src/lib/supabase'
 import { TIPOS_CLIENTE, NIVELES_PRECIO, tipoLabel, nivelLabel, tipoIcon } from '../../../src/lib/clientes'
-import { canWrite } from '../../../src/lib/roles'
+import { canWrite, isVendedor } from '../../../src/lib/roles'
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   pendiente:  { label: 'Pendiente',  color: '#f59e0b', bg: '#fef3c7' },
@@ -60,6 +60,9 @@ export default function ClientesClient() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [pedidosCounts, setPedidosCounts] = useState<Record<string, number>>({})
   const [canEdit, setCanEdit] = useState(false)
+  // El vendedor da de alta clientes y les levanta pedidos, pero no edita su
+  // ficha ni su nivel de precio.
+  const [canCreate, setCanCreate] = useState(false)
   const [loading, setLoading] = useState(true)
 
   // Filters
@@ -91,6 +94,7 @@ export default function ClientesClient() {
       ])
 
       setCanEdit(canWrite(myProfile?.role))
+      setCanCreate(canWrite(myProfile?.role) || isVendedor(myProfile?.role))
       setClientes(clientesData || [])
 
       const counts: Record<string, number> = {}
@@ -187,7 +191,7 @@ export default function ClientesClient() {
         <div>
           <p style={{ color: '#6b7280', fontSize: 13 }}>{total} registrados</p>
         </div>
-        {canEdit && (
+        {canCreate && (
           <div style={{ display: 'flex', gap: 10 }}>
             <a href="/admin/pedidos/nuevo" style={{
               display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
@@ -271,7 +275,7 @@ export default function ClientesClient() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Cliente', 'Tipo', 'Nivel de precio', 'Portal', 'Pedidos', 'Registrado', ...(canEdit ? [''] : [])].map((h, i) => (
+              {['Cliente', 'Tipo', 'Nivel de precio', 'Portal', 'Pedidos', 'Registrado', ...(canCreate ? [''] : [])].map((h, i) => (
                 <th key={i} style={{
                   color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 14px',
                   textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap',
@@ -336,7 +340,7 @@ export default function ClientesClient() {
                   <td style={{ padding: '12px 14px', color: '#9ca3af', fontSize: 13, whiteSpace: 'nowrap' }}>
                     {formatDate(c.created_at)}
                   </td>
-                  {canEdit && (
+                  {canCreate && (
                     <td style={{ padding: '12px 14px' }} onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 6 }}>
                         <a href={`/admin/pedidos/nuevo?cliente=${c.id}`} style={{
@@ -347,14 +351,14 @@ export default function ClientesClient() {
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
                           Pedido
                         </a>
-                        <a href={`/admin/clientes/edit/${c.id}`} style={{
+                        {canEdit && <a href={`/admin/clientes/edit/${c.id}`} style={{
                           display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px',
                           background: '#f3f4f6', color: '#6b7280', borderRadius: 6,
                           textDecoration: 'none', fontSize: 12, fontWeight: 500,
                         }}>
                           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                           Editar
-                        </a>
+                        </a>}
                       </div>
                     </td>
                   )}
@@ -362,7 +366,7 @@ export default function ClientesClient() {
               )
             }) : (
               <tr>
-                <td colSpan={canEdit ? 6 : 5} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
+                <td colSpan={canCreate ? 6 : 5} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
                   {clientes.length === 0 ? 'No hay clientes aun -- agrega el primero' : 'Sin resultados para estos filtros'}
                 </td>
               </tr>

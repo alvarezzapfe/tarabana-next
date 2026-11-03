@@ -12,8 +12,17 @@ export const WRITE_ROLES = ['super_admin', 'admin', 'ventas', 'produccion'] as c
 
 export const SUPER_ADMIN = 'super_admin' as const
 
+/**
+ * Vendedor de campo. A proposito NO esta en STAFF_ROLES ni en WRITE_ROLES:
+ * esas listas espejean is_staff() e is_admin() en SQL, que significan "lee
+ * todo" y "escribe todo". El vendedor solo ve sus pedidos y sus clientes, asi
+ * que lleva su propio predicado y sus propias policies (ver
+ * supabase/migrations/20261103100000_rol_vendedor.sql).
+ */
+export const VENDEDOR = 'vendedor' as const
+
 /** Roles that can be assigned via invitation */
-export const ASSIGNABLE_ROLES = ['admin', 'produccion', 'ventas', 'contabilidad'] as const
+export const ASSIGNABLE_ROLES = ['admin', 'produccion', 'ventas', 'contabilidad', 'vendedor'] as const
 
 export type StaffRole = (typeof STAFF_ROLES)[number]
 
@@ -27,6 +36,27 @@ export function canWrite(role?: string | null): boolean {
 
 export function isSuperAdmin(role?: string | null): boolean {
   return role === SUPER_ADMIN
+}
+
+export function isVendedor(role?: string | null): boolean {
+  return role === VENDEDOR
+}
+
+/**
+ * Puede entrar al panel admin. Dos caminos distintos: el staff entra con
+ * visibilidad global, el vendedor entra acotado por RLS a lo suyo.
+ */
+export function canEnterPanel(role?: string | null): boolean {
+  return isStaff(role) || isVendedor(role)
+}
+
+/**
+ * Helper para declarar visibilidad con una lista explicita de roles, cuando
+ * ningun predicado existente describe el recorte. Se usa en admin-nav para
+ * las secciones que no le tocan a ventas.
+ */
+export function enRoles(...roles: string[]) {
+  return (role?: string | null): boolean => !!role && roles.includes(role)
 }
 
 // ── Feature-specific subsets (more restrictive than is_admin() in SQL) ──

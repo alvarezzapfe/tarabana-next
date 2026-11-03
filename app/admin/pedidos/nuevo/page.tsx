@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
+import { isVendedor } from '../../../../src/lib/roles'
 import { useRouter, useSearchParams } from 'next/navigation'
 import MixBuilder, { type MixResult, type MixProduct } from '../../../../src/components/MixBuilder'
 
@@ -35,6 +36,9 @@ export default function NuevoPedidoPage() {
   const [descuentoMotivo, setDescuentoMotivo] = useState('')
   const [clienteSearch, setClienteSearch] = useState('')
   const [vendedores, setVendedores] = useState<any[]>([])
+  // El vendedor no pone descuentos ni elige a quien se le asigna el pedido:
+  // la API fuerza su propia ficha e ignora el vendedor_id del body.
+  const [esVendedor, setEsVendedor] = useState(false)
   const [vendedorId, setVendedorId] = useState('')
 
   useEffect(() => {
@@ -48,6 +52,12 @@ export default function NuevoPedidoPage() {
       setClientes(cl || [])
       setProductos(pr || [])
       setVendedores(vend || [])
+
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        const { data: yo } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+        setEsVendedor(isVendedor(yo?.role))
+      }
       // Set default condiciones_pago from config
       const diasDefault = (configRes as any)?.negocio?.dias_credito_default
       if (diasDefault === 15) setCondicionesPago('15_dias')
@@ -184,10 +194,10 @@ export default function NuevoPedidoPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         cliente_id: clienteId, condiciones_pago: condicionesPago, items, notas,
-        vendedor_id: vendedorId || null,
-        descuento_tipo: descuentoTipo || null,
-        descuento_valor: descuentoTipo ? descVal : null,
-        descuento_motivo: descuentoTipo ? descuentoMotivo : null,
+        vendedor_id: esVendedor ? null : (vendedorId || null),
+        descuento_tipo: esVendedor ? null : (descuentoTipo || null),
+        descuento_valor: esVendedor || !descuentoTipo ? null : descVal,
+        descuento_motivo: esVendedor || !descuentoTipo ? null : descuentoMotivo,
       })
     })
     if (res.ok) { router.push('/admin/pedidos'); router.refresh() }
@@ -369,6 +379,7 @@ export default function NuevoPedidoPage() {
             </div>
           </div>
 
+          {!esVendedor && (<>
           {/* Descuento */}
           <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 14 }}>
             <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Descuento</p>
@@ -411,6 +422,7 @@ export default function NuevoPedidoPage() {
               ))}
             </select>
           </div>
+          </>)}
 
           <div style={{ marginBottom: 14 }}>
             <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Notas del pedido</label>

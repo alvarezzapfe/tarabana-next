@@ -1,6 +1,6 @@
 import { createServerSupabaseClient, createServiceClient } from '../../src/lib/supabase-server'
 import { redirect } from 'next/navigation'
-import { isStaff } from '../../src/lib/roles'
+import { canEnterPanel } from '../../src/lib/roles'
 import { navParaRol } from '../../src/lib/admin-nav'
 import { contrastaConChrome, esHex6 } from '../../src/lib/contraste'
 import Sidebar from './Sidebar'
@@ -21,7 +21,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const { data: profile } = await supabase
     .from('profiles').select('role, full_name, last_seen_at').eq('id', user.id).single()
 
-  if (!profile || !isStaff(profile.role))
+  // El vendedor tambien entra, pero RLS lo acota a sus pedidos y sus clientes.
+  if (!profile || !canEnterPanel(profile.role))
     redirect('/portal')
 
   // Fire-and-forget: update last_seen_at if >5 min since last

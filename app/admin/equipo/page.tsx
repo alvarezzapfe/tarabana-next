@@ -3,11 +3,20 @@
 import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '../../../src/lib/supabase'
 
+type FichaVendedor = {
+  id: string
+  nombre: string
+  comision_pct: number | null
+  activo: boolean | null
+  profile_id: string | null
+}
+
 const roleConfig: Record<string, { label: string; color: string; bg: string }> = {
   super_admin:  { label: 'Super Admin',   color: '#E8531D', bg: '#fed7aa' },
   admin:        { label: 'Admin',          color: '#3b82f6', bg: '#dbeafe' },
   produccion:   { label: 'Producción',     color: '#f59e0b', bg: '#fef3c7' },
   ventas:       { label: 'Ventas',         color: '#10b981', bg: '#d1fae5' },
+  vendedor:     { label: 'Vendedor',       color: '#0284c7', bg: '#e0f2fe' },
   contabilidad: { label: 'Contabilidad',   color: '#8b5cf6', bg: '#ede9fe' },
 }
 
@@ -57,6 +66,11 @@ export default function UsuariosPage() {
   const [usuarios, setUsuarios] = useState<any[]>([])
   const [invitaciones, setInvitaciones] = useState<any[]>([])
   const [mfaStatus, setMfaStatus] = useState<Record<string, boolean>>({})
+  // Fichas de vendedores. El rol vendedor no sirve hasta que su login queda
+  // ligado a una ficha: mi_vendedor_id() resuelve por vendedores.profile_id.
+  const [fichas, setFichas] = useState<FichaVendedor[]>([])
+  const [ligando, setLigando] = useState<string | null>(null)
+  const [ligarError, setLigarError] = useState('')
   const [activityPanel, setActivityPanel] = useState<{ user: any; logs: any[] } | null>(null)
   const [activityLoading, setActivityLoading] = useState(false)
   const [resetConfirmId, setResetConfirmId] = useState<string | null>(null)
@@ -89,7 +103,7 @@ export default function UsuariosPage() {
     }
     setAuthorized(true)
 
-    const [usuariosRes, invRes, mfaRes] = await Promise.all([
+    const [usuariosRes, invRes, mfaRes, fichasRes] = await Promise.all([
       supabase
         .from('profiles')
         .select('*')
@@ -101,11 +115,13 @@ export default function UsuariosPage() {
         .eq('used', false)
         .order('created_at', { ascending: false }),
       fetch('/api/admin/usuarios/mfa-status').then(r => r.ok ? r.json() : {}),
+      supabase.from('vendedores').select('id, nombre, comision_pct, activo, profile_id').order('nombre'),
     ])
 
     setUsuarios(usuariosRes.data || [])
     setInvitaciones(invRes.data || [])
     setMfaStatus(mfaRes)
+    setFichas(fichasRes.data || [])
     setLoading(false)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -182,6 +198,23 @@ export default function UsuariosPage() {
     )
   }
 
+  const ligarFicha = async (profileId: string, vendedorId: string) => {
+    setLigando(profileId)
+    setLigarError('')
+    const res = await fetch('/api/admin/vendedores/ligar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile_id: profileId, vendedor_id: vendedorId || null }),
+    })
+    setLigando(null)
+    if (!res.ok) {
+      const b = await res.json().catch(() => ({}))
+      setLigarError(b.error || 'No se pudo ligar la ficha.')
+      return
+    }
+    loadData()
+  }
+
   if (!authorized) {
     return (
       <div style={{ fontFamily: 'system-ui, sans-serif' }}>
@@ -216,6 +249,9 @@ export default function UsuariosPage() {
 
       {/* Stats row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 12, marginBottom: 28 }}>
+        {ligarError && (
+          <p style={{ gridColumn: '1 / -1', margin: 0, color: '#dc2626', fontSize: 12 }}>{ligarError}</p>
+        )}
         {Object.entries(roleConfig).map(([role, cfg]) => {
           const count = usuarios.filter(u => u.role === role).length
           return (
@@ -266,6 +302,30 @@ export default function UsuariosPage() {
                   {/* Role badge */}
                   <td style={{ padding: '14px 18px' }}>
                     <span style={{ background: rc.bg, color: rc.color, padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{rc.label}</span>
+                    {u.role === 'vendedor' && (
+                      <div style={{ marginTop: 8 }}>
+                        <select
+                          value={fichas.find(f => f.profile_id === u.id)?.id || ''}
+                          disabled={ligando === u.id}
+                          onChange={e => ligarFicha(u.id, e.target.value)}
+                          style={{ fontSize: 11.5, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', maxWidth: 190 }}
+                        >
+                          <option value="">— sin ficha ligada —</option>
+                          {fichas
+                            .filter(f => !f.profile_id || f.profile_id === u.id)
+                            .map(f => (
+                              <option key={f.id} value={f.id}>
+                                {f.nombre}{f.activo ? '' : ' (inactiva)'}
+                              </option>
+                            ))}
+                        </select>
+                        {!fichas.some(f => f.profile_id === u.id) && (
+                          <p style={{ margin: '4px 0 0', color: '#b45309', fontSize: 10.5, maxWidth: 190, lineHeight: 1.4 }}>
+                            Sin ficha no puede crear pedidos ni ver nada.
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </td>
                   {/* 2FA */}
                   <td style={{ padding: '14px 18px' }}>

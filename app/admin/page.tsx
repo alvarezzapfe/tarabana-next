@@ -1,8 +1,32 @@
 import { createServerSupabaseClient } from '../../src/lib/supabase-server'
+import { isVendedor } from '../../src/lib/roles'
 import DashboardClient from './DashboardClient'
+import DashboardVendedor from './DashboardVendedor'
 
 export default async function AdminDashboard() {
   const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: yo } = await supabase.from('profiles').select('role, full_name').eq('id', user!.id).single()
+
+  // El vendedor ve su propio Inicio. No se le arma el del staff ni se le
+  // consultan productos: nada de inventario. Las filas que recibe ya vienen
+  // acotadas por RLS, no hace falta filtrar por vendedor_id aqui.
+  if (isVendedor(yo?.role)) {
+    const [{ data: misSaldos }, { count: misClientes }] = await Promise.all([
+      supabase
+        .from('pedidos_saldo')
+        .select('id, cliente_id, total, pagado, saldo, status, estado_cobro, dias_vencido, created_at'),
+      supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'comprador'),
+    ])
+    return (
+      <DashboardVendedor
+        saldos={misSaldos || []}
+        clientesEnCartera={misClientes || 0}
+        nombre={yo?.full_name || ''}
+        ahoraISO={new Date().toISOString()}
+      />
+    )
+  }
 
   const [{ data: saldos }, { data: productos }, { data: clientes }, { data: pedidosItems }] = await Promise.all([
     // Fuente unica de las metricas: ya excluye cancelados y trae pagado,

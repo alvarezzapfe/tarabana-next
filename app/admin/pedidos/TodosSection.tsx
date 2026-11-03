@@ -1,12 +1,14 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import PedidosClient from './PedidosClient'
-import { canWrite } from '../../../src/lib/roles'
+import { canWrite, isVendedor } from '../../../src/lib/roles'
 
 export default async function TodosSection() {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
   const canEdit = canWrite(myProfile?.role)
+  // El vendedor levanta pedidos pero no los edita ni registra pagos.
+  const canCreate = canEdit || isVendedor(myProfile?.role)
 
   const [{ data: pedidos }, { data: saldos }, { data: pagos }] = await Promise.all([
     supabase
@@ -17,5 +19,5 @@ export default async function TodosSection() {
     supabase.from('pagos').select('*').order('fecha_pago', { ascending: false }),
   ])
 
-  return <PedidosClient pedidos={pedidos || []} saldos={saldos || []} pagos={pagos || []} canEdit={canEdit} />
+  return <PedidosClient pedidos={pedidos || []} saldos={saldos || []} pagos={pagos || []} canEdit={canEdit} canCreate={canCreate} />
 }

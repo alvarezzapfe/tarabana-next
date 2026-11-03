@@ -1,6 +1,6 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { canWrite } from '../../../../../src/lib/roles'
+import { canWrite, isVendedor } from '../../../../../src/lib/roles'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel, ImageRun } from 'docx'
 import { readFileSync } from 'fs'
 import { join } from 'path'
@@ -25,6 +25,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const service = createServiceClient()
   const { data: profile } = await service.from('profiles').select('role').eq('id', user.id).single()
   const isStaff = canWrite(profile?.role)
+  const esVendedor = isVendedor(profile?.role)
 
   // Load pedido with all related data
   const { data: pedido } = await service.from('pedidos')
@@ -34,7 +35,21 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!pedido) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
 
   // Auth: staff can access any, client only their own
-  if (!isStaff && pedido.cliente_id !== user.id) {
+  // Esta ruta carga el pedido con el service client, que salta RLS, asi que
+  // el control de acceso es este check y no las policies. El vendedor puede
+  // imprimir la orden de sus propios pedidos.
+  let esSuPedido = false
+  if (esVendedor && pedido.vendedor_id) {
+    const { data: ficha } = await service
+      .from('vendedores')
+      .select('id')
+      .eq('profile_id', user.id)
+      .eq('activo', true)
+      .maybeSingle()
+    esSuPedido = !!ficha && ficha.id === pedido.vendedor_id
+  }
+
+  if (!isStaff && !esSuPedido && pedido.cliente_id !== user.id) {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
   }
 

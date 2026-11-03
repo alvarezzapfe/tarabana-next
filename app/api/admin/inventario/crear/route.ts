@@ -1,6 +1,6 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { canWrite } from '../../../../../src/lib/roles'
+import { canManageInventory } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
 
 export async function POST(request: Request) {
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canWrite(profile?.role)) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
+  if (!canManageInventory(profile?.role)) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const body = await request.json()
 

@@ -58,7 +58,7 @@ const Overlay = ({ onClose, children }: { onClose: () => void, children: React.R
 
 const Label = ({ children }: { children: string }) => <label style={{ ...SL, display: 'block', marginBottom: 4 }}>{children}</label>
 
-export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { pedidos: any[], saldos: any[], pagos: any[], canEdit: boolean }) {
+export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCreate }: { pedidos: any[], saldos: any[], pagos: any[], canEdit: boolean, canCreate: boolean }) {
   const [data, setData] = useState(pedidos)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [statusModalId, setStatusModalId] = useState<string | null>(null)
@@ -275,7 +275,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Exportar
           </button>
-          {canEdit && (
+          {canCreate && (
             <a href="/admin/pedidos/nuevo" style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#E8531D', color: '#fff', padding: '9px 20px', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
               Nuevo pedido

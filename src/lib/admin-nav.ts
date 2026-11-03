@@ -17,7 +17,20 @@ import {
   canManageInventory,
   isSuperAdmin,
   isStaff,
+  isVendedor,
+  canEnterPanel,
+  enRoles,
 } from './roles'
+
+/** canWrite (staff de oficina) o el vendedor, acotado por RLS a lo suyo. */
+const canWriteOVendedor: RolePredicate = role => canWrite(role) || isVendedor(role)
+
+/**
+ * Staff menos ventas. Ventas no gestiona produccion ni finanzas.
+ * Se escribe con lista explicita porque ningun predicado de roles.ts
+ * describe este recorte.
+ */
+const staffSinVentas = enRoles('super_admin', 'admin', 'produccion', 'contabilidad')
 
 type RolePredicate = (role?: string | null) => boolean
 
@@ -59,18 +72,20 @@ export const NAV: NavItemDef[] = [
     label: 'Inicio',
     href: '/admin',
     icon: 'M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10',
-    visible: isStaff,
+    visible: canEnterPanel,
   },
   {
     key: 'pedidos',
     label: 'Pedidos',
     href: '/admin/pedidos',
     icon: 'M6 2H4a2 2 0 00-2 2v16a2 2 0 002 2h16a2 2 0 002-2V8l-6-6H6z M14 2v6h6 M16 13H8 M16 17H8 M10 9H8',
-    visible: canWrite,
+    visible: canWriteOVendedor,
     badge: 'pedidosPendientes',
     alerta: 'saldosVencidos',
     tabs: [
-      { key: 'todos', label: 'Todos', visible: canWrite },
+      { key: 'todos', label: 'Todos', visible: canWriteOVendedor },
+      // Cobranza es de oficina. El vendedor no la gestiona, pero si ve el
+      // saldo de cada pedido suyo en la lista.
       { key: 'por-cobrar', label: 'Por cobrar', legacyHref: '/admin/cobranza', visible: canWrite },
     ],
   },
@@ -79,9 +94,9 @@ export const NAV: NavItemDef[] = [
     label: 'Clientes',
     href: '/admin/clientes',
     icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8 M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75',
-    visible: canWrite,
+    visible: canWriteOVendedor,
     tabs: [
-      { key: 'clientes', label: 'Clientes', visible: canWrite },
+      { key: 'clientes', label: 'Clientes', visible: canWriteOVendedor },
       { key: 'puntos-venta', label: 'Puntos de venta', legacyHref: '/admin/puntos-venta', visible: isStaff },
     ],
   },
@@ -90,9 +105,7 @@ export const NAV: NavItemDef[] = [
     label: 'Producción',
     href: '/admin/produccion',
     icon: 'M3 3h18v18H3z M3 9h18 M9 21V9',
-    // La pagina hoy solo hereda el guard del layout (isStaff). No se restringe
-    // mas aqui para no quitarle acceso a nadie que ya lo tiene.
-    visible: isStaff,
+    visible: staffSinVentas,
   },
   {
     key: 'inventario',
@@ -117,10 +130,10 @@ export const NAV: NavItemDef[] = [
     label: 'Finanzas',
     href: '/admin/finanzas',
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
-    visible: isStaff,
+    visible: staffSinVentas,
     tabs: [
-      { key: 'reportes', label: 'Reportes', legacyHref: '/admin/reportes', visible: isStaff },
-      { key: 'contabilidad', label: 'Contabilidad', legacyHref: '/admin/contabilidad', visible: isStaff },
+      { key: 'reportes', label: 'Reportes', legacyHref: '/admin/reportes', visible: staffSinVentas },
+      { key: 'contabilidad', label: 'Contabilidad', legacyHref: '/admin/contabilidad', visible: staffSinVentas },
     ],
   },
   {
