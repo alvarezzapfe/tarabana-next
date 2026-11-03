@@ -6,21 +6,21 @@ const playfair = Playfair_Display({
   subsets: ["latin"],
   weight: ["400", "700", "900"],
   style: ["normal", "italic"],
-  variable: "--font-serif",
+  variable: "--font-playfair",
   display: "swap",
 });
 
 const dmMono = DM_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
-  variable: "--font-mono",
+  variable: "--font-dm-mono",
   display: "swap",
 });
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
   weight: ["300", "400", "500"],
-  variable: "--font-sans",
+  variable: "--font-dm-sans",
   display: "swap",
 });
 

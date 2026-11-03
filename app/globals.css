@@ -1,5 +1,19 @@
 @import "tailwindcss";
 
+/* ── Tipografia ─────────────────────────────────────────────
+   next/font expone las familias como --font-playfair/--font-dm-mono/
+   --font-dm-sans en <html>. Aqui se mapean a los tokens semanticos que
+   Tailwind convierte en las utilidades font-serif/font-mono/font-sans.
+   Los nombres de origen y destino son distintos a proposito: :root es el
+   mismo elemento que <html>, asi que reusarlos se autorreferenciaria y la
+   propiedad quedaria invalida. Estos tokens tambien alimentan los usos
+   inline de var(--font-serif|mono|sans). */
+@theme {
+  --font-serif: var(--font-playfair), Georgia, "Times New Roman", serif;
+  --font-mono: var(--font-dm-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-dm-sans), system-ui, -apple-system, sans-serif;
+}
+
 :root {
   --cream: #F5F0E8;
   --ink: #1A1108;
