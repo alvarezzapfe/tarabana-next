@@ -12,7 +12,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!user) return NextResponse.redirect(new URL('/admin', req.url))
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!isSuperAdmin(profile?.role)) return NextResponse.redirect(new URL('/admin/usuarios', req.url))
+  if (!isSuperAdmin(profile?.role)) return NextResponse.redirect(new URL('/admin/equipo', req.url))
 
   const serviceClient = createServiceClient()
   const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
@@ -35,5 +35,5 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     })
   }
 
-  return NextResponse.redirect(new URL('/admin/usuarios', req.url))
+  return NextResponse.redirect(new URL('/admin/equipo', req.url))
 }

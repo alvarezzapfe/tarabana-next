@@ -62,7 +62,7 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
   )
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 800, fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ maxWidth: 800, fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <a href="/admin/pedidos" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -129,8 +129,8 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
           <label style={labelStyle}>Condiciones de pago</label>
           <select value={condicionesPago} onChange={e => setCondicionesPago(e.target.value)} style={inputStyle}>
             <option value="contado">Contado</option>
-            <option value="15_dias">15 dias</option>
-            <option value="30_dias">30 dias</option>
+            <option value="15_dias">15 días</option>
+            <option value="30_dias">30 días</option>
           </select>
         </div>
       </div>

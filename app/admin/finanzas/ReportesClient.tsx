@@ -185,10 +185,9 @@ export default function ReportesClient({ pedidos, saldos, clientes }: Props) {
   const periodoLabel = vista === 'mes' ? `${meses[mesSel]} ${añoSel}` : vista === 'año' ? `Ano ${añoSel}` : `${rangoDesde} - ${rangoHasta}`
 
   return (
-    <div style={{ padding: '36px 40px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Reportes de ventas</h1>
           <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 500 }}>{periodoLabel}</p>
         </div>
         <button onClick={handleExport} style={{ padding: '10px 20px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#f3f4f6', color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Exportar CSV</button>
@@ -320,7 +319,7 @@ export default function ReportesClient({ pedidos, saldos, clientes }: Props) {
       {/* Clientes inactivos */}
       {clientesInactivos.length > 0 && (
         <div style={{ ...card, marginBottom: 16 }}>
-          <p style={title}>Clientes inactivos (45+ dias sin comprar)</p>
+          <p style={title}>Clientes inactivos (45+ días sin comprar)</p>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
               {['Cliente','Ultimo pedido','Dias sin comprar','Total historico'].map(h => <th key={h} style={th}>{h}</th>)}

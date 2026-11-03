@@ -66,8 +66,7 @@ export default function VendedoresClient({ vendedores: init, comisiones, canEdit
   const tipoColor: Record<string, string> = { interno: '#3b82f6', externo: '#f59e0b', distribuidor: '#10b981' }
 
   return (
-    <div style={{ padding: '36px 40px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Vendedores</h1>
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 28 }}>Gestión de fuerza de ventas y distribuidores</p>
 
       {canEdit && (

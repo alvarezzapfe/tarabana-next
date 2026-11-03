@@ -42,8 +42,7 @@ export default function TaproomConfigClient({ config, canEdit }: { config: any; 
   const inputStyle = { padding: '8px 10px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#1a1a1a', fontSize: 13, outline: 'none', fontFamily: 'system-ui' }
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 760, fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Taproom — Configuración</h1>
+    <div style={{ maxWidth: 760, fontFamily: 'system-ui, sans-serif' }}>
       <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 32 }}>Horarios y mensajes que se muestran en tarabana.mx/taproom</p>
 
       {/* Horarios */}

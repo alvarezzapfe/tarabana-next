@@ -93,7 +93,7 @@ export default function ContactoPage() {
               <div style={{ marginBottom: 20, display: "flex", justifyContent: "center" }}><CheckCircle /></div>
               <h3 style={{ fontFamily: "var(--font-serif)", fontSize: 28, fontWeight: 700, fontStyle: "italic", color: "#F0A030", marginBottom: 8 }}>Mensaje enviado</h3>
               <p style={{ fontFamily: "var(--font-sans)", fontSize: 15, color: "rgba(245,240,232,0.4)", fontWeight: 300, marginBottom: 8 }}>Tu mensaje llego a nuestro correo.</p>
-              <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, color: "rgba(245,240,232,0.25)", fontWeight: 300 }}>Tambien te abrimos WhatsApp para seguir la conversacion.</p>
+              <p style={{ fontFamily: "var(--font-sans)", fontSize: 14, color: "rgba(245,240,232,0.25)", fontWeight: 300 }}>También te abrimos WhatsApp para seguir la conversacion.</p>
               <button onClick={() => { setStatus("idle"); setForm({ nombre: "", email: "", mensaje: "" }); }} style={{ marginTop: 28, fontFamily: "var(--font-mono)", fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase", padding: "13px 32px", background: "transparent", color: "#C8720A", border: "1px solid #C8720A", cursor: "pointer" }}>
                 Enviar otro mensaje
               </button>

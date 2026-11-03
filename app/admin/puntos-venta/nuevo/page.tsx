@@ -62,7 +62,7 @@ export default function NuevoPuntoVentaPage() {
     const json = await res.json()
 
     if (!res.ok) { setError(json.error || 'Error al guardar'); setSaving(false); return }
-    router.push('/admin/puntos-venta')
+    router.push('/admin/clientes?tab=puntos-venta')
     router.refresh()
   }
 
@@ -140,7 +140,7 @@ export default function NuevoPuntoVentaPage() {
             borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? 'wait' : 'pointer',
             opacity: saving ? 0.6 : 1,
           }}>{saving ? 'Guardando...' : 'Guardar punto de venta'}</button>
-          <a href="/admin/puntos-venta" style={{
+          <a href="/admin/clientes?tab=puntos-venta" style={{
             color: '#6b7280', padding: '12px 20px', fontSize: 14, textDecoration: 'none',
             display: 'flex', alignItems: 'center',
           }}>Cancelar</a>

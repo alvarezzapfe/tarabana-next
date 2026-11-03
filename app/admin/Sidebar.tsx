@@ -27,7 +27,7 @@ const ROLE_LABEL: Record<string, string> = {
   super_admin: 'Super Admin',
   admin: 'Administrador',
   ventas: 'Ventas',
-  produccion: 'Produccion',
+  produccion: 'Producción',
   contabilidad: 'Contabilidad',
 }
 
@@ -108,6 +108,8 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
     .sort((a, b) => b.href.length - a.href.length)[0]?.key
 
   const ancho = colapsado ? ANCHO_CERRADO : ANCHO_ABIERTO
+  const principales = items.filter(i => i.bloque !== 'inferior')
+  const inferiores = items.filter(i => i.bloque === 'inferior')
 
   return (
     <aside
@@ -154,7 +156,7 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
         )}
         <button
           onClick={toggle}
-          aria-label={colapsado ? 'Expandir navegacion' : 'Colapsar navegacion'}
+          aria-label={colapsado ? 'Expandir navegación' : 'Colapsar navegación'}
           aria-expanded={!colapsado}
           style={{
             background: 'transparent',
@@ -208,111 +210,40 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
         )}
       </button>
 
-      {/* Items */}
+      {/* Items del bloque principal */}
       <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '4px 12px' }}>
-        {items.map(item => {
-          const activo = item.key === activoKey
-          const pendientes = item.badge === 'pedidosPendientes' ? badges.pedidosPendientes : 0
-          const alerta = item.alerta === 'saldosVencidos' && badges.saldosVencidos
-
-          return (
-            <div key={item.key}>
-              {item.separadorArriba && (
-                <div style={{ height: 1, background: CHROME.borde, margin: '10px 2px' }} />
-              )}
-              <a
-                href={item.href}
-                aria-current={activo ? 'page' : undefined}
-                onMouseEnter={() => setHover(item.key)}
-                onMouseLeave={() => setHover(null)}
-                style={{
-                  position: 'relative',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: colapsado ? 'center' : 'flex-start',
-                  gap: 10,
-                  padding: colapsado ? '10px 0' : '9px 10px',
-                  marginBottom: 2,
-                  borderRadius: 8,
-                  textDecoration: 'none',
-                  fontSize: 14,
-                  fontWeight: activo ? 500 : 450,
-                  color: activo ? CHROME.activoTexto : CHROME.textoInactivo,
-                  background: activo ? CHROME.activoBg : hover === item.key ? CHROME.hoverBg : 'transparent',
-                  transition: 'background 120ms ease, color 120ms ease',
-                }}
-              >
-                {activo && (
-                  <span
-                    aria-hidden
-                    style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 2, background: acento, borderRadius: 1 }}
-                  />
-                )}
-
-                <span style={{ position: 'relative', display: 'flex', flexShrink: 0 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <path d={item.icon} />
-                  </svg>
-                  {/* Colapsado no hay lugar para el conteo: queda el punto. */}
-                  {colapsado && (pendientes > 0 || alerta) && (
-                    <span
-                      aria-hidden
-                      style={{
-                        position: 'absolute', top: -3, right: -4, width: 7, height: 7, borderRadius: '50%',
-                        background: alerta ? '#ef4444' : acento,
-                        border: `1.5px solid ${activo ? CHROME.activoBg : CHROME.bg}`,
-                      }}
-                    />
-                  )}
-                </span>
-
-                {!colapsado && (
-                  <>
-                    <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
-                    <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
-                      {pendientes > 0 && (
-                        <span
-                          className="font-mono"
-                          title={`${pendientes} pedido(s) pendiente(s)`}
-                          style={{
-                            fontSize: 10, lineHeight: 1, padding: '3px 6px', borderRadius: 999,
-                            background: CHROME.borde, color: '#C9D1D9', fontVariantNumeric: 'tabular-nums',
-                          }}
-                        >
-                          {pendientes}
-                        </span>
-                      )}
-                      {alerta && (
-                        <span
-                          title="Hay saldos vencidos"
-                          style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }}
-                        />
-                      )}
-                    </span>
-                  </>
-                )}
-
-                {/* Tooltip cuando esta colapsado */}
-                {colapsado && hover === item.key && (
-                  <span
-                    role="tooltip"
-                    style={{
-                      position: 'absolute', left: ANCHO_CERRADO - 4, top: '50%', transform: 'translateY(-50%)',
-                      background: '#1A1F27', color: '#fff', fontSize: 12, padding: '5px 9px', borderRadius: 6,
-                      border: `1px solid ${CHROME.borde}`, whiteSpace: 'nowrap', zIndex: 60, pointerEvents: 'none',
-                      boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
-                    }}
-                  >
-                    {item.label}
-                    {pendientes > 0 && ` · ${pendientes}`}
-                    {alerta && ' · vencidos'}
-                  </span>
-                )}
-              </a>
-            </div>
-          )
-        })}
+        {principales.map(item => (
+          <ItemNav
+            key={item.key}
+            item={item}
+            activo={item.key === activoKey}
+            colapsado={colapsado}
+            acento={acento}
+            badges={badges}
+            hover={hover}
+            setHover={setHover}
+          />
+        ))}
       </nav>
+
+      {/* Bloque inferior: Equipo y Configuración, anclados arriba del usuario */}
+      {inferiores.length > 0 && (
+        <div style={{ padding: '4px 12px 8px', flexShrink: 0 }}>
+          <div style={{ height: 1, background: CHROME.borde, margin: '6px 2px 8px' }} />
+          {inferiores.map(item => (
+            <ItemNav
+              key={item.key}
+              item={item}
+              activo={item.key === activoKey}
+              colapsado={colapsado}
+              acento={acento}
+              badges={badges}
+              hover={hover}
+              setHover={setHover}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Usuario + logout */}
       <div style={{ borderTop: `1px solid ${CHROME.borde}`, padding: colapsado ? '10px 0' : '12px 12px', flexShrink: 0 }}>
@@ -334,7 +265,7 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
         )}
         <a
           href="/api/auth/logout"
-          title={colapsado ? 'Cerrar sesion' : undefined}
+          title={colapsado ? 'Cerrar sesión' : undefined}
           onMouseEnter={() => setHover('__logout')}
           onMouseLeave={() => setHover(null)}
           style={{
@@ -347,9 +278,123 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
           </svg>
-          {!colapsado && 'Cerrar sesion'}
+          {!colapsado && 'Cerrar sesión'}
         </a>
       </div>
     </aside>
+  )
+}
+
+/** Un item del sidebar. Lo comparten el bloque principal y el inferior. */
+function ItemNav({
+  item,
+  activo,
+  colapsado,
+  acento,
+  badges,
+  hover,
+  setHover,
+}: {
+  item: NavItem
+  activo: boolean
+  colapsado: boolean
+  acento: string
+  badges: Badges
+  hover: string | null
+  setHover: (k: string | null) => void
+}) {
+  const pendientes = item.badge === 'pedidosPendientes' ? badges.pedidosPendientes : 0
+  const alerta = item.alerta === 'saldosVencidos' && badges.saldosVencidos
+
+  return (
+    <a
+      href={item.href}
+      aria-current={activo ? 'page' : undefined}
+      onMouseEnter={() => setHover(item.key)}
+      onMouseLeave={() => setHover(null)}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: colapsado ? 'center' : 'flex-start',
+        gap: 10,
+        padding: colapsado ? '10px 0' : '9px 10px',
+        marginBottom: 2,
+        borderRadius: 8,
+        textDecoration: 'none',
+        fontSize: 14,
+        fontWeight: activo ? 500 : 450,
+        color: activo ? CHROME.activoTexto : CHROME.textoInactivo,
+        background: activo ? CHROME.activoBg : hover === item.key ? CHROME.hoverBg : 'transparent',
+        transition: 'background 120ms ease, color 120ms ease',
+      }}
+    >
+      {activo && (
+        <span
+          aria-hidden
+          style={{ position: 'absolute', left: 0, top: 7, bottom: 7, width: 2, background: acento, borderRadius: 1 }}
+        />
+      )}
+
+      <span style={{ position: 'relative', display: 'flex', flexShrink: 0 }}>
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d={item.icon} />
+        </svg>
+        {/* Colapsado no hay lugar para el conteo: queda el punto. */}
+        {colapsado && (pendientes > 0 || alerta) && (
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute', top: -3, right: -4, width: 7, height: 7, borderRadius: '50%',
+              background: alerta ? '#ef4444' : acento,
+              border: `1.5px solid ${activo ? CHROME.activoBg : CHROME.bg}`,
+            }}
+          />
+        )}
+      </span>
+
+      {!colapsado && (
+        <>
+          <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            {pendientes > 0 && (
+              <span
+                className="font-mono"
+                title={`${pendientes} pedido(s) pendiente(s)`}
+                style={{
+                  fontSize: 10, lineHeight: 1, padding: '3px 6px', borderRadius: 999,
+                  background: CHROME.borde, color: '#C9D1D9', fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {pendientes}
+              </span>
+            )}
+            {alerta && (
+              <span
+                title="Hay saldos vencidos"
+                style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }}
+              />
+            )}
+          </span>
+        </>
+      )}
+
+      {/* Tooltip cuando esta colapsado */}
+      {colapsado && hover === item.key && (
+        <span
+          role="tooltip"
+          style={{
+            position: 'absolute', left: ANCHO_CERRADO - 4, top: '50%', transform: 'translateY(-50%)',
+            background: '#1A1F27', color: '#fff', fontSize: 12, padding: '5px 9px', borderRadius: 6,
+            border: `1px solid ${CHROME.borde}`, whiteSpace: 'nowrap', zIndex: 60, pointerEvents: 'none',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.4)',
+          }}
+        >
+          {item.label}
+          {pendientes > 0 && ` · ${pendientes}`}
+          {alerta && ' · vencidos'}
+        </span>
+      )}
+    </a>
   )
 }

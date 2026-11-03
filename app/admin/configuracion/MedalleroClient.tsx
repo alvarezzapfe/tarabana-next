@@ -64,8 +64,7 @@ export default function MedalleroClient({ medallas: init, canEdit }: { medallas:
   )
 
   return (
-    <div style={{ padding: '36px 40px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Medallero</h1>
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 28 }}>Gestión de reconocimientos en competencias</p>
 
       {/* Formulario */}

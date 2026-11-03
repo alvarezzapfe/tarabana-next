@@ -43,8 +43,7 @@ export default function ComisionesClient({ comisiones: init, vendedores, canEdit
   const cardStyle = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '20px 24px' }
 
   return (
-    <div style={{ padding: '36px 40px', fontFamily: 'system-ui, sans-serif' }}>
-      <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Comisiones</h1>
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       <p style={{ color: '#6b7280', fontSize: 13, marginBottom: 24 }}>Control de comisiones por vendedor</p>
 
       {/* KPIs */}

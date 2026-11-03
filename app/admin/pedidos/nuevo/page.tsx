@@ -200,7 +200,7 @@ export default function NuevoPedidoPage() {
   )
 
   return (
-    <div style={{ padding: '36px 40px', display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, maxWidth: 1100 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, maxWidth: 1100 }}>
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
           <a href="/admin/pedidos" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -254,7 +254,7 @@ export default function NuevoPedidoPage() {
         <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
           <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Condiciones de pago</p>
           <div style={{ display: 'flex', gap: 8 }}>
-            {[{ key: 'contado', label: 'Contado' }, { key: '15_dias', label: '15 dias' }, { key: '30_dias', label: '30 dias' }].map(c => (
+            {[{ key: 'contado', label: 'Contado' }, { key: '15_dias', label: '15 días' }, { key: '30_dias', label: '30 días' }].map(c => (
               <button key={c.key} onClick={() => setCondicionesPago(c.key)} style={{
                 flex: 1, padding: '9px', background: condicionesPago === c.key ? '#1e1e1e' : '#0a0a0a',
                 border: `1.5px solid ${condicionesPago === c.key ? '#E8531D' : '#1e1e1e'}`,

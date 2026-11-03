@@ -378,7 +378,7 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
 
               <div style={{ marginBottom: 16 }}>
                 <label style={{ color: '#6b7280', fontSize: 12, display: 'block', marginBottom: 4 }}>Motivo (opcional)</label>
-                <input value={stockMotivo} onChange={e => setStockMotivo(e.target.value)} placeholder="Produccion, correccion, merma..."
+                <input value={stockMotivo} onChange={e => setStockMotivo(e.target.value)} placeholder="Producción, corrección, merma..."
                   style={{ width: '100%', padding: '8px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 13, color: '#1a1a1a', boxSizing: 'border-box', outline: 'none' }} />
               </div>
 

@@ -37,8 +37,11 @@ export type NavItemDef = {
   icon: string
   visible: RolePredicate
   tabs?: NavTabDef[]
-  /** Separador fino arriba del item. */
-  separadorArriba?: boolean
+  /**
+   * 'principal' va en el cuerpo scrolleable; 'inferior' se ancla abajo,
+   * encima del bloque de usuario, separado por una linea fina.
+   */
+  bloque?: 'principal' | 'inferior'
   /** Clave del contador a pintar como badge. */
   badge?: 'pedidosPendientes'
   /** Punto rojo de alerta. */
@@ -84,7 +87,7 @@ export const NAV: NavItemDef[] = [
   },
   {
     key: 'produccion',
-    label: 'Produccion',
+    label: 'Producción',
     href: '/admin/produccion',
     icon: 'M3 3h18v18H3z M3 9h18 M9 21V9',
     // La pagina hoy solo hereda el guard del layout (isStaff). No se restringe
@@ -101,9 +104,7 @@ export const NAV: NavItemDef[] = [
   {
     key: 'comercial',
     label: 'Comercial',
-    // 1.C mueve esto a /admin/comercial con pestanas. Hasta entonces apunta a
-    // la ruta que ya existe para que el sidebar no lleve a un 404.
-    href: '/admin/vendedores',
+    href: '/admin/comercial',
     icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z',
     visible: canManageAsAdmin,
     tabs: [
@@ -114,8 +115,7 @@ export const NAV: NavItemDef[] = [
   {
     key: 'finanzas',
     label: 'Finanzas',
-    // Igual que comercial: 1.C lo mueve a /admin/finanzas.
-    href: '/admin/reportes',
+    href: '/admin/finanzas',
     icon: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
     visible: isStaff,
     tabs: [
@@ -124,22 +124,29 @@ export const NAV: NavItemDef[] = [
     ],
   },
   {
+    key: 'equipo',
+    label: 'Equipo',
+    href: '/admin/equipo',
+    icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8 M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75',
+    // Usuarios internos, MFA y invitaciones. La pagina valida super_admin.
+    visible: isSuperAdmin,
+    bloque: 'inferior',
+  },
+  {
     key: 'configuracion',
-    label: 'Configuracion',
+    label: 'Configuración',
     href: '/admin/configuracion',
     icon: 'M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z M12 15a3 3 0 100-6 3 3 0 000 6z',
-    // TODO(1.C): pasar a canManageAsAdmin cuando /admin/configuracion sea el
-    // host de pestanas con guard por pestana. Hoy la pagina entera es
-    // isSuperAdmin, asi que mostrarsela a admin lo llevaria a un muro de "solo
-    // super administradores". Mientras tanto admin no ve Taproom ni Medallero
-    // en el sidebar; 1.C se los devuelve como pestanas de esta seccion.
-    visible: isSuperAdmin,
-    separadorArriba: true,
+    // Ahora si llega hasta admin: la pagina es un host de pestanas y cada
+    // pestana valida su propio permiso. Marca, Negocio y Actividad son
+    // super-only; Taproom y Medallero llegan a admin.
+    visible: canManageAsAdmin,
+    bloque: 'inferior',
     tabs: [
+      { key: 'marca', label: 'Marca', visible: isSuperAdmin },
+      { key: 'negocio', label: 'Negocio', visible: isSuperAdmin },
       { key: 'taproom', label: 'Taproom', legacyHref: '/admin/taproom', visible: canManageAsAdmin },
       { key: 'medallero', label: 'Medallero', legacyHref: '/admin/medallero', visible: canManageAsAdmin },
-      { key: 'marca', label: 'Marca', visible: isSuperAdmin },
-      { key: 'usuarios', label: 'Usuarios', legacyHref: '/admin/usuarios', visible: isSuperAdmin },
       { key: 'actividad', label: 'Actividad', legacyHref: '/admin/actividad', visible: isSuperAdmin },
     ],
   },
@@ -157,7 +164,7 @@ function serializarItem(item: NavItemDef, role?: string | null): NavItem {
     label: item.label,
     href: item.href,
     icon: item.icon,
-    ...(item.separadorArriba ? { separadorArriba: item.separadorArriba } : {}),
+    bloque: item.bloque ?? 'principal',
     ...(item.badge ? { badge: item.badge } : {}),
     ...(item.alerta ? { alerta: item.alerta } : {}),
   }

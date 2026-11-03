@@ -84,14 +84,14 @@ export default function EditPuntoVentaPage() {
     const json = await res.json()
 
     if (!res.ok) { setError(json.error || 'Error al guardar'); setSaving(false); return }
-    router.push('/admin/puntos-venta')
+    router.push('/admin/clientes?tab=puntos-venta')
     router.refresh()
   }
 
   const handleDelete = async () => {
     if (!confirm('¿Eliminar este punto de venta? Esta acción no se puede deshacer.')) return
     const res = await fetch(`/api/admin/puntos-venta/${id}`, { method: 'DELETE' })
-    if (res.ok) { router.push('/admin/puntos-venta'); router.refresh() }
+    if (res.ok) { router.push('/admin/clientes?tab=puntos-venta'); router.refresh() }
     else { const json = await res.json(); setError(json.error || 'Error al eliminar') }
   }
 
@@ -178,7 +178,7 @@ export default function EditPuntoVentaPage() {
               borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: saving ? 'wait' : 'pointer',
               opacity: saving ? 0.6 : 1,
             }}>{saving ? 'Guardando...' : 'Guardar cambios'}</button>
-            <a href="/admin/puntos-venta" style={{
+            <a href="/admin/clientes?tab=puntos-venta" style={{
               color: '#6b7280', padding: '12px 20px', fontSize: 14, textDecoration: 'none',
               display: 'flex', alignItems: 'center',
             }}>Cancelar</a>

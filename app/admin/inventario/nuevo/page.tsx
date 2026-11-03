@@ -188,7 +188,7 @@ export default function NuevoProductoPage() {
   }
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 720, fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ maxWidth: 720, fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
         <a href="/admin/inventario" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -305,12 +305,12 @@ export default function NuevoProductoPage() {
           </div>
 
           <div>
-            <label style={labelStyle}>Descripcion corta</label>
+            <label style={labelStyle}>Descripción corta</label>
             <input value={form.descripcion} onChange={e => set('descripcion', e.target.value)} placeholder="Una IPA lupulada y refrescante..." style={inputStyle} />
           </div>
 
           <div>
-            <label style={labelStyle}>Descripcion larga</label>
+            <label style={labelStyle}>Descripción larga</label>
             <textarea value={form.descripcion_larga} onChange={e => set('descripcion_larga', e.target.value)} rows={3} placeholder="Notas de cata, maridajes, historia..."
               style={{ ...inputStyle, resize: 'vertical', minHeight: 80 }} />
           </div>

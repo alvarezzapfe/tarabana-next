@@ -20,5 +20,5 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.toggle', entidad: 'profiles', entidadId: id, detalle: { active: !target.active, target_role: target.role }, request: _req })
 
-  return NextResponse.redirect(new URL('/admin/usuarios', _req.url))
+  return NextResponse.redirect(new URL('/admin/equipo', _req.url))
 }

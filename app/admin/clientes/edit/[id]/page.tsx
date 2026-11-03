@@ -70,10 +70,10 @@ export default function EditClientePage() {
     return {}
   }
 
-  if (loading) return <div style={{ padding: '36px 40px' }}><p style={{ color: '#9ca3af' }}>Cargando...</p></div>
+  if (loading) return <div><p style={{ color: '#9ca3af' }}>Cargando...</p></div>
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 720, fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ maxWidth: 720, fontFamily: 'system-ui, sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 28 }}>
         <a href="/admin/clientes" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>

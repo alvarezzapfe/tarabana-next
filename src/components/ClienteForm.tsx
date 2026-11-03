@@ -133,7 +133,7 @@ export default function ClienteForm({ initial, legacyAddress, onSave, saving, ad
             </div>
           ) : (
             <>
-              <div style={{ marginBottom: 12 }}><label style={LS}>Razon social *</label><input value={d.razon_social} onChange={e => set('razon_social', e.target.value.toUpperCase())} style={IS} placeholder="EMPRESA S.A. DE C.V." /></div>
+              <div style={{ marginBottom: 12 }}><label style={LS}>Razón social *</label><input value={d.razon_social} onChange={e => set('razon_social', e.target.value.toUpperCase())} style={IS} placeholder="EMPRESA S.A. DE C.V." /></div>
               <div className="cf-grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
                 <div><label style={LS}>Nombre comercial</label><input value={d.marca_negocio} onChange={e => set('marca_negocio', e.target.value)} style={IS} placeholder="Como se conoce el lugar" /></div>
                 <div><label style={LS}>Nombre de quien atiende</label><input value={d.contacto_nombre} onChange={e => set('contacto_nombre', e.target.value)} style={IS} placeholder="Juan Perez" /></div>
@@ -147,7 +147,7 @@ export default function ClienteForm({ initial, legacyAddress, onSave, saving, ad
               {emailError && <p style={{ color: '#ef4444', fontSize: 12, margin: '4px 0 0' }}>{emailError}</p>}
             </div>
             <div>
-              <label style={LS}>Telefono</label>
+              <label style={LS}>Teléfono</label>
               <input value={d.phone} onChange={e => set('phone', formatPhone(e.target.value))} style={IS} placeholder="55 1234 5678" inputMode="numeric" />
               {phoneDigits.length > 0 && phoneDigits.length !== 10 && <p style={{ color: '#f59e0b', fontSize: 11, margin: '4px 0 0' }}>{phoneDigits.length}/10 digitos</p>}
             </div>
@@ -180,7 +180,7 @@ export default function ClienteForm({ initial, legacyAddress, onSave, saving, ad
       {/* BLOQUE 4: Direccion */}
       {tp && (
         <div style={{ animation: 'fadeIn 0.2s ease' }}>
-          <p style={{ ...LS, marginBottom: 12, fontSize: 14 }}>Direccion de entrega</p>
+          <p style={{ ...LS, marginBottom: 12, fontSize: 14 }}>Dirección de entrega</p>
           <DireccionForm value={d.direccion} onChange={v => set('direccion', v)} legacyAddress={legacyAddress} />
         </div>
       )}
@@ -191,7 +191,7 @@ export default function ClienteForm({ initial, legacyAddress, onSave, saving, ad
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: d.requiere_factura ? 16 : 0 }}>
             <div>
               <p style={{ margin: 0, fontWeight: 600, fontSize: 15, color: '#1a1a1a' }}>Requiero factura</p>
-              <p style={{ margin: '2px 0 0', fontSize: 13, color: '#9ca3af' }}>Datos fiscales para facturacion</p>
+              <p style={{ margin: '2px 0 0', fontSize: 13, color: '#9ca3af' }}>Datos fiscales para facturación</p>
             </div>
             <button onClick={() => set('requiere_factura', !d.requiere_factura)} style={{ width: 44, height: 24, borderRadius: 12, border: 'none', cursor: 'pointer', background: d.requiere_factura ? '#E8531D' : '#d1d5db', position: 'relative', transition: 'all 0.2s' }}>
               <div style={{ width: 18, height: 18, borderRadius: '50%', background: '#fff', position: 'absolute', top: 3, left: d.requiere_factura ? 23 : 3, transition: 'all 0.2s' }} />
@@ -205,7 +205,7 @@ export default function ClienteForm({ initial, legacyAddress, onSave, saving, ad
                 {d.rfc && d.rfc.length !== rfcLen && <p style={{ color: '#ef4444', fontSize: 11, margin: '4px 0 0' }}>{d.rfc.length}/{rfcLen}</p>}
               </div>
               <div>
-                <label style={LS}>Regimen fiscal</label>
+                <label style={LS}>Régimen fiscal</label>
                 <select value={d.regimen_fiscal} onChange={e => set('regimen_fiscal', e.target.value)} style={{ ...IS, cursor: 'pointer' }}>
                   <option value="">-- Selecciona --</option>
                   {regimenes.map(r => <option key={r.codigo} value={r.codigo}>{r.codigo} - {r.desc}</option>)}

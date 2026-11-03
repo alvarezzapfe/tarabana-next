@@ -1,21 +1,26 @@
-import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
-import PedidosClient from './PedidosClient'
-import { canWrite } from '../../../src/lib/roles'
+import { contextoAdmin, type SearchParams } from '../../../src/lib/admin-contexto'
+import { tabsParaRol } from '../../../src/lib/admin-nav'
+import Tabs, { resolverTab } from '../Tabs'
+import TodosSection from './TodosSection'
+import CobranzaClient from './CobranzaClient'
 
-export default async function PedidosPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: myProfile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
-  const canEdit = canWrite(myProfile?.role)
+export default async function PedidosPage({ searchParams }: { searchParams: SearchParams }) {
+  const [{ role, acento }, params] = await Promise.all([contextoAdmin(), searchParams])
+  const tabs = tabsParaRol('pedidos', role)
+  const activa = resolverTab(tabs, params.tab)
 
-  const [{ data: pedidos }, { data: saldos }, { data: pagos }] = await Promise.all([
-    supabase
-      .from('pedidos')
-      .select('*, profiles!pedidos_cliente_id_fkey(id, full_name, email, phone, tipo_consumidor, nivel_precio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
-      .order('created_at', { ascending: false }),
-    supabase.from('pedidos_saldo').select('*'),
-    supabase.from('pagos').select('*').order('fecha_pago', { ascending: false }),
-  ])
+  if (!activa) return <p style={{ color: '#6b7280', fontSize: 14 }}>Sin acceso a esta sección.</p>
 
-  return <PedidosClient pedidos={pedidos || []} saldos={saldos || []} pagos={pagos || []} canEdit={canEdit} />
+  return (
+    <>
+      <Tabs
+        titulo="Pedidos"
+        tabs={tabs}
+        activa={activa}
+        basePath="/admin/pedidos"
+        acento={acento}
+      />
+      {activa === 'por-cobrar' ? <CobranzaClient /> : <TodosSection />}
+    </>
+  )
 }

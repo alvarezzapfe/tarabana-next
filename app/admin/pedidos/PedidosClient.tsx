@@ -264,11 +264,10 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
   const btnSec: React.CSSProperties = { padding: '8px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, fontSize: 12, color: '#374151', cursor: 'pointer', textDecoration: 'none' }
 
   return (
-    <div style={{ padding: '36px 40px', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ fontFamily: 'system-ui, sans-serif' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
-          <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Pedidos</h1>
           <p style={{ color: '#6b7280', fontSize: 13 }}>{data.length} pedidos totales</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -339,7 +338,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
           {Object.entries(entregaConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
         </select>
         <select value={filterAno} onChange={e => { setFilterAno(e.target.value); if (!e.target.value) setFilterMes('') }} style={FS}>
-          <option value="">Ano: todos</option>
+          <option value="">Año: todos</option>
           {anos.map(a => <option key={a} value={a}>{a}</option>)}
         </select>
         <select value={filterMes} onChange={e => setFilterMes(e.target.value)} disabled={!filterAno} style={{ ...FS, opacity: filterAno ? 1 : 0.5 }}>
@@ -350,7 +349,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
           <option value="">Zona: todas</option>
           <option value="metro">CDMX y Edomex</option>
           {zonas.map(z => <option key={z} value={z}>{z}</option>)}
-          <option value="sin">Sin direccion</option>
+          <option value="sin">Sin dirección</option>
         </select>
         {hasFilters && <button onClick={clearFilters} style={{ padding: '7px 12px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, color: '#ef4444', fontSize: 12, cursor: 'pointer' }}>Limpiar filtros</button>}
         <span style={{ color: '#9ca3af', fontSize: 12, marginLeft: 'auto' }}>{filtered.length} pedidos</span>
@@ -456,11 +455,11 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
               <a href="/admin/clientes" style={{ display: 'inline-block', marginTop: 8, color: '#3b82f6', fontSize: 12, textDecoration: 'none' }}>Ver cliente &rarr;</a>
             </div>
 
-            <p style={SL}>Direccion</p>
+            <p style={SL}>Dirección</p>
             <div style={CARD}>
               {(() => {
                 const lines = formatAddressBlock(dpC)
-                if (!lines) return <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>Sin direccion — <a href="/admin/clientes" style={{ color: '#3b82f6', textDecoration: 'none' }}>editar cliente</a></p>
+                if (!lines) return <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>Sin dirección — <a href="/admin/clientes" style={{ color: '#3b82f6', textDecoration: 'none' }}>editar cliente</a></p>
                 const hasRefs = dpC?.referencias && dpC.calle
                 return <>
                   {lines.map((line, i) => <p key={i} style={{ margin: i ? '2px 0 0' : 0, color: '#1a1a1a', fontSize: 14, fontStyle: hasRefs && i === lines.length - 1 ? 'italic' : undefined }}>{line}</p>)}
@@ -537,7 +536,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
                     {cx && pg.motivo_cancelacion && <p style={{ margin: '4px 0 0', color: '#9ca3af', fontSize: 11 }}>Motivo: {pg.motivo_cancelacion}</p>}
                     {!cx && canEdit && (cancelPagoId === pg.id
                       ? <div style={{ marginTop: 8, display: 'flex', gap: 6, alignItems: 'center' }}>
-                          <input placeholder="Motivo de cancelacion" value={cancelMotivo} onChange={e => setCancelMotivo(e.target.value)} style={{ ...MI, padding: '6px 10px', fontSize: 12, flex: 1 }} />
+                          <input placeholder="Motivo de cancelación" value={cancelMotivo} onChange={e => setCancelMotivo(e.target.value)} style={{ ...MI, padding: '6px 10px', fontSize: 12, flex: 1 }} />
                           <button onClick={cancelPago} disabled={cancelLoading || !cancelMotivo.trim()} style={{ padding: '6px 12px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer', opacity: cancelLoading ? 0.6 : 1 }}>{cancelLoading ? '...' : 'Confirmar'}</button>
                           <button onClick={() => { setCancelPagoId(null); setCancelMotivo('') }} style={{ padding: '6px 10px', background: '#f3f4f6', border: 'none', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#6b7280' }}>X</button>
                         </div>
@@ -596,8 +595,8 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
             <p style={{ color: '#9ca3af', fontSize: 12, margin: '0 0 16px' }}>Pedido #{payModalId.slice(-6).toUpperCase()} — Saldo: {saldoMap[payModalId] ? fmt(saldoMap[payModalId].saldo) : '--'}</p>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               <div><Label>Monto</Label><input type="number" value={payMonto} onChange={e => setPayMonto(e.target.value)} placeholder="0.00" style={{ ...MI, fontSize: 15, fontWeight: 700 }} /></div>
-              <div><Label>Metodo</Label><select value={payMetodo} onChange={e => setPayMetodo(e.target.value)} style={{ ...MI, cursor: 'pointer' }}>{METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select></div>
-              <div><Label>Referencia</Label><input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="No. de operacion" style={MI} /></div>
+              <div><Label>Método</Label><select value={payMetodo} onChange={e => setPayMetodo(e.target.value)} style={{ ...MI, cursor: 'pointer' }}>{METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}</select></div>
+              <div><Label>Referencia</Label><input value={payRef} onChange={e => setPayRef(e.target.value)} placeholder="No. de operación" style={MI} /></div>
             </div>
             {payError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{payError}</p>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
@@ -617,7 +616,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit }: { ped
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               <div><Label>Costo de envio</Label><input type="number" value={shipCosto} onChange={e => setShipCosto(e.target.value)} placeholder="0.00" min="0" step="0.01" style={{ ...MI, fontSize: 15, fontWeight: 700 }} /></div>
               <div><Label>Paqueteria</Label><input value={shipPaqueteria} onChange={e => setShipPaqueteria(e.target.value)} style={MI} /></div>
-              <div><Label>Numero de guia</Label><input value={shipGuia} onChange={e => setShipGuia(e.target.value)} placeholder="Opcional" style={{ ...MI, fontFamily: 'monospace' }} /></div>
+              <div><Label>Número de guía</Label><input value={shipGuia} onChange={e => setShipGuia(e.target.value)} placeholder="Opcional" style={{ ...MI, fontFamily: 'monospace' }} /></div>
             </div>
             {shipError && <p style={{ color: '#ef4444', fontSize: 12, marginBottom: 12, background: '#fef2f2', padding: '8px 12px', borderRadius: 8 }}>{shipError}</p>}
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>

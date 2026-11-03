@@ -183,7 +183,7 @@ export default function EditProductoPage() {
   if (loading) return <div style={{ padding: 60, color: '#6b7280', textAlign: 'center' }}>Cargando...</div>
 
   return (
-    <div style={{ padding: '36px 40px', maxWidth: 860 }}>
+    <div style={{ maxWidth: 860 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16 }}>
         <a href="/admin/inventario" style={{ color: '#6b7280', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
@@ -313,7 +313,7 @@ export default function EditProductoPage() {
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                    <th style={{ padding: '8px 14px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>Presentacion</th>
+                    <th style={{ padding: '8px 14px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>Presentación</th>
                     <th style={{ padding: '8px 10px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase' }}>Publico</th>
                     <th style={{ padding: '8px 10px', textAlign: 'center', color: '#f59e0b', fontSize: 11, textTransform: 'uppercase' }}>Mayorista</th>
                   </tr>
