@@ -1,6 +1,7 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { isStaff, isSuperAdmin } from '../../../../src/lib/roles'
+import { esHex6, contrastaConChrome, contraste, ADMIN_CHROME_BG, CONTRASTE_MINIMO } from '../../../../src/lib/contraste'
 import { logAction } from '../../../../src/lib/audit'
 
 export async function GET() {
@@ -19,10 +20,32 @@ export async function GET() {
 
 const VALID_KEYS = ['branding', 'negocio'] as const
 
-const validateBranding = (v: any) => {
-  if (typeof v !== 'object') return false
-  const allowed = ['color_primary', 'sidebar_bg', 'sidebar_text']
-  return Object.keys(v).every(k => allowed.includes(k) && typeof v[k] === 'string' && /^#[0-9a-fA-F]{6}$/.test(v[k]))
+// sidebar_bg y sidebar_text salieron a proposito: el chrome del admin esta
+// fijo en codigo (ver app/admin/Sidebar.tsx). Dejarlos configurables permitia
+// elegir un fondo claro y romper el contraste de toda la navegacion. Las
+// claves que ya esten guardadas en app_config quedan ahi pero nadie las lee.
+const BRANDING_KEYS = ['color_primary'] as const
+
+type BrandingKey = (typeof BRANDING_KEYS)[number]
+
+const esBrandingKey = (k: string): k is BrandingKey =>
+  (BRANDING_KEYS as readonly string[]).includes(k)
+
+/** Devuelve el motivo del rechazo, o null si es valido. */
+const validateBranding = (v: unknown): string | null => {
+  if (typeof v !== 'object' || v === null || Array.isArray(v)) return 'Branding debe ser un objeto.'
+  const obj = v as Record<string, unknown>
+  for (const k of Object.keys(obj)) {
+    if (!esBrandingKey(k)) return `Clave de branding no permitida: ${k}`
+    if (!esHex6(obj[k])) return `${k} debe ser un color hex de 6 digitos.`
+  }
+  // El acento se pinta sobre el chrome oscuro: si no contrasta, no se lee.
+  const acento = obj.color_primary
+  if (esHex6(acento) && !contrastaConChrome(acento)) {
+    const r = contraste(acento, ADMIN_CHROME_BG).toFixed(2)
+    return `color_primary ${acento} contrasta ${r}:1 contra ${ADMIN_CHROME_BG}; se requiere al menos ${CONTRASTE_MINIMO}:1.`
+  }
+  return null
 }
 
 const validateNegocio = (v: any) => {
@@ -44,7 +67,10 @@ export async function PATCH(request: Request) {
   const { key, value } = await request.json()
   if (!VALID_KEYS.includes(key)) return NextResponse.json({ error: `Key desconocida: ${key}` }, { status: 400 })
 
-  if (key === 'branding' && !validateBranding(value)) return NextResponse.json({ error: 'Valores de branding inválidos. Usa colores hex de 6 dígitos.' }, { status: 400 })
+  if (key === 'branding') {
+    const err = validateBranding(value)
+    if (err) return NextResponse.json({ error: err }, { status: 400 })
+  }
   if (key === 'negocio' && !validateNegocio(value)) return NextResponse.json({ error: 'Valores de negocio inválidos.' }, { status: 400 })
 
   const service = createServiceClient()

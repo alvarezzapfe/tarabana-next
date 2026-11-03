@@ -2,12 +2,14 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '../../../src/lib/supabase'
 import { isSuperAdmin } from '../../../src/lib/roles'
+import { ADMIN_CHROME_BG, CONTRASTE_MINIMO, contraste, contrastaConChrome, esHex6 } from '../../../src/lib/contraste'
 
 export default function ConfiguracionPage() {
   const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [authorized, setAuthorized] = useState(false)
-  const [branding, setBranding] = useState({ color_primary: '#E8531D', sidebar_bg: '#EAF3DE', sidebar_text: '#27500A' })
+  const [branding, setBranding] = useState({ color_primary: '#E8531D' })
+  const [brandingError, setBrandingError] = useState('')
   const [negocio, setNegocio] = useState({ dias_credito_default: 30, dias_alerta_vencido: 7, moneda: 'MXN' })
   const [counts, setCounts] = useState({ usuarios: 0, clientes: 0, pedidos: 0, pagos: 0 })
   const [savingBranding, setSavingBranding] = useState(false)
@@ -31,7 +33,9 @@ export default function ConfiguracionPage() {
         supabase.from('pagos').select('id', { count: 'exact', head: true }),
       ])
 
-      if (configRes.branding) setBranding({ ...branding, ...configRes.branding })
+      // Solo color_primary: sidebar_bg y sidebar_text se retiraron y pueden
+      // seguir presentes en app_config de antes.
+      if (configRes.branding?.color_primary) setBranding({ color_primary: configRes.branding.color_primary })
       if (configRes.negocio) setNegocio({ ...negocio, ...configRes.negocio })
       setCounts({ usuarios: usrRes.count || 0, clientes: cliRes.count || 0, pedidos: pedRes.count || 0, pagos: pagRes.count || 0 })
       setLoading(false)
@@ -41,8 +45,15 @@ export default function ConfiguracionPage() {
 
   const saveBranding = async () => {
     setSavingBranding(true)
-    await fetch('/api/admin/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'branding', value: branding }) })
-    setSavingBranding(false); setSavedBranding(true)
+    setBrandingError('')
+    const res = await fetch('/api/admin/config', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'branding', value: branding }) })
+    setSavingBranding(false)
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}))
+      setBrandingError(body.error || 'No se pudo guardar.')
+      return
+    }
+    setSavedBranding(true)
     setTimeout(() => setSavedBranding(false), 2000)
   }
 
@@ -69,36 +80,39 @@ export default function ConfiguracionPage() {
         <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 20 }}>Marca</p>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 280px', gap: 28 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            {[
-              { key: 'color_primary', label: 'Color primario' },
-              { key: 'sidebar_bg', label: 'Fondo del sidebar' },
-              { key: 'sidebar_text', label: 'Texto del sidebar' },
-            ].map(field => (
-              <div key={field.key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div>
-                  <label style={labelStyle}>{field.label}</label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      type="color"
-                      value={(branding as any)[field.key]}
-                      onChange={e => setBranding({ ...branding, [field.key]: e.target.value })}
-                      style={{ width: 40, height: 36, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', padding: 2 }}
-                    />
-                    <input
-                      value={(branding as any)[field.key]}
-                      onChange={e => setBranding({ ...branding, [field.key]: e.target.value })}
-                      style={{ ...inputStyle, width: 120, fontFamily: 'monospace', fontSize: 13 }}
-                    />
-                  </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div>
+                <label style={labelStyle}>Color de acento</label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <input
+                    type="color"
+                    value={branding.color_primary}
+                    onChange={e => setBranding({ color_primary: e.target.value })}
+                    style={{ width: 40, height: 36, border: '1px solid #d1d5db', borderRadius: 6, cursor: 'pointer', padding: 2 }}
+                  />
+                  <input
+                    value={branding.color_primary}
+                    onChange={e => setBranding({ color_primary: e.target.value })}
+                    style={{ ...inputStyle, width: 120, fontFamily: 'monospace', fontSize: 13 }}
+                  />
                 </div>
+                <p style={{ margin: '8px 0 0', color: '#9ca3af', fontSize: 11, maxWidth: 300, lineHeight: 1.5 }}>
+                  Se usa como acento sobre el chrome oscuro del panel. El resto
+                  de los colores del sidebar estan fijos para garantizar el
+                  contraste.
+                </p>
               </div>
-            ))}
+            </div>
           </div>
-          {/* Preview */}
-          <div style={{ background: branding.sidebar_bg, borderRadius: 10, padding: '20px 16px', border: '1px solid rgba(0,0,0,0.06)' }}>
-            <p style={{ color: branding.sidebar_text, fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14, opacity: 0.5 }}>Preview</p>
-            {['Dashboard', 'Pedidos', 'Clientes'].map(item => (
-              <div key={item} style={{ padding: '8px 10px', borderRadius: 6, color: branding.sidebar_text, fontSize: 13, marginBottom: 2 }}>
+          {/* Preview sobre el chrome real del admin, que esta fijo en codigo */}
+          <div style={{ background: ADMIN_CHROME_BG, borderRadius: 10, padding: '20px 16px', border: '1px solid #1C2128' }}>
+            <p style={{ color: '#8B93A1', fontSize: 11, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 }}>Preview</p>
+            {['Inicio', 'Pedidos', 'Clientes'].map((item, i) => (
+              <div key={item} style={{
+                position: 'relative', padding: '8px 10px', borderRadius: 6, fontSize: 13, marginBottom: 2,
+                color: i === 1 ? '#fff' : '#8B93A1', background: i === 1 ? '#1A1F27' : 'transparent',
+              }}>
+                {i === 1 && <span style={{ position: 'absolute', left: 0, top: 6, bottom: 6, width: 2, background: branding.color_primary, borderRadius: 1 }} />}
                 {item}
               </div>
             ))}
@@ -107,12 +121,18 @@ export default function ConfiguracionPage() {
                 Boton primario
               </button>
             </div>
+            <p style={{ margin: '12px 0 0', fontFamily: 'monospace', fontSize: 11, color: contrastaConChrome(branding.color_primary) ? '#4ade80' : '#f87171' }}>
+              {esHex6(branding.color_primary)
+                ? `contraste ${contraste(branding.color_primary, ADMIN_CHROME_BG).toFixed(2)}:1 ${contrastaConChrome(branding.color_primary) ? 'OK' : `— minimo ${CONTRASTE_MINIMO}:1`}`
+                : 'hex invalido'}
+            </p>
           </div>
         </div>
         <div style={{ marginTop: 20, display: 'flex', alignItems: 'center', gap: 12 }}>
           <button onClick={saveBranding} disabled={savingBranding} style={{ padding: '10px 24px', background: '#E8531D', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', opacity: savingBranding ? 0.6 : 1 }}>
             {savingBranding ? 'Guardando...' : 'Guardar marca'}
           </button>
+          {brandingError && <span style={{ color: '#dc2626', fontSize: 12 }}>{brandingError}</span>}
           {savedBranding && <span style={{ color: '#10b981', fontSize: 13 }}>Guardado. Recarga la pagina para ver los cambios.</span>}
         </div>
       </div>

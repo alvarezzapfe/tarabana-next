@@ -46,3 +46,31 @@ already applied.
 - `public.is_staff()`, `public.is_admin()`, `public.is_super_admin()` — role helpers
 - `public.aplicar_pago(...)` — atomic multi-pedido payment application
 - `public.calc_fecha_vencimiento()` — trigger for payment terms
+
+## Columnas en tarabana_schema.sql que NO existen en produccion
+
+Verificado contra produccion con el service client (solo lectura) el 2026-11-02.
+
+### productos.stock_barriles — NO EXISTE
+```
+column productos.stock_barriles does not exist
+```
+Ya fue tirada (consistente con el hotfix 42d4380, "elimina refs a columnas
+legacy tiradas de la DB"). No hay nada que dropear: lo unico pendiente es que
+`tarabana_schema.sql` la sigue listando. Queda fuera de cualquier calculo —
+era la suma derivada de los cuatro `stock_barril*`, asi que sumarla
+duplicaria el volumen.
+
+### productos.stock_latas — el comentario de tarabana_schema.sql esta MAL
+Ese archivo la documenta como `-- caja12*12 + caja24*24`, o sea derivada.
+**No lo es.** En produccion es un contador independiente de latas sueltas, que
+es como la trata el codigo actual (`InventarioClient.tsx`: `label: 'Sueltas'`,
+y la suma `s + c12 * 12 + c24 * 24`, donde `s` entra aparte).
+
+Comprobado sobre las 10 filas de `productos`: `stock_latas` coincide con
+`caja12*12 + caja24*24` en solo 3, y son justamente las tres que tienen todo
+en cero (0 == 0). En las 7 filas con datos reales no coincide.
+
+**Tratarla como derivada y omitirla subestima el stock; sumarla ademas de un
+total ya derivado lo duplica.** Los factores de conversion viven en
+`src/lib/unidades.ts`; usar esos y no reimplementarlos.
