@@ -1,4 +1,6 @@
 -- ROLLBACK del rol vendedor
+--
+-- En una sola transaccion, igual que la subida.
 
 begin;
 
@@ -6,9 +8,8 @@ drop policy if exists "pedidos_vendedor_read"        on public.pedidos;
 drop policy if exists "pedidos_vendedor_insert"      on public.pedidos;
 drop policy if exists "pedido_items_vendedor_read"   on public.pedido_items;
 drop policy if exists "pedido_items_vendedor_insert" on public.pedido_items;
+drop policy if exists "pagos_vendedor_read"          on public.pagos;
 drop policy if exists "profiles_vendedor_read"       on public.profiles;
-
-commit;
 
 drop function if exists public.mi_vendedor_id();
 drop function if exists public.is_vendedor();
@@ -22,3 +23,5 @@ drop index if exists public.vendedores_profile_id_key;
 -- eliminarlas se queda sin forma de ver nada; hay que reasignarle rol antes.
 alter table public.profiles   drop column if exists vendedor_id;
 alter table public.vendedores drop column if exists profile_id;
+
+commit;

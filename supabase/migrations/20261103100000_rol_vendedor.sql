@@ -21,7 +21,64 @@
 --
 -- Las policies nuevas son ADITIVAS: en Postgres varias policies permisivas se
 -- combinan con OR, asi que ninguna de las de staff cambia de comportamiento.
+--
+-- TODO va en una sola transaccion: si algo falla, no queda nada a medias.
 -- ============================================================
+
+begin;
+
+-- ── 0. Precondiciones ───────────────────────────────────────
+--
+-- Si profiles.role tuviera un CHECK que enumera los roles permitidos, insertar
+-- un 'vendedor' fallaria despues en runtime con un error confuso. Aqui se
+-- revisa antes y se aborta la transaccion completa con un mensaje accionable.
+--
+-- No se reescribe el CHECK automaticamente a proposito: habria que
+-- reconstruir su definicion a ciegas, y eso es justo el tipo de cambio que no
+-- debe hacerse adivinando.
+
+do $$
+declare
+  v_def  text;
+  v_tipo text;
+begin
+  -- role tiene que ser text. Si fuera un enum, agregar un valor es otra
+  -- operacion (ALTER TYPE ... ADD VALUE) y no se puede usar en la misma
+  -- transaccion en que se agrega.
+  select format_type(a.atttypid, a.atttypmod) into v_tipo
+  from pg_attribute a
+  join pg_class t on t.oid = a.attrelid
+  join pg_namespace n on n.oid = t.relnamespace
+  where n.nspname = 'public' and t.relname = 'profiles' and a.attname = 'role';
+
+  if v_tipo is null then
+    raise exception 'No existe public.profiles.role';
+  end if;
+
+  if v_tipo <> 'text' then
+    raise exception using
+      message = format('public.profiles.role es de tipo %s, no text', v_tipo),
+      hint    = 'Si es un enum, agrega el valor ''vendedor'' con ALTER TYPE en una transaccion aparte y vuelve a correr esta migracion.';
+  end if;
+
+  -- CHECK constraints de profiles que mencionen role.
+  select pg_get_constraintdef(c.oid) into v_def
+  from pg_constraint c
+  join pg_class t on t.oid = c.conrelid
+  join pg_namespace n on n.oid = t.relnamespace
+  where n.nspname = 'public'
+    and t.relname = 'profiles'
+    and c.contype = 'c'
+    and pg_get_constraintdef(c.oid) ilike '%role%'
+  limit 1;
+
+  if v_def is not null and v_def not ilike '%vendedor%' then
+    raise exception using
+      message = format('public.profiles.role tiene un CHECK que no admite ''vendedor'': %s', v_def),
+      hint    = 'Agrega ''vendedor'' a los valores permitidos de ese CHECK y vuelve a correr esta migracion.';
+  end if;
+end $$;
+
 
 -- ── 1. Enlaces entre catalogo y login ───────────────────────
 
@@ -88,8 +145,6 @@ grant  execute on function public.mi_vendedor_id() to authenticated;
 
 -- ── 3. Policies ─────────────────────────────────────────────
 
-begin;
-
 -- pedidos: ve y crea solo los suyos.
 -- No hay policy de UPDATE ni de DELETE a proposito: el vendedor no edita
 -- pedidos. El guard de la API tambien lo rechaza; esto es la segunda capa.
@@ -126,6 +181,26 @@ create policy "pedido_items_vendedor_insert" on public.pedido_items
       and p.vendedor_id = public.mi_vendedor_id()
   ));
 
+-- pagos: SELECT de los pagos de sus pedidos.
+--
+-- Imprescindible, no opcional: `pedidos_saldo` agrega sobre `pagos` y tiene
+-- security_invoker = on, asi que sin esta policy el LEFT JOIN no devuelve
+-- filas para el vendedor y la vista le calcula pagado = 0 y saldo = total.
+-- Resultado: su "Cobrado del mes" saldria en $0 y todo le apareceria por
+-- cobrar, sin ningun error visible.
+--
+-- Solo lectura: registrar pagos es de oficina (sigue en pagos_admin_write).
+drop policy if exists "pagos_vendedor_read" on public.pagos;
+
+create policy "pagos_vendedor_read" on public.pagos
+  for select to authenticated
+  using (exists (
+    select 1 from public.pedidos p
+    where p.id = pagos.pedido_id
+      and p.vendedor_id is not null
+      and p.vendedor_id = public.mi_vendedor_id()
+  ));
+
 -- profiles: lee sus clientes. Su propia fila ya la cubre la policy existente
 -- profiles_staff_read, cuya rama `id = auth.uid()` aplica a cualquier
 -- authenticated.
@@ -149,10 +224,9 @@ commit;
 -- vendido). En Fase 3 las comisiones pasan a tramos marginales sobre lo
 -- cobrado, y ese calculo se define ahi.
 --
--- `pedidos_saldo` no necesita cambios: tiene security_invoker = on, asi que
--- las policies de `pedidos` se evaluan con el rol que consulta y la vista le
--- devuelve al vendedor solo sus filas. No hace falta exponer vendedor_id en
--- la vista para que el dashboard del vendedor funcione.
+-- `pedidos_saldo` no necesita cambios: con security_invoker = on y las
+-- policies de pedidos y pagos de arriba, la vista le devuelve al vendedor
+-- solo sus filas y con el pagado correcto.
 --
 -- `productos` tampoco: la policy actual ya deja a cualquier authenticated leer
 -- los activos, que es lo que necesita para armar un pedido. Leer el catalogo
