@@ -1,0 +1,13 @@
+-- ROLLBACK
+--
+-- No hay nada que revertir: la migracion de subida no cambia produccion, solo
+-- escribe en el repo la definicion que ya estaba viva.
+--
+-- A proposito NO se restaura la definicion de 20260803200000_pagos_cobranza
+-- (11 columnas, saldo = total - pagado). Eso no seria un rollback sino una
+-- regresion: dejaria de restar el descuento y de sumar el envio, con lo que
+-- `saldo` pasaria a cobrar de mas, estado_cobro marcaria como vencido lo que
+-- tiene abono, y desaparecerian cinco columnas que el repo ya documenta.
+--
+-- Si de verdad hace falta cambiar la forma de la vista, va en una migracion
+-- nueva y hacia adelante, no aqui.

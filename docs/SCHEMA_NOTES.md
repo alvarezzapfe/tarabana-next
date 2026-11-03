@@ -134,33 +134,47 @@ solo lectura). El archivo de migración declara 11; producción tiene 16:
 16 dias_vencido       integer
 ```
 
-Lógica derivada de los datos y verificada contra las 15 filas de producción
-(15/15 en cada cláusula). **Es ingeniería inversa, no el texto de
-`pg_get_viewdef`:**
+Definición confirmada con `pg_get_viewdef('public.pedidos_saldo')` el
+2026-11-03. Está escrita literal en
+`supabase/migrations/20261103000000_pedidos_saldo_definicion_real.sql`, que
+documenta el estado actual y no cambia nada. **Esa migración es la referencia;
+lo de abajo es solo el resumen.**
 
 ```
 descuento_monto  = CASE descuento_tipo
-                     WHEN 'porcentaje' THEN total * descuento_valor / 100
-                     WHEN 'monto'      THEN descuento_valor
+                     WHEN 'porcentaje' THEN round(total * coalesce(descuento_valor,0) / 100, 2)
+                     WHEN 'monto'      THEN coalesce(descuento_valor,0)
                      ELSE 0 END
-total_con_envio  = total - descuento_monto + costo_envio
-pagado           = coalesce(sum(pagos.monto) filter (cancelado_at is null), 0)
+total_con_envio  = total - descuento_monto + coalesce(costo_envio,0)
+pagado           = coalesce(sum(pagos.monto) filter (where cancelado_at is null), 0)
 saldo            = total_con_envio - pagado
 estado_cobro     = CASE WHEN saldo <= 0 THEN 'pagado'
-                        WHEN pagado > 0 THEN 'parcial'      <- ANTES de vencido
-                        WHEN fecha_vencimiento < now() THEN 'vencido'
+                        WHEN pagado > 0 THEN 'parcial'      -- ANTES de vencido
+                        WHEN fecha_vencimiento is not null
+                             and fecha_vencimiento < CURRENT_DATE THEN 'vencido'
                         ELSE 'pendiente' END
-dias_vencido     = greatest(0, hoy - fecha_vencimiento)
+dias_vencido     = CASE WHEN fecha_vencimiento is null THEN 0
+                        ELSE greatest(0, CURRENT_DATE - fecha_vencimiento) END
 WHERE status <> 'cancelado'
+GROUP BY p.id
+security_invoker = on
 ```
 
-Ojo con el orden de las ramas de `estado_cobro`: el archivo de migración
-evalúa `vencido` antes que `parcial`, producción al revés. El pedido B1465D
-(saldo 100, pagado 1400, 90 días vencido) sale `parcial` en producción y
-saldría `vencido` con la lógica del archivo.
+Tres detalles que importan y que no se ven en los datos:
 
-Lo que NO se pudo obtener sin acceso SQL y sigue pendiente de confirmar antes
-de escribir una migración que redefina la vista: el texto literal de
-`pg_get_viewdef`, el ajuste `security_invoker`, los grants, y si
-`fecha_vencimiento` sale de un cast o de un cambio de tipo en la columna
-origen.
+* El descuento porcentual **se redondea a 2 decimales**. Reimplementarlo sin
+  el `round` da diferencias de centavos contra lo que cobra la vista.
+* El corte de vencimiento es **`CURRENT_DATE`**, no `now()`, y
+  `pedidos.fecha_vencimiento` es **`date`** (el archivo original la declara
+  `timestamptz`). Por eso `CURRENT_DATE - fecha_vencimiento` ya da días
+  enteros, sin `extract`.
+* El orden de las ramas de `estado_cobro`: producción evalúa `parcial` antes
+  que `vencido`, el archivo viejo al revés. El pedido B1465D (saldo 100,
+  pagado 1400, 90 días vencido) sale `parcial` en producción y saldría
+  `vencido` con la lógica del archivo.
+
+`security_invoker = on` significa que las policies RLS de `pedidos` y `pagos`
+se evalúan con el rol que consulta, no con el dueño de la vista. Los grants
+son los default de Supabase (anon, authenticated, postgres, service_role).
+Conceder `ALL` no habilita escritura: la vista tiene `GROUP BY`, así que no es
+auto-updatable y un insert/update/delete falla igual.
