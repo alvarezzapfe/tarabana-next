@@ -1,3 +1,40 @@
+-- ############################################################################
+-- #  ARCHIVO HISTORICO — NO REFLEJA PRODUCCION                               #
+-- ############################################################################
+--
+-- Este es el schema ORIGINAL con el que se creo el proyecto. Produccion
+-- divergio desde entonces y este archivo NO se mantiene al dia: lista
+-- columnas que ya no existen, describe campos como derivados cuando son
+-- independientes, y la definicion viva de al menos una vista es distinta.
+--
+-- NO usar como referencia para escribir codigo ni consultas.
+--
+-- La fuente de verdad es Supabase produccion. Las diferencias verificadas
+-- estan documentadas en:
+--
+--     docs/SCHEMA_NOTES.md
+--
+-- y los cambios aplicados viven en supabase/migrations/.
+--
+-- Discrepancias conocidas (el detalle y la verificacion, en SCHEMA_NOTES.md):
+--
+--   * productos.stock_barriles  listada aqui; NO existe en produccion.
+--   * productos.stock_latas     el comentario dice "caja12*12 + caja24*24",
+--                               o sea derivada. Es independiente: son latas
+--                               sueltas. Tratarla como derivada subestima el
+--                               stock; sumarla sobre un derivado lo duplica.
+--   * public.pedidos_saldo      la vista viva tiene 16 columnas y calcula
+--                               descuento y costo de envio. Aqui no aparece
+--                               nada de eso, y `total` es BRUTO: lo realmente
+--                               facturado es pagado + saldo.
+--   * tablas ausentes           pagos, audit_log, app_config,
+--                               codigos_postales, estilos.
+--
+-- Se conserva sin reescribir porque documenta el punto de partida del
+-- proyecto, que sigue siendo util para entender como se llego aqui.
+--
+-- ############################################################################
+
 -- ============================================================
 -- Tarabaña · Esquema completo para Supabase (PostgreSQL)
 -- Generado 2026-07-11 contra el código real del repo

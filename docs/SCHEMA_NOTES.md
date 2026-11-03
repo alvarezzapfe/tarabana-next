@@ -109,3 +109,58 @@ ni de Por cobrar.
 Los helpers de `src/lib/metricas.ts` ya trabajan sobre la base neta
 (`netoDe`, `netoTotal`, `serieFacturada`); usar esos y no volver a sumar
 `total` a mano.
+
+### Estructura viva de `pedidos_saldo` (16 columnas)
+
+Nombres y orden obtenidos del spec OpenAPI de PostgREST (`GET /rest/v1/`,
+solo lectura). El archivo de migración declara 11; producción tiene 16:
+
+```
+ 1 id                 uuid
+ 2 cliente_id         uuid
+ 3 total              numeric      <- BRUTO
+ 4 costo_envio        numeric      } no estan
+ 5 status             text            en el
+ 6 condiciones_pago   text            archivo
+ 7 fecha_vencimiento  date         <- date, no timestamptz
+ 8 created_at         timestamptz
+ 9 descuento_tipo     text         } no estan
+10 descuento_valor    numeric         en el
+11 descuento_monto    numeric         archivo
+12 total_con_envio    numeric      }
+13 pagado             numeric      <- suma de pagos, NO boolean
+14 saldo              numeric      <- NETO menos pagos
+15 estado_cobro       text
+16 dias_vencido       integer
+```
+
+Lógica derivada de los datos y verificada contra las 15 filas de producción
+(15/15 en cada cláusula). **Es ingeniería inversa, no el texto de
+`pg_get_viewdef`:**
+
+```
+descuento_monto  = CASE descuento_tipo
+                     WHEN 'porcentaje' THEN total * descuento_valor / 100
+                     WHEN 'monto'      THEN descuento_valor
+                     ELSE 0 END
+total_con_envio  = total - descuento_monto + costo_envio
+pagado           = coalesce(sum(pagos.monto) filter (cancelado_at is null), 0)
+saldo            = total_con_envio - pagado
+estado_cobro     = CASE WHEN saldo <= 0 THEN 'pagado'
+                        WHEN pagado > 0 THEN 'parcial'      <- ANTES de vencido
+                        WHEN fecha_vencimiento < now() THEN 'vencido'
+                        ELSE 'pendiente' END
+dias_vencido     = greatest(0, hoy - fecha_vencimiento)
+WHERE status <> 'cancelado'
+```
+
+Ojo con el orden de las ramas de `estado_cobro`: el archivo de migración
+evalúa `vencido` antes que `parcial`, producción al revés. El pedido B1465D
+(saldo 100, pagado 1400, 90 días vencido) sale `parcial` en producción y
+saldría `vencido` con la lógica del archivo.
+
+Lo que NO se pudo obtener sin acceso SQL y sigue pendiente de confirmar antes
+de escribir una migración que redefina la vista: el texto literal de
+`pg_get_viewdef`, el ajuste `security_invoker`, los grants, y si
+`fecha_vencimiento` sale de un cast o de un cambio de tipo en la columna
+origen.
