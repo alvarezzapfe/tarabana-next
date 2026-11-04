@@ -286,8 +286,13 @@ create table if not exists public.comision_cortes (
 
   -- El periodo siempre es el dia 1 del mes, para que (vendedor, periodo) sea
   -- una llave util y no haya dos cortes del mismo mes con fechas distintas.
+  --
+  -- El `::timestamp` es necesario, no decorativo: `date_trunc(text, date)`
+  -- puede resolverse al overload de timestamptz, que es STABLE, y Postgres
+  -- rechaza una funcion no IMMUTABLE dentro de un CHECK. Con el cast explicito
+  -- se elige el overload de timestamp, que si es IMMUTABLE.
   constraint comision_cortes_periodo_dia1
-    check (periodo = date_trunc('month', periodo)::date),
+    check (periodo = date_trunc('month', periodo::timestamp)::date),
   constraint comision_cortes_pagado_coherente
     check (
       (estado = 'pagada'    and pagado_at is not null) or

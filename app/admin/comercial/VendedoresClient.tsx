@@ -3,9 +3,9 @@ import { useState } from 'react'
 import { createClient } from '../../../src/lib/supabase'
 
 const tipos = ['interno', 'externo', 'distribuidor']
-const emptyForm = { nombre: '', email: '', telefono: '', tipo: 'externo', comision_pct: 10, notas: '' }
+const emptyForm = { nombre: '', email: '', telefono: '', tipo: 'externo', notas: '' }
 
-export default function VendedoresClient({ vendedores: init, comisiones, canEdit }: any) {
+export default function VendedoresClient({ vendedores: init, cortes, conEscaleraPropia, canEdit }: any) {
   const [vendedores, setVendedores] = useState(init)
   const [form, setForm] = useState<any>(emptyForm)
   const [editId, setEditId] = useState<string | null>(null)
@@ -14,17 +14,19 @@ export default function VendedoresClient({ vendedores: init, comisiones, canEdit
   const supabase = createClient()
   const set = (k: string, v: any) => setForm((f: any) => ({ ...f, [k]: v }))
 
+  // Sobre los cortes mensuales ya cerrados. El mes en curso no esta aqui a
+  // proposito: se calcula en vivo y vive en la pestana de Comisiones.
   const getStats = (vendedorId: string) => {
-    const vComisiones = comisiones.filter((c: any) => c.vendedor_id === vendedorId)
-    const total = vComisiones.reduce((s: number, c: any) => s + (c.monto_comision || 0), 0)
-    const pagado = vComisiones.filter((c: any) => c.pagada).reduce((s: number, c: any) => s + (c.monto_comision || 0), 0)
-    return { total, pagado, pendiente: total - pagado, count: vComisiones.length }
+    const suyos = cortes.filter((c: any) => c.vendedor_id === vendedorId)
+    const total = suyos.reduce((s: number, c: any) => s + (c.comision || 0), 0)
+    const pagado = suyos.filter((c: any) => c.estado === 'pagada').reduce((s: number, c: any) => s + (c.comision || 0), 0)
+    return { total, pagado, pendiente: total - pagado, count: suyos.length }
   }
 
   const handleSave = async () => {
     if (!form.nombre) return
     setSaving(true)
-    const payload = { nombre: form.nombre, email: form.email || null, telefono: form.telefono || null, tipo: form.tipo, comision_pct: parseFloat(form.comision_pct), notas: form.notas || null }
+    const payload = { nombre: form.nombre, email: form.email || null, telefono: form.telefono || null, tipo: form.tipo, notas: form.notas || null }
     if (editId) {
       const { data } = await supabase.from('vendedores').update(payload).eq('id', editId).select().single()
       if (data) setVendedores((prev: any) => prev.map((v: any) => v.id === editId ? data : v))
@@ -52,7 +54,7 @@ export default function VendedoresClient({ vendedores: init, comisiones, canEdit
 
   const handleEdit = (v: any) => {
     setEditId(v.id)
-    setForm({ nombre: v.nombre, email: v.email || '', telefono: v.telefono || '', tipo: v.tipo, comision_pct: v.comision_pct, notas: v.notas || '' })
+    setForm({ nombre: v.nombre, email: v.email || '', telefono: v.telefono || '', tipo: v.tipo, notas: v.notas || '' })
   }
 
   const inp = (label: string, key: string, placeholder = '', type = 'text') => (
@@ -84,11 +86,6 @@ export default function VendedoresClient({ vendedores: init, comisiones, canEdit
                 style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 14, outline: 'none', cursor: 'pointer' }}>
                 {tipos.map(t => <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
               </select>
-            </div>
-            <div>
-              <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Comisión %</label>
-              <input type="number" step="0.5" min="0" max="100" value={form.comision_pct} onChange={e => set('comision_pct', e.target.value)}
-                style={{ width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#E8531D', fontSize: 14, fontWeight: 700, outline: 'none', boxSizing: 'border-box' as const }} />
             </div>
           </div>
           <div style={{ marginBottom: 16 }}>
@@ -122,17 +119,21 @@ export default function VendedoresClient({ vendedores: init, comisiones, canEdit
                   {v.telefono && <div style={{ color: '#6b7280', fontSize: 12 }}>{v.telefono}</div>}
                 </div>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ color: '#E8531D', fontSize: 20, fontWeight: 700 }}>{v.comision_pct}%</div>
-                  <div style={{ color: '#9ca3af', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em' }}>comisión</div>
+                  <div style={{ color: '#374151', fontSize: 13, fontWeight: 600 }}>
+                    {conEscaleraPropia.includes(v.id) ? 'Escalera propia' : 'Esquema global'}
+                  </div>
+                  <a href="/admin/comercial?tab=comisiones" style={{ color: '#9ca3af', fontSize: 12, textDecoration: 'none' }}>
+                    ver tramos →
+                  </a>
                 </div>
               </div>
 
               {/* Stats comisiones */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8, marginBottom: 14, padding: '12px', background: '#f9fafb', borderRadius: 8 }}>
                 {[
-                  { label: 'Pedidos', value: stats.count, color: '#3b82f6' },
-                  { label: 'Total comisión', value: `$${stats.total.toLocaleString('es-MX')}`, color: '#E8531D' },
-                  { label: 'Por pagar', value: `$${stats.pendiente.toLocaleString('es-MX')}`, color: '#f59e0b' },
+                  { label: 'Meses cerrados', value: stats.count, color: '#3b82f6' },
+                  { label: 'Comisión cerrada', value: `$${Math.round(stats.total).toLocaleString('es-MX')}`, color: '#E8531D' },
+                  { label: 'Por pagar', value: `$${Math.round(stats.pendiente).toLocaleString('es-MX')}`, color: '#f59e0b' },
                 ].map(s => (
                   <div key={s.label} style={{ textAlign: 'center' }}>
                     <div style={{ color: s.color, fontSize: 14, fontWeight: 700 }}>{s.value}</div>

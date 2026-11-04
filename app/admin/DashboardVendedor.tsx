@@ -12,6 +12,7 @@ import {
   variacion,
   type FilaSaldo,
 } from '../../src/lib/metricas'
+import type { ComisionDeVendedor } from '../../src/lib/comisiones'
 
 /**
  * Inicio del vendedor.
@@ -30,11 +31,13 @@ type Props = {
   saldos: FilaSaldo[]
   clientesEnCartera: number
   nombre: string
+  /** null si su login todavia no esta ligado a una ficha de vendedor. */
+  comision: ComisionDeVendedor | null
   /** La fecha viene del servidor: llamarla en render seria impuro. */
   ahoraISO: string
 }
 
-export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, ahoraISO }: Props) {
+export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, comision, ahoraISO }: Props) {
   const ahora = useMemo(() => new Date(ahoraISO), [ahoraISO])
 
   const kpis = useMemo(() => {
@@ -66,8 +69,17 @@ export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, a
         label: 'Clientes en cartera',
         valor: clientesEnCartera.toLocaleString('es-MX'),
       },
+      // Estimada, no definitiva: se mueve con cada pago que entre en el mes y
+      // queda firme cuando la oficina cierra el corte.
+      ...(comision && !comision.sinEsquema
+        ? [{
+            label: 'Comisión del mes',
+            valor: moneda(comision.comision),
+            detalle: 'estimada',
+          }]
+        : []),
     ]
-  }, [saldos, clientesEnCartera, ahora])
+  }, [saldos, clientesEnCartera, comision, ahora])
 
   const serie = useMemo(() => serieFacturada(saldos, 12, ahora), [saldos, ahora])
 
@@ -105,6 +117,8 @@ export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, a
           />
         ))}
       </div>
+
+      {comision && <AvanceComision comision={comision} />}
 
       <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14 }}>
         <div style={card}>
@@ -153,6 +167,83 @@ export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, a
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Comision estimada del mes y avance al siguiente tramo.
+ *
+ * La barra mide el avance DENTRO del tramo actual, no sobre la escalera
+ * completa: el ultimo tramo suele ser abierto y una barra sobre un rango
+ * infinito no significa nada. `tramoActual` es donde cae el siguiente peso
+ * cobrado, asi que con la base justo en un limite ya aparece el tramo de
+ * arriba, que es la tasa que de verdad le van a pagar por lo siguiente.
+ */
+function AvanceComision({ comision }: { comision: ComisionDeVendedor }) {
+  const { base, comision: monto, sinEsquema, topado, tramoActual, siguienteTramo, faltaParaSiguiente, tasaMarginal } = comision
+
+  const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '22px 24px', marginBottom: 14 }
+
+  if (sinEsquema) {
+    return (
+      <div style={card}>
+        <p style={{ color: '#1a1a1a', fontSize: 14, fontWeight: 600, margin: '0 0 6px' }}>Comisión del mes</p>
+        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
+          Todavía no tienes tramos de comisión configurados. En cuanto la oficina los capture, aquí vas a ver tu
+          comisión estimada y cuánto te falta para el siguiente tramo.
+        </p>
+      </div>
+    )
+  }
+
+  // Ancho del tramo actual ya recorrido. Sin tramo actual (base arriba de un
+  // ultimo tramo cerrado) la barra va llena: no hay mas a donde avanzar.
+  const avance =
+    tramoActual && tramoActual.hasta !== null
+      ? Math.min(100, Math.max(0, ((base - tramoActual.desde) / (tramoActual.hasta - tramoActual.desde)) * 100))
+      : 100
+
+  return (
+    <div style={card}>
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 16, flexWrap: 'wrap', marginBottom: 16 }}>
+        <div>
+          <p style={{ color: '#1a1a1a', fontSize: 14, fontWeight: 600, margin: '0 0 4px' }}>Comisión estimada del mes</p>
+          <p style={{ color: '#9ca3af', fontSize: 12, margin: 0 }}>
+            Sobre {moneda(base)} de base cobrada, neta de impuestos y envío
+          </p>
+        </div>
+        <p style={{ color: '#374151', fontSize: 26, fontWeight: 700, margin: '0 0 0 auto', fontVariantNumeric: 'tabular-nums' }}>
+          {moneda(monto)}
+        </p>
+      </div>
+
+      <div style={{ height: 8, background: '#f3f4f6', borderRadius: 99, overflow: 'hidden' }}>
+        <div style={{ width: `${avance}%`, height: '100%', background: '#9ca3af', borderRadius: 99 }} />
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginTop: 8 }}>
+        <span style={{ color: '#9ca3af', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
+          {tramoActual ? moneda(tramoActual.desde) : ''}
+        </span>
+        <span style={{ color: '#9ca3af', fontSize: 11.5, fontVariantNumeric: 'tabular-nums' }}>
+          {tramoActual?.hasta != null ? moneda(tramoActual.hasta) : ''}
+        </span>
+      </div>
+
+      <p style={{ color: '#6b7280', fontSize: 13, margin: '10px 0 0' }}>
+        {topado ? (
+          <>Ya pasaste el último tramo de tu esquema: lo que cobres de más este mes ya no suma comisión.</>
+        ) : siguienteTramo && faltaParaSiguiente !== null ? (
+          <>
+            Vas al <strong style={{ color: '#374151' }}>{tasaMarginal}%</strong>. Te faltan{' '}
+            <strong style={{ color: '#374151' }}>{moneda(faltaParaSiguiente)}</strong> de cobranza para que lo
+            siguiente te pague al <strong style={{ color: '#374151' }}>{siguienteTramo.porcentaje}%</strong>.
+          </>
+        ) : (
+          <>Estás en el tramo más alto: cada peso que cobres te paga al <strong style={{ color: '#374151' }}>{tasaMarginal}%</strong>.</>
+        )}
+      </p>
     </div>
   )
 }

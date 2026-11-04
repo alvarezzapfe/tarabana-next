@@ -46,7 +46,7 @@ export default function NuevoPedidoPage() {
       const [{ data: cl }, { data: pr }, { data: vend }, configRes] = await Promise.all([
         supabase.from('profiles').select('id, full_name, email, tipo_consumidor, nivel_precio').eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
-        supabase.from('vendedores').select('id, nombre, comision_pct').eq('activo', true).order('nombre'),
+        supabase.from('vendedores').select('id, nombre').eq('activo', true).order('nombre'),
         fetch('/api/admin/config').then(r => r.ok ? r.json() : {}),
       ])
       setClientes(cl || [])
@@ -418,7 +418,7 @@ export default function NuevoPedidoPage() {
               style={{ width: '100%', padding: '9px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: vendedorId ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
               <option value="">— Sin vendedor asignado —</option>
               {vendedores.map(v => (
-                <option key={v.id} value={v.id}>{v.nombre} ({v.comision_pct}%)</option>
+                <option key={v.id} value={v.id}>{v.nombre}</option>
               ))}
             </select>
           </div>
