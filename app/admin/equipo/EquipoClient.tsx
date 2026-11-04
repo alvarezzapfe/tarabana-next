@@ -46,7 +46,7 @@ function timeAgo(dateStr: string | null): { text: string; stale: boolean } {
   const hours = Math.floor(mins / 60)
   if (hours < 24) return { text: `hace ${hours} h`, stale: false }
   const days = Math.floor(hours / 24)
-  return { text: `hace ${days} dias`, stale: days > 30 }
+  return { text: `hace ${days} día${days > 1 ? 's' : ''}`, stale: days > 30 }
 }
 
 function timeUntil(dateStr: string): string {
@@ -55,7 +55,7 @@ function timeUntil(dateStr: string): string {
   const diffMs = target - now
   if (diffMs <= 0) return 'Expirada'
   const days = Math.floor(diffMs / 86400000)
-  if (days > 0) return `${days} dia${days > 1 ? 's' : ''}`
+  if (days > 0) return `${days} día${days > 1 ? 's' : ''}`
   const hours = Math.floor(diffMs / 3600000)
   return `${hours} h`
 }
@@ -271,7 +271,7 @@ export default function EquipoClient() {
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
             <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Usuario', 'Rol', '2FA', 'Ultimo acceso', 'Status', 'Acciones'].map(h => (
+              {['Usuario', 'Rol', '2FA', 'Último acceso', 'Status', 'Acciones'].map(h => (
                 <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
               ))}
             </tr>
