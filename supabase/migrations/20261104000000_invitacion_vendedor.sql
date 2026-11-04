@@ -1,5 +1,5 @@
 -- ============================================================
--- invitaciones.vendedor_id — NO APLICADA AUN
+-- invitaciones: vendedor_id y phone — NO APLICADA AUN
 -- ============================================================
 --
 -- Permite elegir la ficha de vendedor al momento de invitar, en un solo paso.
@@ -30,6 +30,17 @@ comment on column public.invitaciones.vendedor_id is
 -- esta comprometida en otra invitacion pendiente.
 create index if not exists invitaciones_vendedor_id_idx
   on public.invitaciones(vendedor_id) where vendedor_id is not null;
+
+-- Celular del invitado, para copiarlo al perfil cuando active.
+--
+-- Se llama `phone` igual que profiles.phone, que es su destino, y guarda el
+-- mismo formato que usa el alta de clientes: '+52' + 10 digitos. Sin indice:
+-- no se busca por este campo, solo se lee junto con la invitacion.
+alter table public.invitaciones
+  add column if not exists phone text;
+
+comment on column public.invitaciones.phone is
+  'Celular del invitado en formato +52XXXXXXXXXX. Se copia a profiles.phone al activar.';
 
 commit;
 

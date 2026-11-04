@@ -24,8 +24,14 @@ export async function POST(request: Request) {
 
   if (createError) return NextResponse.json({ error: createError.message }, { status: 400 })
 
-  // Actualizar profile con rol correcto
-  await supabase.from('profiles').update({ full_name: inv.full_name, role: inv.role }).eq('id', newUser.user.id)
+  // Actualizar profile con rol correcto. El celular viaja en la invitacion
+  // porque al invitar el perfil todavia no existe; antes el dato se capturaba
+  // en el formulario y se tiraba.
+  await supabase.from('profiles').update({
+    full_name: inv.full_name,
+    role: inv.role,
+    ...(inv.phone ? { phone: inv.phone } : {}),
+  }).eq('id', newUser.user.id)
 
   // Ligar la ficha de vendedor, si la invitacion traia una. Es el unico
   // momento en que se puede: vendedores.profile_id necesita un profiles.id y

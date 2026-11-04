@@ -27,6 +27,17 @@ export async function POST(request: Request) {
 
   const serviceClient = createServiceClient()
 
+  // ── Celular ───────────────────────────────────────────────
+  //
+  // Se normaliza al mismo formato que usa el alta de clientes
+  // ('+52' + 10 digitos) porque su destino es profiles.phone, que ya guarda
+  // asi. Es opcional; si viene con otra cantidad de digitos se rechaza en vez
+  // de guardarlo mal.
+  const digitos = String(cel || '').replace(/\D/g, '')
+  if (digitos && digitos.length !== 10)
+    return NextResponse.json({ error: 'El celular debe tener 10 digitos' }, { status: 400 })
+  const phone = digitos ? `+52${digitos}` : null
+
   // ── Ficha de vendedor ─────────────────────────────────────
   //
   // Un vendedor sin ficha entra al panel y no puede crear nada, porque
@@ -114,7 +125,7 @@ export async function POST(request: Request) {
   const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: inv, error: invError } = await serviceClient
     .from('invitaciones')
-    .insert({ email, full_name: nombre, role: rol, created_by: user.id, expires_at, vendedor_id: fichaId })
+    .insert({ email, full_name: nombre, role: rol, created_by: user.id, expires_at, vendedor_id: fichaId, phone })
     .select('token')
     .single()
 
@@ -178,6 +189,6 @@ export async function POST(request: Request) {
 </html>`
   })
 
-  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.invitar', entidad: 'invitaciones', entidadId: inv.token, detalle: { email, nombre, rol, vendedor_id: fichaId }, request })
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.invitar', entidad: 'invitaciones', entidadId: inv.token, detalle: { email, nombre, rol, vendedor_id: fichaId, phone }, request })
   return NextResponse.json({ ok: true })
 }
