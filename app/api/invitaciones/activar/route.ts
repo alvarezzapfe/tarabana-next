@@ -27,6 +27,26 @@ export async function POST(request: Request) {
   // Actualizar profile con rol correcto
   await supabase.from('profiles').update({ full_name: inv.full_name, role: inv.role }).eq('id', newUser.user.id)
 
+  // Ligar la ficha de vendedor, si la invitacion traia una. Es el unico
+  // momento en que se puede: vendedores.profile_id necesita un profiles.id y
+  // el perfil acaba de existir.
+  //
+  // Si la ficha se borro entre la invitacion y la activacion, el on delete
+  // set null ya dejo vendedor_id en null y esto no corre: la persona entra
+  // sin ficha y el panel se lo avisa.
+  if (inv.vendedor_id) {
+    const { error: eLiga } = await supabase
+      .from('vendedores')
+      .update({ profile_id: newUser.user.id })
+      .eq('id', inv.vendedor_id)
+      .is('profile_id', null)
+    if (eLiga) {
+      // No se aborta: la cuenta ya existe y es mejor que entre sin ficha que
+      // dejarla a medias. Un super admin la liga desde Equipo.
+      console.error('[activar] no se pudo ligar la ficha de vendedor', eLiga.message)
+    }
+  }
+
   // Marcar invitación como usada
   await supabase.from('invitaciones').update({ used: true }).eq('token', token)
 

@@ -12,12 +12,12 @@ type FichaVendedor = {
 }
 
 const roleConfig: Record<string, { label: string; color: string; bg: string }> = {
-  super_admin:  { label: 'Super Admin',   color: '#E8531D', bg: '#fed7aa' },
-  admin:        { label: 'Admin',          color: '#3b82f6', bg: '#dbeafe' },
-  produccion:   { label: 'Producción',     color: '#f59e0b', bg: '#fef3c7' },
-  ventas:       { label: 'Ventas',         color: '#10b981', bg: '#d1fae5' },
-  vendedor:     { label: 'Vendedor',       color: '#0284c7', bg: '#e0f2fe' },
-  contabilidad: { label: 'Contabilidad',   color: '#8b5cf6', bg: '#ede9fe' },
+  super_admin:  { label: 'Super Admin',   color: '#9A3412', bg: '#fed7aa' },
+  admin:        { label: 'Admin',          color: '#1D4ED8', bg: '#dbeafe' },
+  produccion:   { label: 'Producción',     color: '#92400E', bg: '#fef3c7' },
+  ventas:       { label: 'Ventas',         color: '#065F46', bg: '#d1fae5' },
+  vendedor:     { label: 'Vendedor',       color: '#075985', bg: '#e0f2fe' },
+  contabilidad: { label: 'Contabilidad',   color: '#5B21B6', bg: '#ede9fe' },
 }
 
 const actionLabels: Record<string, string> = {

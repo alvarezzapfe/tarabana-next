@@ -22,10 +22,69 @@ export async function POST(request: Request) {
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
   if (!isSuperAdmin(profile?.role)) return NextResponse.json({ error: 'Solo super admin' }, { status: 403 })
 
-  const { nombre, email, cel, rol } = await request.json()
+  const { nombre, email, cel, rol, vendedor_id, vendedor_nuevo } = await request.json()
   if (!(ASSIGNABLE_ROLES as readonly string[]).includes(rol)) return NextResponse.json({ error: 'Rol inválido' }, { status: 400 })
 
   const serviceClient = createServiceClient()
+
+  // ── Ficha de vendedor ─────────────────────────────────────
+  //
+  // Un vendedor sin ficha entra al panel y no puede crear nada, porque
+  // mi_vendedor_id() resuelve por vendedores.profile_id. Asi que se exige
+  // aqui y se resuelve en el mismo paso que la invitacion.
+  //
+  // La ficha NO se liga ahora: al invitar todavia no existe el perfil. Se
+  // guarda en invitaciones.vendedor_id y /api/invitaciones/activar hace la
+  // liga cuando el perfil ya existe.
+  const TIPOS_FICHA = ['interno', 'externo', 'distribuidor']
+  let fichaId: string | null = null
+
+  if (rol === 'vendedor') {
+    if (vendedor_nuevo) {
+      const nombreFicha = String(vendedor_nuevo.nombre || '').trim()
+      const tipoFicha = String(vendedor_nuevo.tipo || 'externo')
+      if (nombreFicha.length < 2)
+        return NextResponse.json({ error: 'El nombre de la ficha es obligatorio' }, { status: 400 })
+      if (!TIPOS_FICHA.includes(tipoFicha))
+        return NextResponse.json({ error: 'Tipo de ficha invalido' }, { status: 400 })
+
+      // comision_pct se deja en el default de la tabla: en Fase 3 las
+      // comisiones pasan a tramos marginales, asi que pedir un porcentaje
+      // aqui seria capturar un dato que se va a reemplazar.
+      const { data: creada, error: eFicha } = await serviceClient
+        .from('vendedores')
+        .insert({ nombre: nombreFicha, tipo: tipoFicha, activo: true })
+        .select('id')
+        .single()
+      if (eFicha || !creada)
+        return NextResponse.json({ error: eFicha?.message || 'No se pudo crear la ficha' }, { status: 400 })
+      fichaId = creada.id
+    } else if (vendedor_id) {
+      const { data: ficha } = await serviceClient
+        .from('vendedores')
+        .select('id, profile_id, activo')
+        .eq('id', vendedor_id)
+        .maybeSingle()
+      if (!ficha) return NextResponse.json({ error: 'Ficha de vendedor no encontrada' }, { status: 404 })
+      if (ficha.profile_id) return NextResponse.json({ error: 'Esa ficha ya esta ligada a otro usuario' }, { status: 409 })
+      if (ficha.activo === false) return NextResponse.json({ error: 'Esa ficha esta inactiva' }, { status: 400 })
+
+      // Que no quede comprometida en dos invitaciones pendientes a la vez.
+      const { data: comprometida } = await serviceClient
+        .from('invitaciones')
+        .select('id, email')
+        .eq('vendedor_id', vendedor_id)
+        .eq('used', false)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle()
+      if (comprometida)
+        return NextResponse.json({ error: `Esa ficha ya esta reservada para la invitacion de ${comprometida.email}` }, { status: 409 })
+
+      fichaId = ficha.id
+    } else {
+      return NextResponse.json({ error: 'Un vendedor necesita una ficha de vendedor' }, { status: 400 })
+    }
+  }
 
   // Validar duplicados antes de insertar
   const { data: existingProfile } = await serviceClient.from('profiles').select('id').eq('email', email).single()
@@ -55,7 +114,7 @@ export async function POST(request: Request) {
   const expires_at = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()
   const { data: inv, error: invError } = await serviceClient
     .from('invitaciones')
-    .insert({ email, full_name: nombre, role: rol, created_by: user.id, expires_at })
+    .insert({ email, full_name: nombre, role: rol, created_by: user.id, expires_at, vendedor_id: fichaId })
     .select('token')
     .single()
 
@@ -119,6 +178,6 @@ export async function POST(request: Request) {
 </html>`
   })
 
-  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.invitar', entidad: 'invitaciones', entidadId: inv.token, detalle: { email, nombre, rol }, request })
+  logAction({ actorId: user.id, actorEmail: user.email!, actorRole: profile!.role, accion: 'usuario.invitar', entidad: 'invitaciones', entidadId: inv.token, detalle: { email, nombre, rol, vendedor_id: fichaId }, request })
   return NextResponse.json({ ok: true })
 }
