@@ -1,7 +1,17 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
+import { isStaffSinVentas } from '../../../src/lib/roles'
 
 export default async function ProduccionPage() {
   const supabase = await createServerSupabaseClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
+
+  // Mismo predicado que usa el sidebar, para que lo que se esconde sea
+  // tambien lo que se niega. Antes la pagina no tenia guard propio.
+  if (!isStaffSinVentas(profile?.role)) {
+    return <p style={{ color: '#6b7280', fontSize: 14 }}>Sin acceso a esta sección.</p>
+  }
+
   const { data: lotes } = await supabase
     .from('lotes')
     .select('*, productos(nombre)')

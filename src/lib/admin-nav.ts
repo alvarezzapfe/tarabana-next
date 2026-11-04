@@ -19,18 +19,14 @@ import {
   isStaff,
   isVendedor,
   canEnterPanel,
-  enRoles,
+  isStaffSinVentas,
 } from './roles'
 
 /** canWrite (staff de oficina) o el vendedor, acotado por RLS a lo suyo. */
 const canWriteOVendedor: RolePredicate = role => canWrite(role) || isVendedor(role)
 
-/**
- * Staff menos ventas. Ventas no gestiona produccion ni finanzas.
- * Se escribe con lista explicita porque ningun predicado de roles.ts
- * describe este recorte.
- */
-const staffSinVentas = enRoles('super_admin', 'admin', 'produccion', 'contabilidad')
+/** Staff menos ventas. Ventas no gestiona produccion ni finanzas. */
+const staffSinVentas = isStaffSinVentas
 
 type RolePredicate = (role?: string | null) => boolean
 

@@ -50,14 +50,6 @@ export function canEnterPanel(role?: string | null): boolean {
   return isStaff(role) || isVendedor(role)
 }
 
-/**
- * Helper para declarar visibilidad con una lista explicita de roles, cuando
- * ningun predicado existente describe el recorte. Se usa en admin-nav para
- * las secciones que no le tocan a ventas.
- */
-export function enRoles(...roles: string[]) {
-  return (role?: string | null): boolean => !!role && roles.includes(role)
-}
 
 // ── Feature-specific subsets (more restrictive than is_admin() in SQL) ──
 // These exist because the UI promises narrower access per role description:
@@ -72,6 +64,16 @@ export function enRoles(...roles: string[]) {
 export const ADMIN_ONLY_ROLES = ['super_admin', 'admin'] as const
 export function canManageAsAdmin(role?: string | null): boolean {
   return !!role && (ADMIN_ONLY_ROLES as readonly string[]).includes(role)
+}
+
+/**
+ * Produccion y Finanzas: staff menos ventas. Lo comparten el sidebar y los
+ * guards de esas paginas, para que la visibilidad y la autorizacion no se
+ * contradigan.
+ */
+export const STAFF_SIN_VENTAS_ROLES = ['super_admin', 'admin', 'produccion', 'contabilidad'] as const
+export function isStaffSinVentas(role?: string | null): boolean {
+  return !!role && (STAFF_SIN_VENTAS_ROLES as readonly string[]).includes(role)
 }
 
 /** Inventory management — admin + produccion, not ventas */
