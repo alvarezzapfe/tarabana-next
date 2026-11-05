@@ -1,463 +1,734 @@
 'use client'
-import { useState, useEffect } from 'react'
-import { createClient } from '../../../../src/lib/supabase'
-import { isVendedor } from '../../../../src/lib/roles'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import MixBuilder, { type MixResult, type MixProduct } from '../../../../src/components/MixBuilder'
+import { createClient } from '../../../../src/lib/supabase'
+import { canManageAsAdmin, isVendedor } from '../../../../src/lib/roles'
+import { precioSufijo } from '../../../../src/lib/clientes'
+import { nombreLegible } from '../../../../src/lib/metricas'
+import MixBuilder, { type MixProduct, type MixResult } from '../../../../src/components/MixBuilder'
+import MatrizProductos from './MatrizProductos'
+import Carrito, { type Descuento } from './Carrito'
+import ClienteCombobox, { type Cliente } from './ClienteCombobox'
+import {
+  ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA,
+  type Partida, type Producto,
+  card, claveCelda, etiquetaDe, moneda, precioDe, presentacionesVisibles,
+  productoDeClave, stockDe, tabular,
+} from './pos-ui'
 
-type Producto = { id: string; nombre: string; estilo: string; precio_lata_publico: number; precio_lata_taproom: number; precio_barril_pet_publico: number; precio_barril_pet_taproom: number; precio_barril_acero_taproom: number; stock_caja12: number; stock_caja24: number; stock_barril_pet: number; stock_barril_acero: number; stock_latas: number; imagen_url: string }
-type Cliente = { id: string; full_name: string; email: string; tipo_consumidor: string; nivel_precio: string }
-type Item = { producto_id: string; nombre: string; unidad: string; cantidad: number; precio: number }
+/**
+ * Captura de pedidos, estilo punto de venta.
+ *
+ * La matriz es la pantalla: filas de productos, columnas de presentacion y un
+ * stepper en cada celda, con el precio del nivel del cliente y el stock. El
+ * carrito vive fijo a la derecha y Confirmar siempre esta visible.
+ *
+ * La LOGICA no cambia: sigue siendo un POST a /api/admin/pedidos/crear con el
+ * mismo body, que atiende `crearPedido`. Los precios y el stock salen de
+ * `precioUnitario` y `columnaStockDe` (ver pos-ui.ts), las mismas primitivas
+ * que usa el servidor, en vez de los helpers locales e incompletos que tenia
+ * esta pagina y que no conocian ni las latas sueltas ni los barriles de 10 L.
+ */
 
-const unidades = [
-  { key: 'caja12', label: 'Caja 12 latas' },
-  { key: 'caja24', label: 'Caja 24 latas' },
-  { key: 'barril_pet', label: 'Barril 20L PET' },
-  { key: 'barril_acero', label: 'Barril 20L Acero' },
+const CONDICIONES = [
+  { key: 'contado', label: 'Contado' },
+  { key: '15_dias', label: '15 dias' },
+  { key: '30_dias', label: '30 dias' },
 ]
+
+/** Sin acentos y en minusculas, para buscar. */
+const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+
+const CSS = `
+  .pos-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 342px; align-items: start; }
+  .pos-carrito { position: sticky; top: 16px; }
+  .pos-movil { display: none; }
+  .pos-barra-movil { display: none; }
+
+  @media (max-width: 1020px) {
+    .pos-grid { grid-template-columns: minmax(0, 1fr); }
+    .pos-carrito { position: static; }
+  }
+  /* En movil la matriz se cambia por tarjetas: siete columnas en 390 px no
+     se leen ni se pican. */
+  @media (max-width: 720px) {
+    .pos-matriz { display: none; }
+    .pos-movil { display: block; }
+    .pos-carrito-panel { display: none; }
+    .pos-carrito-panel.abierto { display: block; }
+    .pos-barra-movil {
+      display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+      align-items: center; gap: 10px; padding: 10px 14px;
+      background: #fff; border-top: 1px solid #e5e7eb;
+      box-shadow: 0 -4px 16px rgba(17,24,39,0.08);
+    }
+    .pos-con-barra { padding-bottom: 78px; }
+  }
+`
 
 export default function NuevoPedidoPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const supabase = createClient()
+  const supabase = useMemo(() => createClient(), [])
 
   const [clientes, setClientes] = useState<Cliente[]>([])
+  const [recientes, setRecientes] = useState<string[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
-  const [clienteId, setClienteId] = useState(searchParams.get('cliente') || '')
-  // tipoPrecio derived from client's nivel_precio, not selectable
-  const [condicionesPago, setCondicionesPago] = useState('contado')
-  const [items, setItems] = useState<Item[]>([])
-  const [notas, setNotas] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [crearError, setCrearError] = useState('')
-  const [showMixModal, setShowMixModal] = useState(false)
-  const [descuentoTipo, setDescuentoTipo] = useState<'' | 'porcentaje' | 'monto'>('')
-  const [descuentoValor, setDescuentoValor] = useState('')
-  const [descuentoMotivo, setDescuentoMotivo] = useState('')
-  const [clienteSearch, setClienteSearch] = useState('')
-  const [vendedores, setVendedores] = useState<any[]>([])
-  // El vendedor no pone descuentos ni elige a quien se le asigna el pedido:
-  // la API fuerza su propia ficha e ignora el vendedor_id del body.
+  const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([])
   const [esVendedor, setEsVendedor] = useState(false)
-  const [vendedorId, setVendedorId] = useState('')
+  const [puedeDescuento, setPuedeDescuento] = useState(false)
 
+  const [clienteId, setClienteId] = useState(searchParams.get('cliente') || '')
+  const [vendedorId, setVendedorId] = useState('')
+  const [condiciones, setCondiciones] = useState('contado')
+  const [notas, setNotas] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+
+  /** Cantidades de la matriz, por clave "<uuid>-<presentacion>". */
+  const [cantidades, setCantidades] = useState<Record<string, number>>({})
+  /** Las cajas mixtas van aparte: no son una celda de la matriz. */
+  const [mixes, setMixes] = useState<Partida[]>([])
+
+  const [descuento, setDescuento] = useState<Descuento>({ tipo: '', valor: '', motivo: '' })
+  const [costoEnvio, setCostoEnvio] = useState('')
+
+  const [drawerMix, setDrawerMix] = useState(false)
+  const [carritoMovil, setCarritoMovil] = useState(false)
+  const [enviando, setEnviando] = useState(false)
+  const [error, setError] = useState('')
+  const [aviso, setAviso] = useState('')
+
+  // ── Carga ─────────────────────────────────────────────────
   useEffect(() => {
-    const load = async () => {
-      const [{ data: cl }, { data: pr }, { data: vend }, configRes] = await Promise.all([
-        supabase.from('profiles').select('id, full_name, email, tipo_consumidor, nivel_precio').eq('role', 'comprador').order('full_name'),
+    const cargar = async () => {
+      const [{ data: perfiles }, { data: prods }, { data: vend }, config] = await Promise.all([
+        supabase.from('profiles')
+          .select('id, full_name, email, razon_social, nivel_precio')
+          .eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
         supabase.from('vendedores').select('id, nombre').eq('activo', true).order('nombre'),
-        fetch('/api/admin/config').then(r => r.ok ? r.json() : {}),
+        fetch('/api/admin/config').then(r => (r.ok ? r.json() : {})).catch(() => ({})),
       ])
-      setClientes(cl || [])
-      setProductos(pr || [])
+
+      setClientes((perfiles || []).map(p => ({
+        id: p.id,
+        nombre: nombreLegible(p),
+        email: p.email,
+        nivel_precio: p.nivel_precio,
+      })))
+      setProductos((prods || []) as Producto[])
       setVendedores(vend || [])
+
+      // Clientes mas recientes POR ULTIMO PEDIDO, no por fecha de alta: la
+      // pregunta es "a quien le vendi hace poco". Con RLS, un vendedor ve
+      // solo sus pedidos, que es justo lo que le sirve.
+      const { data: ultimos } = await supabase
+        .from('pedidos').select('cliente_id, created_at')
+        .order('created_at', { ascending: false }).limit(120)
+      const vistos: string[] = []
+      for (const p of ultimos || []) {
+        if (p.cliente_id && !vistos.includes(p.cliente_id)) vistos.push(p.cliente_id)
+      }
+      setRecientes(vistos)
 
       const { data: { user } } = await supabase.auth.getUser()
       if (user) {
         const { data: yo } = await supabase.from('profiles').select('role').eq('id', user.id).single()
         setEsVendedor(isVendedor(yo?.role))
+        // Descuento y envio son de admin: `crearPedido` los rechaza para
+        // cualquier otro rol, asi que la UI no los ofrece y nadie captura
+        // algo que el servidor va a tirar.
+        setPuedeDescuento(canManageAsAdmin(yo?.role))
       }
-      // Set default condiciones_pago from config
-      const diasDefault = (configRes as any)?.negocio?.dias_credito_default
-      if (diasDefault === 15) setCondicionesPago('15_dias')
-      else if (diasDefault === 30) setCondicionesPago('30_dias')
-      else setCondicionesPago('contado')
+
+      const dias = (config as { negocio?: { dias_credito_default?: number } })?.negocio?.dias_credito_default
+      setCondiciones(dias === 15 ? '15_dias' : dias === 30 ? '30_dias' : 'contado')
     }
-    load()
+    cargar()
+  }, [supabase])
+
+  // ── Derivados ─────────────────────────────────────────────
+  const cliente = clientes.find(c => c.id === clienteId) || null
+  const sufijo = precioSufijo(cliente?.nivel_precio)
+  const presentaciones = useMemo(() => presentacionesVisibles(productos), [productos])
+  const porId = useMemo(() => new Map(productos.map(p => [p.id, p])), [productos])
+
+  const productosFiltrados = useMemo(() => {
+    const q = norm(busqueda.trim())
+    if (!q) return productos
+    return productos.filter(p => norm(`${p.nombre} ${p.estilo || ''}`).includes(q))
+  }, [productos, busqueda])
+
+  /** La presentacion de una clave de celda. */
+  const presentacionDe = useCallback(
+    (clave: string) => clave.slice(productoDeClave(clave).length + 1),
+    []
+  )
+
+  /** Las partidas que van al servidor: matriz mas mixes. */
+  const partidas = useMemo<Partida[]>(() => {
+    const deMatriz: Partida[] = []
+    for (const [clave, cantidad] of Object.entries(cantidades)) {
+      if (cantidad <= 0) continue
+      const producto = porId.get(productoDeClave(clave))
+      if (!producto) continue
+      const presentacion = presentacionDe(clave)
+      const precio = precioDe(producto, presentacion, sufijo)
+      if (precio <= 0) continue
+      deMatriz.push({
+        producto_id: clave,
+        nombre: `${producto.nombre} — ${etiquetaDe(presentacion)}`,
+        unidad: presentacion,
+        cantidad,
+        precio,
+      })
+    }
+    // Un mix cuyo estilo perdio el precio en este nivel queda fuera, igual
+    // que una celda sin precio: el servidor lo rechazaria de todos modos.
+    const mixesValidos = mixes.filter(m => {
+      const estilos = (m.metadata as { estilos?: { producto_id: string }[] } | undefined)?.estilos || []
+      return estilos.length > 0 && estilos.every(e => {
+        const p = porId.get(e.producto_id)
+        return p ? precioDe(p, 'lata', sufijo) > 0 : false
+      })
+    })
+    return [...deMatriz, ...mixesValidos]
+  }, [cantidades, mixes, porId, sufijo, presentacionDe])
+
+  const stockPorClave = useMemo(() => {
+    const mapa: Record<string, number> = {}
+    for (const clave of Object.keys(cantidades)) {
+      const producto = porId.get(productoDeClave(clave))
+      if (!producto) continue
+      mapa[clave] = stockDe(producto, presentacionDe(clave))
+    }
+    return mapa
+  }, [cantidades, porId, presentacionDe])
+
+  // ── Reprecio al cambiar de cliente ────────────────────────
+  //
+  // No hay efecto que sincronice nada: lo que no tiene precio en el nivel del
+  // cliente actual simplemente no entra al carrito, y se lista en un aviso.
+  // Antes esto era un useEffect que borraba `cantidades`, lo que ademas de
+  // violar la regla de no llamar setState dentro de un efecto era destructivo:
+  // al volver al cliente anterior la captura ya se habia perdido. Derivarlo
+  // en render hace que cambiar de cliente reprecie al instante y que volver
+  // atras recupere lo capturado.
+  const fueraDeNivel = useMemo(() => {
+    const fuera: string[] = []
+    for (const [clave, cantidad] of Object.entries(cantidades)) {
+      if (cantidad <= 0) continue
+      const producto = porId.get(productoDeClave(clave))
+      if (!producto) continue
+      const presentacion = presentacionDe(clave)
+      if (precioDe(producto, presentacion, sufijo) <= 0) {
+        fuera.push(`${producto.nombre} — ${etiquetaDe(presentacion)}`)
+      }
+    }
+    for (const m of mixes) {
+      const estilos = (m.metadata as { estilos?: { producto_id: string }[] } | undefined)?.estilos || []
+      const vale = estilos.length > 0 && estilos.every(e => {
+        const p = porId.get(e.producto_id)
+        return p ? precioDe(p, 'lata', sufijo) > 0 : false
+      })
+      if (!vale) fuera.push(m.nombre)
+    }
+    return fuera
+  }, [cantidades, mixes, porId, sufijo, presentacionDe])
+
+  // ── Handlers ──────────────────────────────────────────────
+  const setCantidad = useCallback((productoId: string, presentacion: string, cantidad: number) => {
+    const clave = claveCelda(productoId, presentacion)
+    setCantidades(prev => {
+      if (cantidad <= 0) {
+        const resto = { ...prev }
+        delete resto[clave]
+        return resto
+      }
+      return { ...prev, [clave]: cantidad }
+    })
   }, [])
 
-  const clienteSeleccionado = clientes.find(c => c.id === clienteId)
-  const esMayorista = clienteSeleccionado?.nivel_precio === 'taproom' || clienteSeleccionado?.nivel_precio === 'distribuidor'
-  const sufijoPrecio = esMayorista ? 'taproom' : 'publico'
-  const nivelLabel = esMayorista ? 'Precios mayoristas' : 'Precios al publico'
-
-  const getPrecio = (p: Producto, unidad: string): number => {
-    const suf = sufijoPrecio
-    const precioLata = (p as any)[`precio_lata_${suf}`] as number || 0
-    if (unidad === 'caja12') return Math.round(precioLata * 12)
-    if (unidad === 'caja24') return Math.round(precioLata * 24)
-    if (unidad === 'barril_pet') return (p as any)[`precio_barril_pet_${suf}`] as number || 0
-    if (unidad === 'barril_acero') return (p as any)[`precio_barril_acero_${suf}`] as number || 0
-    return 0
-  }
-
-  const getStock = (p: Producto, unidad: string): number => {
-    if (unidad === 'caja12') return p.stock_caja12
-    if (unidad === 'caja24') return p.stock_caja24
-    if (unidad === 'barril_pet') return p.stock_barril_pet
-    if (unidad === 'barril_acero') return p.stock_barril_acero
-    return 0
-  }
-
-  const addItem = (producto: Producto, unidad: string) => {
-    const precio = getPrecio(producto, unidad)
-    if (!precio) return
-    const key = `${producto.id}-${unidad}`
-    const existing = items.find(i => i.producto_id === key)
-    if (existing) {
-      setItems(items.map(i => i.producto_id === key ? { ...i, cantidad: i.cantidad + 1 } : i))
-    } else {
-      const uLabel = unidades.find(u => u.key === unidad)?.label || unidad
-      setItems([...items, { producto_id: key, nombre: `${producto.nombre} — ${uLabel}`, unidad, cantidad: 1, precio }])
+  const cambiarPartida = useCallback((partida: Partida, cantidad: number) => {
+    if (partida.unidad === 'mix24') {
+      setMixes(prev => cantidad <= 0
+        ? prev.filter(m => m.producto_id !== partida.producto_id)
+        : prev.map(m => (m.producto_id === partida.producto_id ? { ...m, cantidad } : m)))
+      return
     }
-  }
-
-  // Recalculate cart prices when the price level changes (client switch)
-  const [prevSufijo, setPrevSufijo] = useState(sufijoPrecio)
-  const [removedWarning, setRemovedWarning] = useState('')
-  useEffect(() => {
-    if (sufijoPrecio === prevSufijo) return
-    setPrevSufijo(sufijoPrecio)
-    if (items.length === 0) return
-
-    const kept: Item[] = []
-    const dropped: string[] = []
-    for (const item of items) {
-      if (item.unidad === 'mix24') {
-        // Mix: recalculate prorrateo per lata
-        const meta = (item as any).metadata
-        if (meta?.estilos) {
-          let mixTotal = 0
-          let valid = true
-          for (const e of meta.estilos) {
-            const prod = productos.find(p => p.id === e.producto_id)
-            const lataPrice = prod ? ((prod as any)[`precio_lata_${sufijoPrecio}`] || 0) : 0
-            if (lataPrice <= 0) { valid = false; break }
-            mixTotal += Math.round(lataPrice) * e.latas
-          }
-          if (valid) {
-            kept.push({ ...item, precio: mixTotal })
-          } else {
-            dropped.push(item.nombre)
-          }
-        } else {
-          dropped.push(item.nombre)
-        }
-      } else {
-        const realId = item.producto_id.split('-').slice(0, -1).join('-')
-        const prod = productos.find(p => p.id === realId)
-        const newPrice = prod ? getPrecio(prod, item.unidad) : 0
-        if (newPrice > 0) {
-          kept.push({ ...item, precio: newPrice })
-        } else {
-          dropped.push(item.nombre)
-        }
+    setCantidades(prev => {
+      if (cantidad <= 0) {
+        const resto = { ...prev }
+        delete resto[partida.producto_id]
+        return resto
       }
-    }
-    setItems(kept)
-    if (dropped.length > 0) {
-      setRemovedWarning(`Se removieron del carrito (sin precio ${sufijoPrecio === 'taproom' ? 'mayorista' : 'publico'}): ${dropped.join(', ')}`)
-    } else {
-      setRemovedWarning('')
-    }
-  }, [sufijoPrecio])
+      return { ...prev, [partida.producto_id]: cantidad }
+    })
+  }, [])
 
-  const updateCantidad = (key: string, delta: number) => {
-    setItems(items.map(i => i.producto_id === key ? { ...i, cantidad: Math.max(0, i.cantidad + delta) } : i).filter(i => i.cantidad > 0))
+  const quitarPartida = useCallback((partida: Partida) => cambiarPartida(partida, 0), [cambiarPartida])
+
+  /** Precarga el carrito con el pedido anterior del cliente. */
+  const repetirUltimo = async () => {
+    if (!cliente) return
+    setError(''); setAviso('')
+
+    const { data: ultimo } = await supabase
+      .from('pedidos')
+      .select('id, created_at, pedido_items(producto_id, unidad, cantidad, metadata)')
+      .eq('cliente_id', cliente.id)
+      .neq('status', 'cancelado')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (!ultimo || !(ultimo.pedido_items || []).length) {
+      setAviso('Este cliente no tiene un pedido anterior que repetir.')
+      return
+    }
+
+    const nuevas: Record<string, number> = {}
+    const nuevosMixes: Partida[] = []
+    const ajustes: string[] = []
+
+    for (const item of ultimo.pedido_items) {
+      const cantidad = Number(item.cantidad) || 0
+      if (cantidad <= 0) continue
+
+      if (item.unidad === 'mix24') {
+        const estilos = (item.metadata as { estilos?: { producto_id: string; nombre?: string; latas?: number }[] } | null)?.estilos
+        if (!estilos?.length) { ajustes.push('se omitio una caja mixta sin desglose'); continue }
+        let precio = 0
+        let vale = true
+        for (const e of estilos) {
+          const p = porId.get(e.producto_id)
+          const lata = p ? precioDe(p, 'lata', sufijo) : 0
+          if (lata <= 0) { vale = false; break }
+          precio += lata * (Number(e.latas) || 0)
+        }
+        if (!vale) { ajustes.push('se omitio una caja mixta con un estilo sin precio'); continue }
+        nuevosMixes.push({
+          producto_id: `${estilos[0].producto_id}-mix24`,
+          nombre: `Mix: ${estilos.map(e => e.nombre || '').filter(Boolean).join(', ')}`,
+          unidad: 'mix24', cantidad, precio,
+          metadata: { tipo: 'mix24', estilos },
+        })
+        continue
+      }
+
+      const producto = porId.get(item.producto_id)
+      if (!producto) { ajustes.push('se omitio un producto que ya no esta activo'); continue }
+      const presentacion = item.unidad || ''
+      const etiqueta = `${producto.nombre} — ${etiquetaDe(presentacion)}`
+
+      if (precioDe(producto, presentacion, sufijo) <= 0) {
+        ajustes.push(`${etiqueta}: sin precio para este cliente`)
+        continue
+      }
+      const stock = stockDe(producto, presentacion)
+      if (stock <= 0) {
+        ajustes.push(`${etiqueta}: sin stock`)
+        continue
+      }
+      // Se ajusta a lo que hay en vez de precargar un exceso, que bloquearia
+      // Confirmar sin que se vea el motivo.
+      const ajustada = Math.min(cantidad, stock)
+      if (ajustada < cantidad) ajustes.push(`${etiqueta}: bajo de ${cantidad} a ${ajustada} por stock`)
+      nuevas[claveCelda(producto.id, presentacion)] = ajustada
+    }
+
+    setCantidades(nuevas)
+    setMixes(nuevosMixes)
+
+    const fecha = new Date(ultimo.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+    const vacio = Object.keys(nuevas).length === 0 && nuevosMixes.length === 0
+    setAviso(
+      vacio
+        ? `Del pedido del ${fecha} no se pudo cargar nada. ${ajustes.join('; ')}.`
+        : `Se cargo el pedido del ${fecha}, con los precios y el stock de hoy.` +
+          (ajustes.length ? ` Ajustes: ${ajustes.join('; ')}.` : '')
+    )
   }
 
-  // Mix builder products — use client's nivel_precio
-  const mixProducts: MixProduct[] = productos
-    .filter(p => (p.stock_latas || 0) > 0 && ((p as any)[`precio_lata_${sufijoPrecio}`] || 0) > 0)
-    .map(p => ({
-      id: p.id, nombre: p.nombre, imagen_url: p.imagen_url,
-      stock_latas: p.stock_latas || 0,
-      precio_por_lata: Math.round((p as any)[`precio_lata_${sufijoPrecio}`] || 0),
-    }))
+  // ── Mix ───────────────────────────────────────────────────
+  const mixProducts = useMemo<MixProduct[]>(
+    () => productos
+      .filter(p => precioDe(p, 'lata', sufijo) > 0 && stockDe(p, 'lata') > 0)
+      .map(p => ({
+        id: p.id,
+        nombre: p.nombre,
+        imagen_url: typeof p.imagen_url === 'string' ? p.imagen_url : undefined,
+        stock_latas: stockDe(p, 'lata'),
+        precio_por_lata: precioDe(p, 'lata', sufijo),
+      })),
+    [productos, sufijo]
+  )
 
-  const handleMixAdd = (result: MixResult) => {
-    const names = result.estilos.map(e => `${e.nombre} x${e.latas}`).sort().join(', ')
-    const firstId = result.estilos[0].producto_id
-    setItems(prev => [...prev, {
-      producto_id: `${firstId}-mix24`,
-      nombre: `Mix: ${names}`,
+  const agregarMix = (resultado: MixResult) => {
+    const nombres = resultado.estilos.map(e => e.nombre).join(', ')
+    setMixes(prev => [...prev, {
+      producto_id: `${resultado.estilos[0].producto_id}-mix24`,
+      nombre: `Mix: ${nombres}`,
       unidad: 'mix24',
       cantidad: 1,
-      precio: result.precio,
-      metadata: { tipo: 'mix24', estilos: result.estilos },
-    } as any])
-    setShowMixModal(false)
+      precio: resultado.precio,
+      metadata: { tipo: 'mix24', estilos: resultado.estilos },
+    }])
+    setDrawerMix(false)
   }
 
-  const subtotal = items.reduce((s, i) => s + i.precio * i.cantidad, 0)
-  const descVal = parseFloat(descuentoValor) || 0
-  const descuentoMonto = descuentoTipo === 'porcentaje' ? Math.round(subtotal * descVal / 100) : descuentoTipo === 'monto' ? descVal : 0
-  const total = subtotal // total = subtotal (discount applied in pedidos_saldo view, NOT subtracted here)
+  // ── Bloqueos de Confirmar ─────────────────────────────────
+  const bloqueos = useMemo(() => {
+    const lista: string[] = []
+    if (!clienteId) lista.push('Falta elegir el cliente.')
+    if (partidas.length === 0) lista.push('El carrito esta vacio.')
 
-  const handleConfirmar = async () => {
-    if (!clienteId || items.length === 0) return
-    if (descuentoTipo && !descuentoMotivo.trim()) { setCrearError('El motivo del descuento es obligatorio'); return }
-    setLoading(true); setCrearError('')
+    for (const p of partidas) {
+      if (p.unidad === 'mix24') continue
+      const disponible = stockPorClave[p.producto_id]
+      if (disponible !== undefined && p.cantidad > disponible) {
+        lista.push(`${p.nombre}: pides ${p.cantidad} y quedan ${disponible}.`)
+      }
+    }
+
+    if (puedeDescuento && descuento.tipo) {
+      const val = Number(descuento.valor.replace(/[^\d.]/g, '')) || 0
+      if (val <= 0) lista.push('El descuento necesita un valor mayor a 0.')
+      if (descuento.tipo === 'porcentaje' && val > 100) lista.push('El descuento porcentual no puede pasar de 100.')
+      if (!descuento.motivo.trim()) lista.push('El motivo del descuento es obligatorio.')
+      const subtotal = partidas.reduce((s, p) => s + p.precio * p.cantidad, 0)
+      if (descuento.tipo === 'monto' && val > subtotal) lista.push('El descuento no puede ser mayor al subtotal.')
+    }
+    return lista
+  }, [clienteId, partidas, stockPorClave, puedeDescuento, descuento])
+
+  // ── Confirmar ─────────────────────────────────────────────
+  const confirmar = async () => {
+    if (bloqueos.length || enviando) return
+    setEnviando(true); setError('')
+
+    const descVal = Number(descuento.valor.replace(/[^\d.]/g, '')) || 0
+    const envio = Number(costoEnvio.replace(/[^\d.]/g, '')) || 0
+
     const res = await fetch('/api/admin/pedidos/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        cliente_id: clienteId, condiciones_pago: condicionesPago, items, notas,
+        cliente_id: clienteId,
+        condiciones_pago: condiciones,
+        items: partidas,
+        notas,
         vendedor_id: esVendedor ? null : (vendedorId || null),
-        descuento_tipo: esVendedor ? null : (descuentoTipo || null),
-        descuento_valor: esVendedor || !descuentoTipo ? null : descVal,
-        descuento_motivo: esVendedor || !descuentoTipo ? null : descuentoMotivo,
-      })
+        costo_envio: puedeDescuento ? envio : null,
+        descuento_tipo: puedeDescuento && descuento.tipo ? descuento.tipo : null,
+        descuento_valor: puedeDescuento && descuento.tipo ? descVal : null,
+        descuento_motivo: puedeDescuento && descuento.tipo ? descuento.motivo : null,
+      }),
     })
-    if (res.ok) { router.push('/admin/pedidos'); router.refresh() }
-    else { const d = await res.json().catch(() => ({})); setCrearError(d.error || 'Error al crear pedido'); setLoading(false) }
+
+    if (res.ok) {
+      router.push('/admin/pedidos')
+      router.refresh()
+      return
+    }
+    const d = await res.json().catch(() => ({}))
+    setError(d.error || 'No se pudo crear el pedido.')
+    setEnviando(false)
   }
 
-  const filteredClientes = clientes.filter(c =>
-    (c.full_name || '').toLowerCase().includes(clienteSearch.toLowerCase()) ||
-    c.email.toLowerCase().includes(clienteSearch.toLowerCase())
+  const totalCarrito = partidas.reduce((s, p) => s + p.precio * p.cantidad, 0)
+
+  const carrito = (
+    <Carrito
+      partidas={partidas}
+      stockPorClave={stockPorClave}
+      onCantidad={cambiarPartida}
+      onQuitar={quitarPartida}
+      puedeDescuento={puedeDescuento}
+      descuento={descuento}
+      onDescuento={setDescuento}
+      costoEnvio={costoEnvio}
+      onCostoEnvio={setCostoEnvio}
+      bloqueos={bloqueos}
+      enviando={enviando}
+      onConfirmar={confirmar}
+      error={error}
+    />
   )
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 360px', gap: 24, maxWidth: 1100 }}>
-      <div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
-          <a href="/admin/pedidos" style={{ color: '#9ca3af', textDecoration: 'none', fontSize: 13, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
-            Pedidos
-          </a>
-          <span style={{ color: '#2a2a2a' }}>/</span>
-          <h1 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>Nuevo pedido</h1>
-        </div>
+    <div className="pos-con-barra" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <style>{CSS}</style>
 
-        {/* Selección cliente */}
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20, marginBottom: 16 }}>
-          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Cliente *</p>
-          <input value={clienteSearch} onChange={e => setClienteSearch(e.target.value)} placeholder="Buscar cliente..."
-            style={{ width: '100%', padding: '9px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', marginBottom: 10 }} />
-          <div style={{ maxHeight: 160, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {filteredClientes.map(c => (
-              <button key={c.id} onClick={() => { setClienteId(c.id); setClienteSearch('') }} style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px',
-                background: clienteId === c.id ? '#1e1e1e' : 'transparent',
-                border: `1px solid ${clienteId === c.id ? '#E8531D' : 'transparent'}`,
-                borderRadius: 7, cursor: 'pointer', textAlign: 'left', width: '100%'
-              }}>
-                <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>
-                  {(c.full_name || c.email)[0].toUpperCase()}
-                </div>
-                <div>
-                  <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13 }}>{c.full_name || c.email}</p>
-                  <p style={{ margin: 0, color: '#6b7280', fontSize: 11 }}>{c.email}</p>
-                </div>
+      {/* ── Encabezado ──────────────────────────────────── */}
+      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, marginBottom: 16, flexWrap: 'wrap' }}>
+        <div>
+          <h1 style={{ margin: '0 0 3px', color: TINTA, fontSize: 21, fontWeight: 700, letterSpacing: '-0.01em' }}>
+            Nuevo pedido
+          </h1>
+          <p style={{ margin: 0, color: GRIS, fontSize: 12.5 }}>
+            Captura en la matriz: Enter suma uno, las flechas mueven entre celdas.
+          </p>
+        </div>
+        <a
+          href="/admin/pedidos"
+          style={{ marginLeft: 'auto', padding: '8px 14px', border: `1px solid ${BORDE}`, borderRadius: 8, color: GRIS, fontSize: 12.5, textDecoration: 'none' }}
+        >
+          Cancelar
+        </a>
+      </div>
+
+      {/* ── Cliente y condiciones ───────────────────────── */}
+      <div style={{ ...card, padding: '16px 18px', marginBottom: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(232px, 1fr))', gap: 16, alignItems: 'start' }}>
+          <div>
+            <label style={lbl}>Cliente</label>
+            <ClienteCombobox
+              clientes={clientes}
+              recientes={recientes}
+              valor={clienteId}
+              onElegir={setClienteId}
+            />
+            {cliente && (
+              <button
+                type="button"
+                onClick={repetirUltimo}
+                style={{ marginTop: 8, padding: '6px 12px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 7, color: TINTA_MEDIA, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Repetir ultimo pedido
               </button>
-            ))}
+            )}
           </div>
-          {clienteSeleccionado && (
-            <div style={{ marginTop: 10, padding: '8px 12px', background: '#f3f4f6', borderRadius: 7, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, color: '#10b981', fontSize: 14 }}>✓ {clienteSeleccionado.full_name}</p>
-              {esMayorista && <span style={{ background: '#dbeafe', color: '#3b82f6', fontSize: 13, padding: '2px 8px', borderRadius: 99 }}>Mayorista</span>}
+
+          <div>
+            <label style={lbl}>Condiciones de pago</label>
+            {/* Botones claros, como las tarjetas de rol de Equipo: antes eran
+                cajas casi negras sobre fondo claro y no se leia la elegida. */}
+            <div style={{ display: 'flex', gap: 7 }}>
+              {CONDICIONES.map(c => {
+                const activo = condiciones === c.key
+                return (
+                  <button
+                    key={c.key}
+                    type="button"
+                    onClick={() => setCondiciones(c.key)}
+                    style={{
+                      flex: 1, padding: '9px 6px',
+                      background: activo ? '#fff7f3' : '#fff',
+                      border: `1.5px solid ${activo ? ACENTO : BORDE}`,
+                      borderRadius: 8, cursor: 'pointer',
+                      color: activo ? TINTA : GRIS,
+                      fontSize: 12.5, fontWeight: activo ? 700 : 500,
+                    }}
+                  >
+                    {c.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          {!esVendedor && vendedores.length > 0 && (
+            <div>
+              <label style={lbl}>Vendedor</label>
+              <select
+                value={vendedorId}
+                onChange={e => setVendedorId(e.target.value)}
+                style={{ width: '100%', padding: '9px 11px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none', cursor: 'pointer', boxSizing: 'border-box' }}
+              >
+                <option value="">Sin vendedor asignado</option>
+                {vendedores.map(v => <option key={v.id} value={v.id}>{v.nombre}</option>)}
+              </select>
             </div>
           )}
         </div>
+      </div>
 
-        {/* Nivel de precio (informativo, no seleccionable) */}
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '14px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>Nivel de precio</p>
-          <span style={{ background: esMayorista ? '#dbeafe' : '#f3f4f6', color: esMayorista ? '#3b82f6' : '#6b7280', padding: '5px 14px', borderRadius: 99, fontSize: 13, fontWeight: 600 }}>
-            {clienteSeleccionado ? nivelLabel : 'Selecciona un cliente'}
-          </span>
-        </div>
+      {aviso && (
+        <p style={{ padding: '10px 13px', marginBottom: 14, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, color: '#92400e', fontSize: 12.5, lineHeight: 1.5 }}>
+          {aviso}
+        </p>
+      )}
 
-        {/* Condiciones de pago */}
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
-          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Condiciones de pago</p>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[{ key: 'contado', label: 'Contado' }, { key: '15_dias', label: '15 días' }, { key: '30_dias', label: '30 días' }].map(c => (
-              <button key={c.key} onClick={() => setCondicionesPago(c.key)} style={{
-                flex: 1, padding: '9px', background: condicionesPago === c.key ? '#1e1e1e' : '#0a0a0a',
-                border: `1.5px solid ${condicionesPago === c.key ? '#E8531D' : '#1e1e1e'}`,
-                borderRadius: 8, cursor: 'pointer', color: condicionesPago === c.key ? '#fff' : '#555', fontSize: 13, fontWeight: condicionesPago === c.key ? 600 : 400
-              }}>
-                {c.label}
-              </button>
-            ))}
-          </div>
-        </div>
+      {fueraDeNivel.length > 0 && (
+        <p style={{ padding: '10px 13px', marginBottom: 14, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, color: '#92400e', fontSize: 12.5, lineHeight: 1.5 }}>
+          Fuera del pedido por no tener precio {sufijo === 'taproom' ? 'mayorista' : 'al publico'}:{' '}
+          {fueraDeNivel.join(', ')}. Siguen capturados por si vuelves a un cliente que si los tenga.
+        </p>
+      )}
 
-        {/* Productos */}
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', margin: 0 }}>Productos</p>
+      {/* ── Matriz y carrito ────────────────────────────── */}
+      <div className="pos-grid">
+        <div style={{ ...card, padding: '14px 16px', minWidth: 0 }}>
+          <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+            <input
+              value={busqueda}
+              onChange={e => setBusqueda(e.target.value)}
+              placeholder="Buscar producto o estilo..."
+              style={{ flex: 1, minWidth: 160, padding: '8px 11px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none' }}
+            />
             {mixProducts.length > 0 && (
-              <button onClick={() => setShowMixModal(true)} style={{ padding: '6px 14px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, color: '#6b7280', fontSize: 12, fontWeight: 500, cursor: 'pointer' }}>
+              <button
+                type="button"
+                onClick={() => setDrawerMix(true)}
+                style={{ padding: '8px 13px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA_MEDIA, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+              >
                 Armar caja mixta
               </button>
             )}
           </div>
-          {productos.length === 0 ? (
-            <p style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', padding: 20 }}>No hay productos en inventario</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {productos.map(p => (
-                <div key={p.id} style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10, padding: '12px 14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                    {p.imagen_url
-                      ? <img src={p.imagen_url} style={{ width: 36, height: 36, borderRadius: 6, objectFit: 'cover' }} />
-                      : <div style={{ width: 36, height: 36, borderRadius: 6, background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#444" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 11h1a3 3 0 010 6h-1"/><path d="M9 12v6"/><path d="M13 12v6"/><path d="M14 7.5c-1 0-1.44.5-3 .5s-2-.5-3-.5-1.44.5-3 .5"/><path d="M3 8l.6 12a2 2 0 002 1.4h9.8a2 2 0 002-1.4l.6-12z"/></svg>
-                  </div>
-                    }
-                    <div>
-                      <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13.5, fontWeight: 600 }}>{p.nombre}</p>
-                      <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>{p.estilo}</p>
-                    </div>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
-                    {unidades.map(u => {
-                      const precio = getPrecio(p, u.key)
-                      const stock = getStock(p, u.key)
-                      const itemKey = `${p.id}-${u.key}`
-                      const itemInCart = items.find(i => i.producto_id === itemKey)
-                      if (!precio || stock === 0) return (
-                        <div key={u.key} style={{ padding: '7px 8px', background: '#fff', borderRadius: 7, textAlign: 'center', opacity: 0.4 }}>
-                          <p style={{ margin: 0, color: '#9ca3af', fontSize: 13 }}>{u.label}</p>
-                          <p style={{ margin: '2px 0 0', color: !precio ? '#d97706' : '#9ca3af', fontSize: 10 }}>{!precio ? `Sin precio ${esMayorista ? 'mayorista' : 'publico'}` : 'Sin stock'}</p>
-                        </div>
-                      )
-                      return (
-                        <div key={u.key} style={{ padding: '7px 8px', background: '#fff', border: `1px solid ${itemInCart ? '#E8531D40' : '#1a1a1a'}`, borderRadius: 7, textAlign: 'center' }}>
-                          <p style={{ margin: 0, color: '#6b7280', fontSize: 10 }}>{u.label}</p>
-                          <p style={{ margin: '2px 0 4px', color: '#E8531D', fontSize: 13, fontWeight: 600 }}>${precio?.toLocaleString()}</p>
-                          <p style={{ margin: '0 0 6px', color: '#9ca3af', fontSize: 10 }}>Stock: {stock}</p>
-                          {itemInCart ? (
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                              <button onClick={() => updateCantidad(itemKey, -1)} style={{ width: 22, height: 22, borderRadius: '50%', background: '#e5e7eb', border: 'none', color: '#1a1a1a', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                              <span style={{ color: '#1a1a1a', fontSize: 13, fontWeight: 600, minWidth: 16, textAlign: 'center' }}>{itemInCart.cantidad}</span>
-                              <button onClick={() => updateCantidad(itemKey, 1)} style={{ width: 22, height: 22, borderRadius: '50%', background: '#E8531D', border: 'none', color: '#1a1a1a', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
-                            </div>
-                          ) : (
-                            <button onClick={() => addItem(p, u.key)} style={{ width: '100%', padding: '4px', background: '#f3f4f6', border: 'none', borderRadius: 5, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>+ Agregar</button>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              ))}
-            </div>
+
+          {!clienteId && (
+            <p style={{ margin: '0 0 12px', padding: '9px 12px', background: '#f9fafb', border: `1px solid ${BORDE}`, borderRadius: 8, color: GRIS, fontSize: 12 }}>
+              Elige un cliente: los precios dependen de su nivel.
+            </p>
           )}
+
+          <div className="pos-matriz">
+            <MatrizProductos
+              productos={productosFiltrados}
+              presentaciones={presentaciones}
+              sufijo={sufijo}
+              cantidades={cantidades}
+              onCantidad={setCantidad}
+              habilitada={!!clienteId}
+            />
+          </div>
+
+          {/* Movil: una tarjeta por producto con steppers grandes. */}
+          <div className="pos-movil">
+            {productosFiltrados.length === 0 && (
+              <p style={{ padding: '30px 0', textAlign: 'center', color: GRIS_SUAVE, fontSize: 13 }}>
+                Ningun producto coincide con la busqueda.
+              </p>
+            )}
+            {productosFiltrados.map(producto => (
+              <div key={producto.id} style={{ borderTop: `1px solid ${PISTA}`, padding: '12px 0' }}>
+                <p style={{ margin: '0 0 9px', color: TINTA, fontSize: 13.5, fontWeight: 600 }}>
+                  {producto.nombre}
+                  {producto.estilo && <span style={{ color: GRIS_SUAVE, fontSize: 11, fontWeight: 400 }}> · {producto.estilo}</span>}
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+                  {presentaciones.map(pres => {
+                    const clave = claveCelda(producto.id, pres.key)
+                    const cantidad = cantidades[clave] || 0
+                    const precio = precioDe(producto, pres.key, sufijo)
+                    const stock = stockDe(producto, pres.key)
+                    // Lo que no tiene ni precio ni stock no se pinta: en movil
+                    // el espacio es el recurso escaso.
+                    if (precio <= 0 && stock <= 0) return null
+                    const bloqueada = !clienteId || precio <= 0 || stock <= 0
+                    const excede = cantidad > stock
+                    return (
+                      <div key={pres.key} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: bloqueada ? 0.45 : 1 }}>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', color: TINTA_MEDIA, fontSize: 12.5 }}>{pres.largo}</span>
+                          <span style={{ ...tabular, display: 'block', color: excede ? '#dc2626' : GRIS_SUAVE, fontSize: 10.5 }}>
+                            {precio > 0 ? `${moneda(precio)} · ${stock} disp.` : 'sin precio'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <button type="button" disabled={bloqueada || cantidad === 0} onClick={() => setCantidad(producto.id, pres.key, cantidad - 1)} style={btnMovil}>-</button>
+                          <span style={{ ...tabular, minWidth: 28, textAlign: 'center', color: excede ? '#dc2626' : TINTA, fontSize: 15, fontWeight: 700 }}>{cantidad}</span>
+                          <button type="button" disabled={bloqueada} onClick={() => setCantidad(producto.id, pres.key, cantidad + 1)} style={btnMovil}>+</button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDE}` }}>
+            <label style={lbl}>Notas del pedido</label>
+            <input
+              value={notas}
+              onChange={e => setNotas(e.target.value)}
+              placeholder="Opcional"
+              style={{ width: '100%', padding: '8px 11px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+        </div>
+
+        <div className="pos-carrito">
+          <div className={`pos-carrito-panel ${carritoMovil ? 'abierto' : ''}`} style={{ ...card, padding: '16px 18px' }}>
+            {carrito}
+          </div>
         </div>
       </div>
 
-      {/* Panel derecho — resumen */}
-      <div style={{ position: 'sticky', top: 24 }}>
-        <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 20 }}>
-          <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 14 }}>Resumen del pedido</p>
-
-          {items.length === 0 ? (
-            <p style={{ color: '#9ca3af', fontSize: 13, textAlign: 'center', padding: '20px 0' }}>Agrega productos al pedido</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
-              {items.map(item => (
-                <div key={item.producto_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, color: '#374151', fontSize: 14 }}>{item.nombre}</p>
-                    <p style={{ margin: '1px 0 0', color: '#6b7280', fontSize: 13 }}>{item.cantidad} × ${item.precio.toLocaleString()}</p>
-                  </div>
-                  <p style={{ margin: 0, color: '#E8531D', fontSize: 13, fontWeight: 600 }}>${(item.precio * item.cantidad).toLocaleString()}</p>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <div style={{ borderTop: '1px solid #1a1a1a', paddingTop: 12, marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ margin: 0, color: '#6b7280', fontSize: 13 }}>Subtotal</p>
-              <p style={{ margin: 0, color: '#1a1a1a', fontSize: 15, fontWeight: 600 }}>${subtotal.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
-            </div>
-            {descuentoMonto > 0 && (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                <p style={{ margin: 0, color: '#10b981', fontSize: 13 }}>Descuento {descuentoTipo === 'porcentaje' ? `(${descVal}%)` : ''}</p>
-                <p style={{ margin: 0, color: '#10b981', fontSize: 15, fontWeight: 600 }}>-${descuentoMonto.toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
-              </div>
-            )}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6, paddingTop: 6, borderTop: '1px solid #e5e7eb' }}>
-              <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>Total</p>
-              <p style={{ margin: 0, color: '#E8531D', fontSize: 20, fontWeight: 700 }}>${(subtotal - descuentoMonto).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
-
-          {!esVendedor && (<>
-          {/* Descuento */}
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Descuento</p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: descuentoTipo ? 12 : 0 }}>
-              {[{ key: '', label: 'Sin descuento' }, { key: 'porcentaje', label: 'Porcentaje' }, { key: 'monto', label: 'Monto fijo' }].map(t => (
-                <button key={t.key} onClick={() => { setDescuentoTipo(t.key as any); setDescuentoValor(''); setDescuentoMotivo('') }} style={{
-                  flex: 1, padding: '8px', background: descuentoTipo === t.key ? '#1e1e1e' : '#f9fafb',
-                  border: `1.5px solid ${descuentoTipo === t.key ? '#E8531D' : '#e5e7eb'}`,
-                  borderRadius: 7, cursor: 'pointer', color: descuentoTipo === t.key ? '#fff' : '#6b7280', fontSize: 12, fontWeight: 500,
-                }}>{t.label}</button>
-              ))}
-            </div>
-            {descuentoTipo && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                <div>
-                  <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-                    {descuentoTipo === 'porcentaje' ? 'Porcentaje (0-100)' : 'Monto fijo'}
-                  </label>
-                  <input type="number" value={descuentoValor} onChange={e => setDescuentoValor(e.target.value)} placeholder="0"
-                    min="0" max={descuentoTipo === 'porcentaje' ? '100' : String(subtotal)}
-                    style={{ width: '100%', padding: '9px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, color: '#1a1a1a', fontSize: 14, fontWeight: 600, boxSizing: 'border-box' as const, outline: 'none' }} />
-                </div>
-                <div>
-                  <label style={{ color: '#6b7280', fontSize: 11, display: 'block', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Motivo (obligatorio)</label>
-                  <input value={descuentoMotivo} onChange={e => setDescuentoMotivo(e.target.value)} placeholder="Volumen, cliente nuevo, ajuste..."
-                    style={{ width: '100%', padding: '9px 12px', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const, outline: 'none' }} />
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Vendedor */}
-          <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 14 }}>
-            <p style={{ color: '#6b7280', fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.07em', marginBottom: 10 }}>Vendedor asignado</p>
-            <select value={vendedorId} onChange={e => setVendedorId(e.target.value)}
-              style={{ width: '100%', padding: '9px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: vendedorId ? '#fff' : '#555', fontSize: 13.5, boxSizing: 'border-box' as const, outline: 'none', cursor: 'pointer' }}>
-              <option value="">— Sin vendedor asignado —</option>
-              {vendedores.map(v => (
-                <option key={v.id} value={v.id}>{v.nombre}</option>
-              ))}
-            </select>
-          </div>
-          </>)}
-
-          <div style={{ marginBottom: 14 }}>
-            <label style={{ color: '#6b7280', fontSize: 13, display: 'block', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Notas del pedido</label>
-            <textarea value={notas} onChange={e => setNotas(e.target.value)} rows={2} placeholder="Instrucciones de entrega, comentarios..."
-              style={{ width: '100%', padding: '9px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 7, color: '#1a1a1a', fontSize: 13, boxSizing: 'border-box' as const, resize: 'none', outline: 'none' }} />
-          </div>
-
-          {removedWarning && (
-            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
-              <p style={{ color: '#92400e', fontSize: 13, margin: 0, lineHeight: 1.5 }}>{removedWarning}</p>
-            </div>
-          )}
-          {crearError && (
-            <div style={{ background: '#fef2f2', border: '1px solid #fca5a5', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
-              <p style={{ color: '#ef4444', fontSize: 13, margin: 0, lineHeight: 1.5 }}>{crearError}</p>
-            </div>
-          )}
-          <button onClick={handleConfirmar} disabled={loading || !clienteId || items.length === 0} style={{
-            width: '100%', padding: '13px', background: clienteId && items.length > 0 ? '#E8531D' : '#1a1a1a',
-            border: 'none', borderRadius: 8, color: clienteId && items.length > 0 ? '#fff' : '#444',
-            fontSize: 14, fontWeight: 600, cursor: clienteId && items.length > 0 ? 'pointer' : 'not-allowed',
-            opacity: loading ? 0.7 : 1
-          }}>{loading ? 'Confirmando...' : 'Confirmar pedido'}</button>
+      {/* ── Barra fija de movil ─────────────────────────── */}
+      <div className="pos-barra-movil">
+        <div>
+          <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Total</span>
+          <span style={{ ...tabular, color: TINTA, fontSize: 17, fontWeight: 700 }}>{moneda(totalCarrito)}</span>
         </div>
+        <button
+          type="button"
+          onClick={() => setCarritoMovil(v => !v)}
+          style={{ padding: '10px 13px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA_MEDIA, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' }}
+        >
+          {carritoMovil ? 'Ocultar' : `Ver ${partidas.length}`}
+        </button>
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={enviando || bloqueos.length > 0}
+          style={{
+            flex: 1, padding: '11px', borderRadius: 8, border: 'none',
+            background: bloqueos.length > 0 ? '#e5e7eb' : ACENTO,
+            color: bloqueos.length > 0 ? GRIS_SUAVE : '#fff',
+            fontSize: 13.5, fontWeight: 700, cursor: bloqueos.length ? 'default' : 'pointer',
+          }}
+        >
+          {enviando ? 'Creando...' : 'Confirmar'}
+        </button>
       </div>
 
-      {/* Mix Builder Modal */}
-      {showMixModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }} onClick={() => setShowMixModal(false)}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: '28px 32px', width: 640, maxHeight: '80vh', overflowY: 'auto', boxShadow: '0 8px 30px rgba(0,0,0,0.12)' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ color: '#1a1a1a', fontSize: 17, fontWeight: 700, margin: '0 0 20px' }}>Armar caja mixta</h3>
-            <MixBuilder productos={mixProducts} onAdd={handleMixAdd} onCancel={() => setShowMixModal(false)} showCancel />
-          </div>
-        </div>
+      {/* ── Drawer de caja mixta ────────────────────────── */}
+      {drawerMix && (
+        <>
+          <div
+            onClick={() => setDrawerMix(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.3)', zIndex: 90 }}
+          />
+          <aside
+            style={{
+              position: 'fixed', top: 0, right: 0, bottom: 0, width: 'min(440px, 100%)',
+              background: '#fff', borderLeft: `1px solid ${BORDE}`, zIndex: 91,
+              padding: '22px 24px', overflowY: 'auto',
+              boxShadow: '-12px 0 36px rgba(17,24,39,0.14)',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: 16 }}>
+              <div>
+                <h2 style={{ margin: 0, color: TINTA, fontSize: 16, fontWeight: 700 }}>Armar caja mixta</h2>
+                <p style={{ margin: '3px 0 0', color: GRIS, fontSize: 12 }}>24 latas en total, de los estilos que quieras.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDrawerMix(false)}
+                style={{ marginLeft: 'auto', background: 'none', border: 'none', color: GRIS_SUAVE, fontSize: 20, cursor: 'pointer', lineHeight: 1 }}
+              >
+                ×
+              </button>
+            </div>
+            <MixBuilder productos={mixProducts} onAdd={agregarMix} onCancel={() => setDrawerMix(false)} showCancel />
+          </aside>
+        </>
       )}
     </div>
   )
+}
+
+const lbl: React.CSSProperties = {
+  display: 'block', color: GRIS, fontSize: 10.5, fontWeight: 600,
+  textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6,
+}
+
+const btnMovil: React.CSSProperties = {
+  width: 36, height: 36, padding: 0, background: '#fff',
+  border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA_MEDIA,
+  fontSize: 18, cursor: 'pointer', lineHeight: 1,
 }
