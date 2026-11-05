@@ -2,7 +2,7 @@ import { createServerSupabaseClient } from '../../../../../../src/lib/supabase-s
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../../src/lib/roles'
 import { logAction } from '../../../../../../src/lib/audit'
-import { columnaStockDe } from '../../../../../../src/lib/unidades'
+import { movimientosDeEntrega, porProducto } from '../../../../../../src/lib/stock-entrega'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -31,55 +31,73 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       .select('*, productos(id, nombre, stock_latas, stock_caja12, stock_caja24, stock_barril_pet, stock_barril_acero, stock_barril10_pet, stock_barril10_acero)')
       .eq('pedido_id', id)
 
-    if (items) {
-      for (const item of items) {
-        if (item.unidad === 'mix24' && item.metadata?.estilos) {
-          // Mix flexible: deduct from stock_latas ONLY, never touch stock_caja24.
-          // The mix is assembled from latas sueltas.
-          for (const estilo of item.metadata.estilos) {
-            const { data: prod } = await supabase
-              .from('productos')
-              .select('stock_latas')
-              .eq('id', estilo.producto_id)
-              .single()
-            if (!prod) continue
-            const latasToDeduct = item.cantidad * (estilo.latas || estilo.cantidad_latas || 6)
-            if ((prod.stock_latas || 0) < latasToDeduct) {
-              return NextResponse.json({ error: `Stock de latas insuficiente de ${estilo.nombre || 'producto'} para el mix. Disponible: ${prod.stock_latas || 0} latas.` }, { status: 400 })
-            }
-            await supabase.from('productos').update({
-              stock_latas: (prod.stock_latas || 0) - latasToDeduct,
-            }).eq('id', estilo.producto_id)
-          }
-        } else {
-          // La columna sale de unidades.ts y no de un ternario.
-          //
-          // El ternario que estaba aqui mandaba a `stock_caja24` todo lo que
-          // no fuera caja12 ni barril_pet, asi que entregar un barril_acero o
-          // uno de 10 L descontaba CAJAS DE 24 y dejaba intacta la columna del
-          // barril. Nunca corrompio produccion de milagro: no hay ningun
-          // pedido en estado 'entregado' todavia, pero el pedido CB63CF trae
-          // un barril_acero esperando.
-          const stockCol = columnaStockDe(item.unidad)
-          if (!stockCol) {
-            return NextResponse.json(
-              { error: `No se puede descontar stock: presentacion no reconocida (${item.unidad}) en ${item.productos?.nombre || 'un producto'}.` },
-              { status: 400 }
-            )
-          }
-          const currentStock = item.productos?.[stockCol] || 0
-          const newStock = currentStock - item.cantidad
-          if (newStock < 0) {
-            return NextResponse.json({ error: `Stock insuficiente de ${item.productos?.nombre || 'producto'} para entregar. Stock actual: ${currentStock}.` }, { status: 400 })
-          }
-          const update: Record<string, any> = { [stockCol]: newStock }
-          // Also deduct from stock_latas for caja items
-          if (item.unidad === 'caja24' || item.unidad === 'caja12') {
-            const latasPerUnit = item.unidad === 'caja24' ? 24 : 12
-            update.stock_latas = Math.max(0, (item.productos?.stock_latas || 0) - (item.cantidad * latasPerUnit))
-          }
-          await supabase.from('productos').update(update).eq('id', item.producto_id)
+    // Que descontar: lo calcula movimientosDeEntrega, que es puro y esta
+    // probado. Antes esto era un bucle que escribia una vez por partida y
+    // tenia dos fallas:
+    //
+    //   - Descontaba `stock_latas` al entregar cajas. Las latas sueltas son
+    //     un contador independiente (docs/SCHEMA_NOTES.md), asi que eso
+    //     restaba inventario que nadie envio.
+    //   - Cada partida calculaba el nuevo stock desde el mismo snapshot
+    //     previo al bucle, asi que dos partidas del mismo producto se
+    //     pisaban y solo se descontaba la ultima.
+    const movimientos = movimientosDeEntrega(
+      (items || []).map(it => ({
+        producto_id: it.producto_id,
+        unidad: it.unidad,
+        cantidad: it.cantidad,
+        metadata: it.metadata,
+        nombre: it.productos?.nombre,
+      }))
+    )
+    if ('error' in movimientos) {
+      return NextResponse.json({ error: movimientos.error }, { status: 400 })
+    }
+
+    // El stock actual de cada producto que se va a tocar. Se lee aqui y no
+    // del join de las partidas porque un mix descuenta de productos que no
+    // son el de su propia partida.
+    const productoIds = [...new Set(movimientos.map(m => m.producto_id))]
+    const { data: productos } = await supabase
+      .from('productos')
+      .select('id, nombre, stock_latas, stock_caja12, stock_caja24, stock_barril_pet, stock_barril_acero, stock_barril10_pet, stock_barril10_acero')
+      .in('id', productoIds)
+
+    const porId = new Map((productos || []).map(p => [p.id, p as Record<string, unknown>]))
+
+    // Primero se valida TODO y despues se escribe: si una partida no alcanza,
+    // el pedido no queda a medio descontar.
+    const updates: { id: string; cambios: Record<string, number> }[] = []
+
+    for (const [producto_id, movs] of porProducto(movimientos)) {
+      const prod = porId.get(producto_id)
+      if (!prod) {
+        return NextResponse.json(
+          { error: `Un producto del pedido ya no existe en el catalogo (${producto_id}).` },
+          { status: 400 }
+        )
+      }
+      const cambios: Record<string, number> = {}
+      for (const m of movs) {
+        const actual = Number(prod[m.columna] ?? 0) || 0
+        if (actual < m.cantidad) {
+          return NextResponse.json(
+            { error: `Stock insuficiente de ${prod.nombre}: necesitas ${m.cantidad} ${m.etiqueta} y hay ${actual}.` },
+            { status: 400 }
+          )
         }
+        cambios[m.columna] = actual - m.cantidad
+      }
+      updates.push({ id: producto_id, cambios })
+    }
+
+    for (const u of updates) {
+      const { error } = await supabase.from('productos').update(u.cambios).eq('id', u.id)
+      if (error) {
+        return NextResponse.json(
+          { error: `No se pudo actualizar el inventario: ${error.message}` },
+          { status: 400 }
+        )
       }
     }
   }
