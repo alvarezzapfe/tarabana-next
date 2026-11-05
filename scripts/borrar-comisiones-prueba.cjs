@@ -1,8 +1,10 @@
 /**
  * Borra TODO lo que la prueba de comisiones (Fase 3) creo en produccion.
  *
- *   node scripts/borrar-comisiones-prueba.cjs          # muestra que borraria
- *   node scripts/borrar-comisiones-prueba.cjs --si     # lo borra
+ *   node scripts/borrar-comisiones-prueba.cjs                       # simula
+ *   node scripts/borrar-comisiones-prueba.cjs --si                  # borra
+ *   node scripts/borrar-comisiones-prueba.cjs --si --escaleras      # + tramos
+ *   node scripts/borrar-comisiones-prueba.cjs --si --audit          # + audit_log
  *
  * Busca por correo, por nombre de ficha y por marca en las notas, no por ids
  * hardcodeados, asi que es idempotente: si ya se borro, no hace nada.
@@ -12,6 +14,10 @@
  * prueba; la escalera global y la de las fichas reales se quedan salvo que
  * pases --escaleras, porque no hay forma de distinguir la que dejo la prueba
  * de la que capturaste tu a mano.
+ *
+ * `audit_log` NO se borra por default: es el rastro de quien hizo que, y
+ * tirarlo destruye evidencia aunque la haya generado una prueba. El script lo
+ * reporta y hay que pedirlo con --audit. Ver CLAUDE.md.
  */
 const fs = require('fs')
 const path = require('path')
@@ -36,6 +42,8 @@ const MARCA = 'PRUEBA-COMISIONES'
 const EJECUTAR = process.argv.includes('--si')
 /** Tirar tambien la escalera global y la de las fichas reales (no llevan marca). */
 const BORRAR_ESCALERAS = process.argv.includes('--escaleras')
+/** Tirar el rastro de audit_log. Explicito a proposito: ver CLAUDE.md. */
+const BORRAR_AUDIT = process.argv.includes('--audit')
 
 ;(async () => {
   const { data: perfiles } = await db
@@ -135,12 +143,27 @@ const BORRAR_ESCALERAS = process.argv.includes('--escaleras')
     console.log('borrado usuario', p.email.padEnd(34), error ? 'ERROR ' + error.message : 'ok')
   }
 
-  // audit_log guarda el correo como texto, asi que las entradas sobreviven al
-  // borrado del usuario. Se van por correo, no por accion: asi no se toca
-  // ninguna entrada de comisiones que hayas generado tu.
-  const { error: eAudit, count: nAudit } = await db
-    .from('audit_log').delete({ count: 'exact' }).in('actor_email', CORREOS)
-  console.log('borrado audit_log    ', eAudit ? 'ERROR ' + eAudit.message : `ok (${nAudit} entradas de los usuarios de prueba)`)
+  // ── audit_log: se reporta, no se borra ────────────────────
+  //
+  // audit_log es el rastro de quien hizo que, y borrar ahi destruye evidencia
+  // aunque las filas las haya generado una prueba (ver CLAUDE.md). El script
+  // dice que hay y quien lo dejo; borrarlo es una decision explicita.
+  const { data: rastro } = await db
+    .from('audit_log').select('accion').in('actor_email', CORREOS)
+
+  if ((rastro || []).length) {
+    const porAccion = {}
+    for (const a of rastro) porAccion[a.accion] = (porAccion[a.accion] || 0) + 1
+    console.log(`\naudit_log: ${rastro.length} entradas de los usuarios de prueba`)
+    for (const [k, v] of Object.entries(porAccion)) console.log(`  ${k.padEnd(28)} ${v}`)
+    if (BORRAR_AUDIT) {
+      const { error, count } = await db
+        .from('audit_log').delete({ count: 'exact' }).in('actor_email', CORREOS)
+      console.log('borrado audit_log    ', error ? 'ERROR ' + error.message : `ok (${count} entradas)`)
+    } else {
+      console.log('  NO se borran. Si quieres tirarlas: --si --audit')
+    }
+  }
 
   // ── Verificacion ──────────────────────────────────────────
   console.log('\nListo. Verificacion:')
