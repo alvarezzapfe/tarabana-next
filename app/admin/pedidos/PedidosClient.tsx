@@ -2,7 +2,6 @@
 import { useState, useMemo } from 'react'
 import { METODOS_PAGO } from '../../../src/lib/pagos'
 import { tipoLabel, nivelLabel } from '../../../src/lib/clientes'
-import * as XLSX from 'xlsx'
 import ImportarExcel from './ImportarExcel'
 
 const entregaConfig: Record<string, { label: string, color: string, bg: string }> = {
@@ -179,7 +178,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
   }
 
   // Export handler
-  const handleExport = () => {
+  const handleExport = async () => {
     let expData = data
     if (expPeriodo === 'ano') expData = expData.filter(p => new Date(p.created_at).getFullYear() === expAno)
     if (expPeriodo === 'meses' && expMeses.length > 0) expData = expData.filter(p => { const f = new Date(p.created_at); return f.getFullYear() === expAno && expMeses.includes(f.getMonth()) })
@@ -203,11 +202,15 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
       }
     })
 
-    const wb = XLSX.utils.book_new()
-    const ws = XLSX.utils.json_to_sheet(rows)
-    const colWidths = [12, 12, 20, 24, 14, 18, 12, 10, 10, 14, 12, 12, 12, 10, 14, 14]
-    ws['!cols'] = colWidths.map(w => ({ wch: w }))
-    XLSX.utils.book_append_sheet(wb, ws, 'Pedidos')
+    // Las hojas se arman aqui, igual que antes, y el .xlsx lo escribe el
+    // servidor: asi exceljs no viaja al bundle de esta pantalla.
+    type Celda = string | number | boolean | null
+    const hojas: { nombre: string; columnas: string[]; filas: Record<string, Celda>[]; anchos?: number[] }[] = [{
+      nombre: 'Pedidos',
+      columnas: Object.keys(rows[0] || { Pedido: '' }),
+      filas: rows,
+      anchos: [12, 12, 20, 24, 14, 18, 12, 10, 10, 14, 12, 12, 12, 10, 14, 14],
+    }]
 
     if (expDetallado) {
       const prodRows: any[] = []
@@ -225,9 +228,14 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
           }
         })
       })
-      const ws2 = XLSX.utils.json_to_sheet(prodRows)
-      ws2['!cols'] = [12, 20, 20, 16, 14, 10, 12, 12, 12].map(w => ({ wch: w }))
-      XLSX.utils.book_append_sheet(wb, ws2, 'Productos')
+      if (prodRows.length) {
+        hojas.push({
+          nombre: 'Productos',
+          columnas: Object.keys(prodRows[0]),
+          filas: prodRows,
+          anchos: [12, 20, 20, 16, 14, 10, 12, 12, 12],
+        })
+      }
     }
 
     // Resumen sheet
@@ -237,12 +245,37 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
       { Concepto: 'Por cobrar', Valor: rows.reduce((s, r) => s + Math.max(0, r.Saldo), 0) },
       { Concepto: 'Pedidos', Valor: rows.length },
     ]
-    const ws3 = XLSX.utils.json_to_sheet(resRows)
-    ws3['!cols'] = [{ wch: 20 }, { wch: 16 }]
-    XLSX.utils.book_append_sheet(wb, ws3, 'Resumen')
+    hojas.push({ nombre: 'Resumen', columnas: ['Concepto', 'Valor'], filas: resRows, anchos: [20, 16] })
 
     const label = expPeriodo === 'ano' ? String(expAno) : expPeriodo === 'meses' ? `${expAno}-${expMeses.map(m => MESES[m]).join('-')}` : 'todo'
-    XLSX.writeFile(wb, `Pedidos-Tarabana-${label}.xlsx`)
+    const archivo = `Pedidos-Tarabana-${label}.xlsx`
+
+    try {
+      const res = await fetch('/api/admin/pedidos/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ hojas, archivo }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        alert(j.error || 'No se pudo generar el export.')
+        return
+      }
+      // El navegador no puede guardar la respuesta de un fetch por si solo:
+      // se vuelve un blob y se dispara un <a download> de usar y tirar.
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = archivo
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      alert('Se cayo la conexion al generar el export.')
+      return
+    }
     setShowExport(false)
   }
 
