@@ -59,3 +59,84 @@ export function latasEquivalentes(p: FilaStock): number {
 export function formatLitros(litros: number): string {
   return `${litros.toLocaleString('es-MX', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} L`
 }
+
+// ── Unidades de venta (pedido_items) ────────────────────────
+//
+// `LITROS_POR_UNIDAD` de arriba esta indexado por COLUMNA DE STOCK, que es
+// otro vocabulario: `pedido_items.unidad` guarda la presentacion vendida
+// ('caja24', 'mix24', 'barril_acero'...). Los factores son los mismos y se
+// reusan de las constantes de arriba para que no haya dos verdades.
+//
+// `mix24` es una caja de 24 latas armada con estilos distintos: mismo volumen
+// que una caja24, y por eso mismo factor.
+
+export const LITROS_POR_UNIDAD_VENTA = {
+  lata: LITROS_POR_LATA,
+  caja12: LATAS_POR_CAJA12 * LITROS_POR_LATA,
+  caja24: LATAS_POR_CAJA24 * LITROS_POR_LATA,
+  mix24: LATAS_POR_CAJA24 * LITROS_POR_LATA,
+  barril_pet: LITROS_BARRIL_20,
+  barril_acero: LITROS_BARRIL_20,
+  barril10_pet: LITROS_BARRIL_10,
+  barril10_acero: LITROS_BARRIL_10,
+} as const
+
+export type UnidadVenta = keyof typeof LITROS_POR_UNIDAD_VENTA
+
+export const esUnidadVenta = (u: string | null | undefined): u is UnidadVenta =>
+  !!u && u in LITROS_POR_UNIDAD_VENTA
+
+/**
+ * Litros de una partida de pedido.
+ *
+ * Devuelve null si la unidad es desconocida o viene vacia, en vez de asumir
+ * una: en produccion hay partidas con `unidad` en null, y rellenarlas con un
+ * default (como hace el fallback de precio en calcular-pedido.ts) inventaria
+ * volumen que no se vendio. Quien llame decide si lo omite o lo reporta.
+ */
+export function litrosDeItem(unidad: string | null | undefined, cantidad: number | null): number | null {
+  if (!esUnidadVenta(unidad)) return null
+  return (cantidad || 0) * LITROS_POR_UNIDAD_VENTA[unidad]
+}
+
+// ── Top productos por volumen ───────────────────────────────
+
+export type FilaProducto = { nombre: string; litros: number }
+
+export type ItemVendido = {
+  unidad: string | null
+  cantidad: number | null
+  nombre: string
+}
+
+/**
+ * Top productos por VOLUMEN, no por piezas: una caja de 24 y un barril de 20 L
+ * no son comparables como "1 unidad" cada uno.
+ *
+ * `sinUnidad` cuenta las partidas cuya unidad no se pudo interpretar. No se
+ * reparten ni se asumen: se reportan, para que un hueco en los datos se vea
+ * en vez de desaparecer dentro de un total.
+ */
+export function topProductosEnLitros(
+  items: ItemVendido[],
+  limite = 5
+): { filas: FilaProducto[]; sinUnidad: number } {
+  const acum = new Map<string, number>()
+  let sinUnidad = 0
+
+  for (const it of items) {
+    const litros = litrosDeItem(it.unidad, it.cantidad)
+    if (litros === null) {
+      sinUnidad += 1
+      continue
+    }
+    acum.set(it.nombre, (acum.get(it.nombre) || 0) + litros)
+  }
+
+  const filas = [...acum.entries()]
+    .map(([nombre, litros]) => ({ nombre, litros }))
+    .sort((a, b) => b.litros - a.litros)
+    .slice(0, limite)
+
+  return { filas, sinUnidad }
+}

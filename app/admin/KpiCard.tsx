@@ -12,6 +12,16 @@ import type { Variacion } from '../../src/lib/metricas'
 
 export type Senal = 'neutral' | 'alerta'
 
+/**
+ * Tinte del numero cuando el dato en si es la alarma.
+ *
+ * Distinto de `senal`: 'alerta' es ambar y marca "esto hay que vigilarlo"
+ * siempre (Por cobrar lo lleva aunque este en cero); 'rojo' lo pone quien
+ * llama solo cuando el valor lo amerita, para que un $0 no salga en rojo y
+ * entrene a ignorar el color.
+ */
+export type Tono = 'rojo'
+
 type Props = {
   label: string
   /** Valor ya formateado. */
@@ -24,15 +34,16 @@ type Props = {
   /** Base de la comparacion, p.ej. "vs mes anterior". Solo si hay variacion. */
   nota?: string
   senal?: Senal
+  tono?: Tono
   /** true si un aumento es malo (por cobrar, vencido). */
   subirEsMalo?: boolean
   /** Leyenda siempre visible bajo el numero, independiente de la variacion. */
   detalle?: string
 }
 
-export default function KpiCard({ label, valor, variacion, nota, senal = 'neutral', subirEsMalo = false, detalle }: Props) {
+export default function KpiCard({ label, valor, variacion, nota, senal = 'neutral', tono, subirEsMalo = false, detalle }: Props) {
   const esBueno = variacion ? (variacion.dir === 'up') !== subirEsMalo : false
-  const colorValor = senal === 'alerta' ? '#b45309' : '#1a1a1a'
+  const colorValor = tono === 'rojo' ? '#dc2626' : senal === 'alerta' ? '#b45309' : '#1a1a1a'
 
   return (
     <div
