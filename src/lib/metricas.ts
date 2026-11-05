@@ -17,8 +17,22 @@
  * no cuadra con Cobrado ni con Por cobrar.
  */
 
-/** Ventana de inactividad de un cliente. La comparte Reportes. */
+/**
+ * Ventana de inactividad de un cliente.
+ *
+ * OJO: Reportes NO importa esta constante, repite el literal 45 en
+ * `app/admin/finanzas/ReportesClient.tsx`. Si se cambia aqui, alla no cambia.
+ */
 export const DIAS_INACTIVIDAD = 45
+
+/**
+ * Ventana del KPI "Clientes activos" del Inicio.
+ *
+ * Aparte de DIAS_INACTIVIDAD a proposito: son dos preguntas distintas (quien
+ * sigue comprando vs a quien hay que volver a buscar) y mover una no deberia
+ * mover la otra en silencio.
+ */
+export const DIAS_CLIENTE_ACTIVO = 90
 
 /** Status que ya no cuentan como pedido en curso (la vista excluye cancelados). */
 const STATUS_CERRADOS = ['entregado']
@@ -73,9 +87,9 @@ export function hayVencidos(filas: FilaSaldo[]): boolean {
   return filas.some(f => f.estado_cobro === 'vencido')
 }
 
-/** Clientes con al menos un pedido en los ultimos DIAS_INACTIVIDAD dias. */
-export function clientesActivosDe(filas: FilaSaldo[], ahora = new Date()): number {
-  const corte = ahora.getTime() - DIAS_INACTIVIDAD * 86400000
+/** Clientes con al menos un pedido en los ultimos `dias`. */
+export function clientesActivosDe(filas: FilaSaldo[], ahora = new Date(), dias = DIAS_CLIENTE_ACTIVO): number {
+  const corte = ahora.getTime() - dias * 86400000
   const ids = new Set<string>()
   for (const f of filas) {
     if (!f.cliente_id) continue
@@ -155,4 +169,241 @@ export function clavesMesActualYPrevio(ahora = new Date()) {
   const actual = new Date(ahora.getFullYear(), ahora.getMonth(), 1)
   const previo = new Date(ahora.getFullYear(), ahora.getMonth() - 1, 1)
   return { actual: clave(actual), previo: clave(previo) }
+}
+
+// ── Vencido ─────────────────────────────────────────────────
+
+/**
+ * Saldo realmente vencido.
+ *
+ * Se filtra por `dias_vencido > 0` y NO por `estado_cobro === 'vencido'`, que
+ * es lo que uno esperaria. Motivo: la vista viva evalua la rama 'parcial'
+ * ANTES de 'vencido' (ver docs/SCHEMA_NOTES.md), asi que un pedido atrasado
+ * que ya recibio un abono sale 'parcial' y su saldo no se contaria.
+ *
+ * En produccion eso pasa hoy: el pedido B1465D lleva 92 dias de atraso con
+ * $100 de saldo y estado 'parcial'. Con `estado_cobro` el KPI daria
+ * $36,873.85 en vez de $36,973.85, y ademas no cuadraria con la antiguedad de
+ * cartera de la misma pantalla, que si usa `dias_vencido`.
+ */
+export function vencidoDe(filas: FilaSaldo[]): number {
+  return filas
+    .filter(f => (f.dias_vencido || 0) > 0)
+    .reduce((s, f) => s + saldoPositivo(f), 0)
+}
+
+// ── Facturado vs cobrado por mes ────────────────────────────
+
+export type MesFacturado = {
+  mes: string
+  /** Neto facturado: pagado + saldo. */
+  facturado: number
+  cobrado: number
+  /** Lo que falta por cobrar de los pedidos de ese mes. */
+  pendiente: number
+  /** Fraccion cobrada, o null si ese mes no facturo nada. */
+  pct: number | null
+}
+
+/**
+ * Serie mensual de facturado y cobrado, con los meses vacios en cero.
+ *
+ * `pendiente` es la resta y no `porCobrarDe` para que las dos barras apiladas
+ * sumen exactamente `facturado` y la grafica no mienta por un centavo de
+ * redondeo. Puede dar 0 pero nunca negativo: un sobrepago no resta.
+ */
+export function serieFacturadoVsCobrado(filas: FilaSaldo[], n = 12, ahora = new Date()): MesFacturado[] {
+  const mapa = porMes(filas)
+  return ultimosMeses(n, ahora).map(m => {
+    const delMes = mapa.get(m.clave) || []
+    const facturado = netoTotal(delMes)
+    const cobrado = cobradoDe(delMes)
+    return {
+      mes: m.etiqueta,
+      facturado,
+      cobrado,
+      pendiente: Math.max(0, facturado - cobrado),
+      pct: facturado > 0 ? (cobrado / facturado) * 100 : null,
+    }
+  })
+}
+
+// ── Antiguedad de cartera ───────────────────────────────────
+
+export type BucketCartera = {
+  clave: string
+  etiqueta: string
+  monto: number
+  pedidos: number
+}
+
+/**
+ * Los tramos de atraso. `hasta` es inclusivo y `null` es sin tope.
+ * 'Al corriente' son los que tienen saldo pero todavia no vencen.
+ */
+const TRAMOS_CARTERA: { clave: string; etiqueta: string; desde: number; hasta: number | null }[] = [
+  { clave: 'corriente', etiqueta: 'Al corriente', desde: 0, hasta: 0 },
+  { clave: '1-30', etiqueta: '1–30 días', desde: 1, hasta: 30 },
+  { clave: '31-60', etiqueta: '31–60 días', desde: 31, hasta: 60 },
+  { clave: '61-90', etiqueta: '61–90 días', desde: 61, hasta: 90 },
+  { clave: '90+', etiqueta: '90+ días', desde: 91, hasta: null },
+]
+
+/**
+ * Antiguedad de lo que falta por cobrar, por dias de atraso.
+ *
+ * Solo entran pedidos con saldo > 0: la cartera es lo que se debe, no lo que
+ * se facturo. Un pedido ya pagado no tiene antiguedad que medir, aunque su
+ * fecha de vencimiento haya quedado atras.
+ */
+export function antiguedadCartera(filas: FilaSaldo[]): BucketCartera[] {
+  const buckets = TRAMOS_CARTERA.map(t => ({ ...t, monto: 0, pedidos: 0 }))
+
+  for (const f of filas) {
+    const saldo = saldoPositivo(f)
+    if (saldo <= 0) continue
+    const dias = Math.max(0, f.dias_vencido || 0)
+    const b = buckets.find(x => dias >= x.desde && (x.hasta === null || dias <= x.hasta))
+    if (!b) continue
+    b.monto += saldo
+    b.pedidos += 1
+  }
+
+  return buckets.map(({ clave, etiqueta, monto, pedidos }) => ({ clave, etiqueta, monto, pedidos }))
+}
+
+// ── Requiere atencion ───────────────────────────────────────
+
+/** Dias con saldo abierto a partir de los cuales un pedido pide atencion. */
+export const DIAS_ATENCION = 30
+
+export type FilaAtencion = {
+  id: string
+  cliente_id: string | null
+  saldo: number
+  /** Dias de atraso sobre la fecha de vencimiento. 0 si aun no vence. */
+  diasVencido: number
+  /** Dias desde que se levanto el pedido. */
+  diasAbierto: number
+  estado_cobro: string
+}
+
+/**
+ * Pedidos con saldo que ya vencieron, o que llevan mas de DIAS_ATENCION dias
+ * abiertos aunque sus condiciones de pago todavia no venzan.
+ *
+ * Lo segundo no es redundante: un pedido a 30 dias levantado hace 40 vence
+ * por fecha, pero uno de contado mal capturado puede quedarse con
+ * `fecha_vencimiento` nula y nunca contar como vencido. La antiguedad del
+ * saldo lo pesca igual.
+ *
+ * Ordenados por atraso y, a igual atraso, por monto: lo mas viejo y mas caro
+ * primero.
+ */
+export function requierenAtencion(filas: FilaSaldo[], ahora = new Date()): FilaAtencion[] {
+  const salida: FilaAtencion[] = []
+
+  for (const f of filas) {
+    const saldo = saldoPositivo(f)
+    if (saldo <= 0) continue
+
+    const diasVencido = Math.max(0, f.dias_vencido || 0)
+    const diasAbierto = Math.max(
+      0,
+      Math.floor((ahora.getTime() - new Date(f.created_at).getTime()) / 86400000)
+    )
+    if (diasVencido === 0 && diasAbierto <= DIAS_ATENCION) continue
+
+    salida.push({
+      id: f.id,
+      cliente_id: f.cliente_id,
+      saldo,
+      diasVencido,
+      diasAbierto,
+      estado_cobro: f.estado_cobro,
+    })
+  }
+
+  return salida.sort((a, b) =>
+    b.diasVencido !== a.diasVencido ? b.diasVencido - a.diasVencido : b.saldo - a.saldo
+  )
+}
+
+// ── Top clientes ────────────────────────────────────────────
+
+export type FilaCliente = {
+  id: string
+  /** razon_social > full_name > email, ya normalizado. */
+  nombre: string
+  facturado: number
+  saldo: number
+  /** Fraccion del facturado total del periodo. */
+  pct: number
+}
+
+export type DatosCliente = {
+  id: string
+  full_name: string | null
+  email: string | null
+  razon_social: string | null
+}
+
+const MINUSCULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en', 'el', 'a'])
+
+/**
+ * Nombre en formato Titulo, solo si viene TODO EN MAYUSCULAS.
+ *
+ * Los nombres que ya traen minusculas se dejan como estan: reescribirlos
+ * seria adivinar donde van las mayusculas de un nombre propio.
+ *
+ * Respeta las siglas y las formas legales: un token con puntos ('S.A.P.I.')
+ * o de la lista de sufijos se queda en mayusculas, para que
+ * 'CERVECERIA ... S.A.P.I. DE C.V.' quede 'Cerveceria ... S.A.P.I. de C.V.'
+ * y no 'S.a.p.i. De C.v.'.
+ */
+const SIGLAS = new Set(['SA', 'SAPI', 'CV', 'SC', 'SAS', 'RL', 'SRL', 'SOFOM', 'ENR', 'MI'])
+
+export function nombreLegible(c: DatosCliente): string {
+  const crudo = (c.razon_social || c.full_name || c.email || '').trim()
+  if (!crudo) return 'Cliente sin nombre'
+  // Si trae alguna minuscula, no se toca.
+  if (/[a-záéíóúñü]/.test(crudo)) return crudo
+
+  return crudo
+    .toLowerCase()
+    .split(/\s+/)
+    .map((palabra, i) => {
+      const original = crudo.split(/\s+/)[i]
+      if (original.includes('.') || SIGLAS.has(original.replace(/\./g, ''))) return original
+      if (i > 0 && MINUSCULAS.has(palabra)) return palabra
+      return palabra.charAt(0).toUpperCase() + palabra.slice(1)
+    })
+    .join(' ')
+}
+
+/** Top clientes por facturacion neta, con su saldo y su peso en el total. */
+export function topClientes(filas: FilaSaldo[], clientes: DatosCliente[], limite = 8): FilaCliente[] {
+  const datos = new Map(clientes.map(c => [c.id, c]))
+  const acum = new Map<string, { facturado: number; saldo: number }>()
+
+  for (const f of filas) {
+    if (!f.cliente_id) continue
+    const a = acum.get(f.cliente_id) || { facturado: 0, saldo: 0 }
+    a.facturado += netoDe(f)
+    a.saldo += saldoPositivo(f)
+    acum.set(f.cliente_id, a)
+  }
+
+  const total = [...acum.values()].reduce((s, a) => s + a.facturado, 0)
+
+  return [...acum.entries()]
+    .map(([id, a]) => ({
+      id,
+      nombre: nombreLegible(datos.get(id) || { id, full_name: null, email: null, razon_social: null }),
+      facturado: a.facturado,
+      saldo: a.saldo,
+      pct: total > 0 ? (a.facturado / total) * 100 : 0,
+    }))
+    .sort((a, b) => b.facturado - a.facturado)
+    .slice(0, limite)
 }

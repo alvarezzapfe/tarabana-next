@@ -1,64 +1,76 @@
 'use client'
 import { useMemo } from 'react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import KpiCard from './KpiCard'
-import { formatLitros, litrosTotales, type FilaStock } from '../../src/lib/unidades'
+import FacturadoCobradoChart from './FacturadoCobradoChart'
+import AntiguedadCartera from './AntiguedadCartera'
+import RequiereAtencion from './RequiereAtencion'
+import { formatLitros, litrosTotales, topProductosEnLitros, type FilaStock, type ItemVendido } from '../../src/lib/unidades'
 import {
+  DIAS_ATENCION,
+  DIAS_CLIENTE_ACTIVO,
+  antiguedadCartera,
   clavesMesActualYPrevio,
   clientesActivosDe,
   cobradoDe,
-  DIAS_INACTIVIDAD,
+  nombreLegible,
   pctCobradoDe,
   pedidosActivosDe,
   porCobrarDe,
-  netoDe,
   porMes,
-  serieFacturada,
+  requierenAtencion,
+  serieFacturadoVsCobrado,
+  topClientes,
   variacion,
+  vencidoDe,
+  type DatosCliente,
   type FilaSaldo,
 } from '../../src/lib/metricas'
-
-/** pedidos_saldo ya excluye cancelados, asi que no aparece como status. */
-const STATUS_COLORS: Record<string, { color: string; label: string }> = {
-  pendiente: { color: '#d97706', label: 'Pendiente' },
-  confirmado: { color: '#2563eb', label: 'Confirmado' },
-  enviado: { color: '#7c3aed', label: 'En camino' },
-  entregado: { color: '#059669', label: 'Entregado' },
-}
-
-type Cliente = { id: string; full_name: string | null; email: string | null }
+import {
+  ACENTO, BORDE, CSS_DASH, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
+  card, moneda, subtituloPanel, tabular, tituloPanel,
+} from './dash-ui'
 
 /**
- * Supabase tipa una relacion anidada como arreglo aunque con FK devuelva un
- * objeto, asi que se aceptan las dos formas y se normaliza al leer.
+ * Inicio del staff.
+ *
+ * Fuente unica: `pedidos_saldo`. Todos los montos salen de ahi y ninguno se
+ * recalcula sobre `pedidos.total`, que es el importe BRUTO antes de descuento
+ * y envio (ver docs/SCHEMA_NOTES.md). `profiles` entra solo a resolver
+ * nombres y `pedido_items` solo a sumar volumen.
+ *
+ * La pantalla contesta cuatro preguntas en orden: como vamos (KPIs), si lo
+ * facturado se esta cobrando (barras apiladas), que tan vieja es la cartera
+ * (antiguedad) y a quien hay que llamar hoy (requiere atencion).
  */
-type ProductoRef = { nombre?: string | null } | { nombre?: string | null }[] | null
-type PedidoItems = { id: string; pedido_items?: { cantidad: number | null; productos?: ProductoRef }[] | null }
 
+type ProductoRef = { nombre?: string | null } | { nombre?: string | null }[] | null
+type PedidoItems = {
+  id: string
+  pedido_items?: { cantidad: number | null; unidad: string | null; productos?: ProductoRef }[] | null
+}
+
+/** Supabase tipa un to-one anidado como arreglo segun la version; se normaliza. */
 const nombreProducto = (ref: ProductoRef): string => {
   const p = Array.isArray(ref) ? ref[0] : ref
-  return p?.nombre || 'Sin nombre'
+  return p?.nombre || 'Sin producto'
 }
 
 type Props = {
   saldos: FilaSaldo[]
   productos: FilaStock[]
-  clientes: Cliente[]
+  clientes: DatosCliente[]
   pedidosItems: PedidoItems[]
   /** La fecha viene del servidor: llamarla en render seria impuro. */
   ahoraISO: string
 }
 
-const moneda = (n: number) => `$${Math.round(n).toLocaleString('es-MX')}`
-
-const Vacio = ({ mensaje, alto = 180 }: { mensaje: string; alto?: number }) => (
-  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: alto, color: '#9ca3af', fontSize: 13 }}>
-    {mensaje}
-  </div>
-)
-
 export default function DashboardClient({ saldos, productos, clientes, pedidosItems, ahoraISO }: Props) {
   const ahora = useMemo(() => new Date(ahoraISO), [ahoraISO])
+
+  const nombres = useMemo(
+    () => new Map(clientes.map(c => [c.id, nombreLegible(c)])),
+    [clientes]
+  )
 
   const kpis = useMemo(() => {
     const { actual, previo } = clavesMesActualYPrevio(ahora)
@@ -70,11 +82,13 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
       new Set(filas.map(f => f.cliente_id).filter(Boolean) as string[]).size
 
     const pct = pctCobradoDe(saldos)
+    const vencido = vencidoDe(saldos)
 
     return [
       {
         label: 'Clientes activos',
         valor: clientesActivosDe(saldos, ahora).toLocaleString('es-MX'),
+        detalle: `con pedido en ${DIAS_CLIENTE_ACTIVO} días`,
         variacion: variacion(compradoresDe(delMes), compradoresDe(delPrevio)),
         nota: 'compradores vs mes anterior',
       },
@@ -85,14 +99,23 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
         nota: 'pedidos del mes vs anterior',
       },
       {
-        // Saldo pendiente al dia de hoy: no hay historico con el que compararlo.
         label: 'Por cobrar',
         valor: moneda(porCobrarDe(saldos)),
+        detalle: 'saldo abierto total',
         senal: 'alerta' as const,
+      },
+      {
+        // Rojo solo cuando hay algo vencido: un $0 en rojo entrena a ignorar
+        // el color justo donde tiene que avisar.
+        label: 'Vencido',
+        valor: moneda(vencido),
+        detalle: vencido > 0 ? 'ya pasó su vencimiento' : 'nada vencido',
+        tono: vencido > 0 ? ('rojo' as const) : undefined,
       },
       {
         label: '% cobrado',
         valor: pct === null ? '—' : `${pct.toFixed(1)}%`,
+        detalle: 'de lo facturado',
       },
       {
         label: 'Pedidos activos',
@@ -107,58 +130,44 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
     ]
   }, [saldos, productos, ahora])
 
-  // Doce meses fijos, con los vacios en cero.
-  const ventasPorMes = useMemo(() => serieFacturada(saldos, 12, ahora), [saldos, ahora])
+  const serie = useMemo(() => serieFacturadoVsCobrado(saldos, 12, ahora), [saldos, ahora])
+  const buckets = useMemo(() => antiguedadCartera(saldos), [saldos])
+  const atencion = useMemo(() => requierenAtencion(saldos, ahora), [saldos, ahora])
+  const top = useMemo(() => topClientes(saldos, clientes, 8), [saldos, clientes])
 
-  const statusData = useMemo(() => {
-    const map: Record<string, number> = {}
-    for (const f of saldos) map[f.status] = (map[f.status] || 0) + 1
-    return Object.entries(STATUS_COLORS).map(([key, cfg]) => ({
-      key, label: cfg.label, color: cfg.color, count: map[key] || 0,
-    }))
-  }, [saldos])
+  const itemsVendidos = useMemo<ItemVendido[]>(
+    () =>
+      pedidosItems.flatMap(p =>
+        (p.pedido_items || []).map(it => ({
+          unidad: it.unidad,
+          cantidad: it.cantidad,
+          nombre: nombreProducto(it.productos ?? null),
+        }))
+      ),
+    [pedidosItems]
+  )
+  const { filas: litrosPorProducto, sinUnidad } = useMemo(
+    () => topProductosEnLitros(itemsVendidos, 6),
+    [itemsVendidos]
+  )
 
-  const topClientes = useMemo(() => {
-    const nombre = new Map(clientes.map(c => [c.id, c.full_name || c.email || 'Sin nombre']))
-    const map = new Map<string, number>()
-    for (const f of saldos) {
-      if (!f.cliente_id) continue
-      map.set(f.cliente_id, (map.get(f.cliente_id) || 0) + netoDe(f))
-    }
-    return [...map.entries()]
-      .map(([id, total]) => ({ nombre: nombre.get(id) || 'Sin nombre', total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 5)
-  }, [saldos, clientes])
-
-  const topProductos = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const p of pedidosItems) {
-      for (const item of p.pedido_items || []) {
-        const n = nombreProducto(item.productos ?? null)
-        map.set(n, (map.get(n) || 0) + (item.cantidad || 0))
-      }
-    }
-    return [...map.entries()]
-      .map(([nombre, cantidad]) => ({ nombre, cantidad }))
-      .sort((a, b) => b.cantidad - a.cantidad)
-      .slice(0, 5)
-  }, [pedidosItems])
-
-  const card = { background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, padding: '22px 24px' }
-  const sectionTitle = { color: '#1a1a1a', fontSize: 14, fontWeight: 600 as const, margin: '0 0 16px' }
-  const totalPedidos = saldos.length || 1
+  const maxTop = top[0]?.facturado || 1
+  const maxLitros = litrosPorProducto[0]?.litros || 1
 
   return (
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-      <div style={{ marginBottom: 24 }}>
-        <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, margin: '0 0 4px' }}>Inicio</h1>
-        <p style={{ color: '#6b7280', fontSize: 13, margin: 0 }}>
-          Vista general de la operación · clientes activos = con pedido en los últimos {DIAS_INACTIVIDAD} días
+      <style>{CSS_DASH}</style>
+
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ color: TINTA, fontSize: 21, fontWeight: 700, margin: '0 0 3px', letterSpacing: '-0.01em' }}>
+          Inicio
+        </h1>
+        <p style={{ color: GRIS, fontSize: 12.5, margin: 0 }}>
+          Vista general de la operación · clientes activos = con pedido en los últimos {DIAS_CLIENTE_ACTIVO} días
         </p>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(190px, 1fr))', gap: 12, marginBottom: 24 }}>
+      <div className="dash-kpis">
         {kpis.map(k => (
           <KpiCard
             key={k.label}
@@ -167,92 +176,137 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
             variacion={k.variacion}
             nota={k.nota}
             senal={k.senal}
-            subirEsMalo={k.label === 'Por cobrar'}
+            tono={k.tono}
+            detalle={k.detalle}
+            subirEsMalo={k.label === 'Por cobrar' || k.label === 'Vencido'}
           />
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 14, marginBottom: 14 }}>
-        <div style={card}>
-          <p style={sectionTitle}>Facturado por mes · últimos 12 meses</p>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={ventasPorMes}>
-              <XAxis dataKey="mes" stroke="#e5e7eb" tick={{ fill: '#6b7280', fontSize: 11 }} interval={0} />
-              <YAxis stroke="#e5e7eb" tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip
-                formatter={(v: unknown) => [moneda(Number(v) || 0), 'Facturado']}
-                contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, color: '#1a1a1a', fontSize: 12 }}
-              />
-              <Bar dataKey="total" fill="#9ca3af" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+      <div className="dash-2-1">
+        <section style={card} className="dash-min">
+          <p style={tituloPanel}>Facturado vs cobrado</p>
+          <p style={{ ...subtituloPanel, marginBottom: 16 }}>Últimos 12 meses, por mes del pedido</p>
+          <FacturadoCobradoChart serie={serie} />
+        </section>
 
-        <div style={card}>
-          <p style={sectionTitle}>Pedidos por status</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {statusData.map(s => {
-              const pct = Math.round((s.count / totalPedidos) * 100)
-              return (
-                <div key={s.key}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
-                    <span style={{ color: '#374151' }}>{s.label}</span>
-                    <span style={{ color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>{s.count}</span>
-                  </div>
-                  <div style={{ height: 5, background: '#f3f4f6', borderRadius: 3, overflow: 'hidden' }}>
-                    <div style={{ width: `${pct}%`, height: '100%', background: s.color, borderRadius: 3 }} />
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <section style={card} className="dash-min">
+          <p style={tituloPanel}>Antigüedad de cartera</p>
+          <p style={{ ...subtituloPanel, marginBottom: 16 }}>Saldo por cobrar según su atraso</p>
+          <AntiguedadCartera buckets={buckets} />
+        </section>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        <div style={card}>
-          <p style={sectionTitle}>Top clientes por facturación</p>
-          {topClientes.length ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={topClientes} layout="vertical">
-                <XAxis type="number" stroke="#e5e7eb" tick={{ fill: '#6b7280', fontSize: 11 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="nombre" width={120} stroke="#e5e7eb" tick={{ fill: '#6b7280', fontSize: 11 }} />
-                <Tooltip
-                  formatter={(v: unknown) => [moneda(Number(v) || 0), 'Facturado']}
-                  contentStyle={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 8, color: '#1a1a1a', fontSize: 12 }}
-                />
-                <Bar dataKey="total" fill="#9ca3af" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <Vacio mensaje="Sin pedidos registrados" alto={200} />
-          )}
-        </div>
+      <div className="dash-1-1">
+        <section style={card} className="dash-min">
+          <p style={tituloPanel}>Top clientes</p>
+          <p style={{ ...subtituloPanel, marginBottom: 14 }}>Por facturación neta histórica</p>
 
-        <div style={card}>
-          <p style={sectionTitle}>Top productos por unidades</p>
-          {topProductos.length ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 11, paddingTop: 4 }}>
-              {topProductos.map(p => {
-                const max = topProductos[0].cantidad || 1
-                return (
-                  <div key={p.nombre}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 4 }}>
-                      <span style={{ color: '#374151' }}>{p.nombre}</span>
-                      <span style={{ color: '#6b7280', fontVariantNumeric: 'tabular-nums' }}>{p.cantidad}</span>
-                    </div>
-                    <div style={{ height: 5, background: '#f3f4f6', borderRadius: 3, overflow: 'hidden' }}>
-                      <div style={{ width: `${Math.round((p.cantidad / max) * 100)}%`, height: '100%', background: '#9ca3af', borderRadius: 3 }} />
-                    </div>
-                  </div>
-                )
-              })}
+          {top.length === 0 ? (
+            <div style={{ height: 230, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GRIS_SUAVE, fontSize: 13 }}>
+              Sin pedidos registrados
             </div>
           ) : (
-            <Vacio mensaje="Sin partidas registradas" alto={200} />
+            <div>
+              {top.map((c, i) => (
+                <a
+                  key={c.id}
+                  href={`/admin/clientes/edit/${c.id}`}
+                  className="dash-fila-link"
+                  style={{ padding: '9px 6px', margin: '0 -6px', borderRadius: 6, borderTop: i === 0 ? 'none' : `1px solid ${PISTA}` }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                    <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 11, width: 14, flexShrink: 0 }}>
+                      {i + 1}
+                    </span>
+                    <span
+                      className="dash-elipsis dash-nombre"
+                      title={c.nombre}
+                      style={{ color: TINTA_MEDIA, fontSize: 12.5, fontWeight: 500, flex: 1 }}
+                    >
+                      {c.nombre}
+                    </span>
+                    {c.saldo > 0 && (
+                      <span
+                        title={`Saldo pendiente: ${moneda(c.saldo)}`}
+                        style={{
+                          ...tabular,
+                          flexShrink: 0,
+                          padding: '1px 7px',
+                          borderRadius: 99,
+                          background: '#fef2f2',
+                          border: '1px solid #fecaca',
+                          color: ROJO,
+                          fontSize: 10.5,
+                          fontWeight: 600,
+                        }}
+                      >
+                        debe {moneda(c.saldo)}
+                      </span>
+                    )}
+                    <span style={{ ...tabular, color: TINTA, fontSize: 12.5, fontWeight: 600, flexShrink: 0 }}>
+                      {moneda(c.facturado)}
+                    </span>
+                    <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 10.5, width: 34, textAlign: 'right', flexShrink: 0 }}>
+                      {c.pct.toFixed(0)}%
+                    </span>
+                  </div>
+                  <div style={{ height: 3, background: PISTA, borderRadius: 2, marginTop: 6, overflow: 'hidden' }}>
+                    <div style={{ width: `${(c.facturado / maxTop) * 100}%`, height: '100%', background: ACENTO, borderRadius: 2 }} />
+                  </div>
+                </a>
+              ))}
+            </div>
           )}
-        </div>
+        </section>
+
+        <section style={card} className="dash-min">
+          <p style={tituloPanel}>Requiere atención</p>
+          <p style={{ ...subtituloPanel, marginBottom: 14 }}>
+            Vencidos o con saldo de más de {DIAS_ATENCION} días
+          </p>
+          <RequiereAtencion filas={atencion} nombres={nombres} />
+        </section>
       </div>
+
+      <section style={card}>
+        <p style={tituloPanel}>Top productos</p>
+        <p style={{ ...subtituloPanel, marginBottom: 16 }}>
+          Por volumen vendido · un barril de 20 L no es comparable con una caja como &ldquo;una unidad&rdquo;
+        </p>
+
+        {litrosPorProducto.length === 0 ? (
+          <div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center', color: GRIS_SUAVE, fontSize: 13 }}>
+            Sin partidas registradas
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '14px 28px' }}>
+            {litrosPorProducto.map((p, i) => (
+              <div key={p.nombre}>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 6 }}>
+                  <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 11, width: 14, flexShrink: 0 }}>{i + 1}</span>
+                  <span className="dash-elipsis" title={p.nombre} style={{ color: TINTA_MEDIA, fontSize: 12.5, fontWeight: 500, flex: 1 }}>
+                    {p.nombre}
+                  </span>
+                  <span style={{ ...tabular, color: TINTA, fontSize: 12.5, fontWeight: 600, flexShrink: 0 }}>
+                    {formatLitros(p.litros)}
+                  </span>
+                </div>
+                <div style={{ height: 3, background: PISTA, borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ width: `${(p.litros / maxLitros) * 100}%`, height: '100%', background: i === 0 ? ACENTO : '#d1d5db', borderRadius: 2 }} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Un hueco en los datos se dice, no se esconde dentro del total. */}
+        {sinUnidad > 0 && (
+          <p style={{ margin: '16px 0 0', paddingTop: 12, borderTop: `1px solid ${BORDE}`, color: GRIS_SUAVE, fontSize: 11 }}>
+            {sinUnidad} {sinUnidad === 1 ? 'partida' : 'partidas'} sin presentación registrada; no suman litros.
+          </p>
+        )}
+      </section>
     </div>
   )
 }
