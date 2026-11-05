@@ -1,5 +1,7 @@
 import { createServerSupabaseClient } from '../../src/lib/supabase-server'
 import { isVendedor } from '../../src/lib/roles'
+import { cargarDatosComision } from '../../src/lib/comisiones-datos'
+import { comisionesPorVendedor, periodoDeFecha } from '../../src/lib/comisiones'
 import DashboardClient from './DashboardClient'
 import DashboardVendedor from './DashboardVendedor'
 
@@ -12,17 +14,38 @@ export default async function AdminDashboard() {
   // consultan productos: nada de inventario. Las filas que recibe ya vienen
   // acotadas por RLS, no hace falta filtrar por vendedor_id aqui.
   if (isVendedor(yo?.role)) {
-    const [{ data: misSaldos }, { count: misClientes }] = await Promise.all([
+    const [{ data: misSaldos }, { count: misClientes }, { data: miVendedorId }, datos] = await Promise.all([
       supabase
         .from('pedidos_saldo')
         .select('id, cliente_id, total, pagado, saldo, status, estado_cobro, dias_vencido, created_at'),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'comprador'),
+      // Su propia ficha por RPC y no con un select: `vendedores` pide
+      // is_staff() para leer y el vendedor no lo es. `mi_vendedor_id()` es
+      // security definer, esta otorgada a authenticated y ya es fail-closed
+      // (devuelve null si le quitaron el rol o desactivaron la ficha).
+      supabase.rpc('mi_vendedor_id'),
+      cargarDatosComision(supabase),
     ])
+
+    // Sin ficha ligada no hay a quien comisionar — y tampoco tendria pedidos.
+    const comision = miVendedorId
+      ? comisionesPorVendedor({
+          vendedorIds: [miVendedorId],
+          pagos: datos.pagos,
+          pedidos: datos.pedidos,
+          tramos: datos.tramos,
+          periodo: periodoDeFecha(new Date()),
+          ivaTasa: datos.ivaTasa,
+          iepsTasa: datos.iepsTasa,
+        })[0]
+      : null
+
     return (
       <DashboardVendedor
         saldos={misSaldos || []}
         clientesEnCartera={misClientes || 0}
         nombre={yo?.full_name || ''}
+        comision={comision}
         ahoraISO={new Date().toISOString()}
       />
     )

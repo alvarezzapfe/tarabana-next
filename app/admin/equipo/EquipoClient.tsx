@@ -6,7 +6,6 @@ import { createClient } from '../../../src/lib/supabase'
 type FichaVendedor = {
   id: string
   nombre: string
-  comision_pct: number | null
   activo: boolean | null
   profile_id: string | null
 }
@@ -115,7 +114,7 @@ export default function EquipoClient() {
         .eq('used', false)
         .order('created_at', { ascending: false }),
       fetch('/api/admin/usuarios/mfa-status').then(r => r.ok ? r.json() : {}),
-      supabase.from('vendedores').select('id, nombre, comision_pct, activo, profile_id').order('nombre'),
+      supabase.from('vendedores').select('id, nombre, activo, profile_id').order('nombre'),
     ])
 
     setUsuarios(usuariosRes.data || [])

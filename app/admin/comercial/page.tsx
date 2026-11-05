@@ -20,7 +20,16 @@ export default async function ComercialPage({ searchParams }: { searchParams: Se
         basePath="/admin/comercial"
         acento={acento}
       />
-      {activa === 'comisiones' ? <ComisionesSection /> : <VendedoresSection />}
+      {activa === 'comisiones' ? (
+        // El mes que se mira viaja en la URL: el calculo es server-side y
+        // cambiar de mes es navegar, no estado del cliente.
+        <ComisionesSection
+          periodo={typeof params.periodo === 'string' ? params.periodo : undefined}
+          acento={acento}
+        />
+      ) : (
+        <VendedoresSection />
+      )}
     </>
   )
 }

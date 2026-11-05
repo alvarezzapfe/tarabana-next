@@ -178,3 +178,70 @@ se evalúan con el rol que consulta, no con el dueño de la vista. Los grants
 son los default de Supabase (anon, authenticated, postgres, service_role).
 Conceder `ALL` no habilita escritura: la vista tiene `GROUP BY`, así que no es
 auto-updatable y un insert/update/delete falla igual.
+
+## `pagos.fecha_pago` es `date` en producción, no `timestamptz`
+
+Verificado contra producción el 2026-11-04 con el spec OpenAPI de PostgREST
+(`GET /rest/v1/`, solo lectura): la columna es `date`. El archivo
+`supabase/migrations/20260803200000_pagos_cobranza.sql:12` la declara
+`timestamptz not null default now()`. Los valores que devuelve la API lo
+confirman: `"fecha_pago": "2026-08-07"`, sin hora ni offset.
+
+Es la misma clase de divergencia que la de `pedidos.fecha_vencimiento`
+(declarada `timestamptz`, viva como `date`).
+
+**Por qué importa para cualquier agrupación por mes:** siendo `date`, el mes
+sale del string y no hay zona horaria de por medio. Pasarla por `Date` es un
+error silencioso:
+
+```js
+new Date('2026-08-01')            // 2026-07-31T18:00:00 en CDMX (UTC-6)
+new Date('2026-08-01').getMonth() // 6 = julio
+```
+
+Un pago del día 1 se iría al mes anterior. `src/lib/comisiones.ts` saca el
+periodo con `fecha.slice(0, 7)` justamente por esto, y nunca construye un
+`Date` a partir de `fecha_pago`.
+
+## Comisiones por tramos marginales (Fase 3)
+
+Tablas nuevas, en `supabase/migrations/20261104100000_comisiones_tramos.sql`:
+
+- **`comision_tramos`** — escalera marginal. `vendedor_id` nullable, donde
+  null = esquema global por default. La resolución es **todo o nada**: un
+  vendedor con tramos propios ignora los globales, nunca se mezclan.
+  Los invariantes del conjunto (arranca en 0, contiguos, a lo más un tramo
+  abierto y que sea el último) los impone el constraint trigger diferido
+  `trg_validar_comision_tramos`, no un CHECK de fila — ninguna propiedad del
+  conjunto cabe en uno. `set_comision_tramos(vendedor_id, jsonb)` reemplaza la
+  escalera completa en una transacción; es lo que llama la UI.
+- **`comision_cortes`** — snapshot mensual por vendedor. **Que la fila exista
+  significa que el mes está cerrado**; el mes abierto se calcula en vivo y no
+  se persiste, así que no hay estado 'abierto'. Guarda base, desglose, las dos
+  tasas y la escalera usadas, para ser reproducible si después cambian.
+
+### Los precios de la DB traen los impuestos adentro
+
+No hay ninguna columna de impuestos en `pedidos` ni en `pedido_items`;
+`calcular-pedido.ts` arma `total = SUM(cantidad * precio_unitario)` y el
+documento imprime Subtotal/Descuento/Envío/TOTAL sin renglón de impuestos.
+`profiles.requiere_factura` **no cambia el monto**. Lo único explícito del
+repo es el catálogo de WhatsApp (`src/lib/whatsappPrompt.ts:130`): "Precios
+mayorista, IVA incluido".
+
+Decisión de negocio: los precios traen **IVA 16% e IEPS de cerveza 26.5%**, y
+la base de comisión es neta de los dos (`÷ 1.16 ÷ 1.265`). Las tasas viven en
+`app_config.impuestos` y se copian dentro de cada corte.
+
+`app_config` tiene una policy extra, `config_vendedor_read_impuestos`, porque
+el rol `vendedor` no es `is_staff()` y sin ella no podría netear su propia
+base. Le abre esa clave y solo esa.
+
+### Lo obsoleto que sigue vivo
+
+`vendedores.comision_pct` y la tabla `comisiones` quedaron marcadas obsoletas
+con `COMMENT` y ya no las lee nada del código. Se tiran con
+`20261104200000_comisiones_limpieza.sql`, **que no debe correrse hasta que las
+escaleras estén capturadas**: mientras no lo estén, `comision_pct` es el único
+registro del porcentaje que se pactó con cada vendedor. Esa migración trae un
+guard que aborta si `comision_tramos` está vacía.
