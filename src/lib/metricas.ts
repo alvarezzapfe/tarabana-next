@@ -17,6 +17,8 @@
  * no cuadra con Cobrado ni con Por cobrar.
  */
 
+import { periodoMx } from './fechas.ts'
+
 /**
  * Ventana de inactividad de un cliente.
  *
@@ -102,7 +104,15 @@ export function clientesActivosDe(filas: FilaSaldo[], ahora = new Date(), dias =
 
 export type Mes = { clave: string; etiqueta: string }
 
-const clave = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+/**
+ * Clave de mes, en la zona del negocio.
+ *
+ * Antes era `getFullYear`/`getMonth`, que es la zona de donde corre el codigo.
+ * En un servidor en UTC, un pedido de las 19:00 del 31 de octubre caia en
+ * noviembre; en el navegador de alguien en CDMX, en octubre. La misma grafica
+ * daba numeros distintos segun donde se calculara.
+ */
+const clave = (d: Date) => periodoMx(d)
 
 /**
  * Los ultimos `n` meses hasta el actual, siempre completos.
