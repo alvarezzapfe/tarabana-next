@@ -2,6 +2,7 @@ import { createServerSupabaseClient } from '../../../../../../src/lib/supabase-s
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../../src/lib/roles'
 import { logAction } from '../../../../../../src/lib/audit'
+import { columnaStockDe } from '../../../../../../src/lib/unidades'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -25,7 +26,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const { data: items } = await supabase
       .from('pedido_items')
-      .select('*, productos(id, nombre, stock_caja24, stock_caja12, stock_barril_pet, stock_latas)')
+      // Todas las columnas de stock: antes traia solo cuatro, asi que para un
+      // barril de acero o de 10 L el valor actual llegaba undefined.
+      .select('*, productos(id, nombre, stock_latas, stock_caja12, stock_caja24, stock_barril_pet, stock_barril_acero, stock_barril10_pet, stock_barril10_acero)')
       .eq('pedido_id', id)
 
     if (items) {
@@ -49,10 +52,21 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
             }).eq('id', estilo.producto_id)
           }
         } else {
-          // Standard items: caja24, caja12, barril_pet
-          const stockCol = item.unidad === 'caja12' ? 'stock_caja12'
-            : item.unidad === 'barril_pet' ? 'stock_barril_pet'
-            : 'stock_caja24'
+          // La columna sale de unidades.ts y no de un ternario.
+          //
+          // El ternario que estaba aqui mandaba a `stock_caja24` todo lo que
+          // no fuera caja12 ni barril_pet, asi que entregar un barril_acero o
+          // uno de 10 L descontaba CAJAS DE 24 y dejaba intacta la columna del
+          // barril. Nunca corrompio produccion de milagro: no hay ningun
+          // pedido en estado 'entregado' todavia, pero el pedido CB63CF trae
+          // un barril_acero esperando.
+          const stockCol = columnaStockDe(item.unidad)
+          if (!stockCol) {
+            return NextResponse.json(
+              { error: `No se puede descontar stock: presentacion no reconocida (${item.unidad}) en ${item.productos?.nombre || 'un producto'}.` },
+              { status: 400 }
+            )
+          }
           const currentStock = item.productos?.[stockCol] || 0
           const newStock = currentStock - item.cantidad
           if (newStock < 0) {

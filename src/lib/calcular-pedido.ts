@@ -7,15 +7,11 @@
  * - Latas (caja12, caja24, mix24): derived from precio_lata_* × quantity
  * - Barriles: use their own price columns directly
  */
-
-const STOCK_COL: Record<string, string> = {
-  caja12: 'stock_caja12',
-  caja24: 'stock_caja24',
-  barril_pet: 'stock_barril_pet',
-  barril_acero: 'stock_barril_acero',
-  barril10_pet: 'stock_barril10_pet',
-  barril10_acero: 'stock_barril10_acero',
-}
+// La extension .ts no es un descuido: `node --test` corre este archivo sin
+// bundler y su resolucion de ESM exige el especificador completo. Turbopack y
+// tsc lo resuelven igual (allowImportingTsExtensions en tsconfig). Quitarla
+// rompe los tests.
+import { columnaStockDe } from './unidades.ts'
 
 const UNIDAD_LABEL: Record<string, string> = {
   caja12: 'Caja 12',
@@ -132,7 +128,14 @@ export function calcularPedido(
         return { error: `${prod.nombre} no tiene precio ${sufijo === 'taproom' ? 'mayorista' : 'publico'} configurado para ${label}.`, status: 400 }
       }
 
-      const stockKey = STOCK_COL[unidad] || `stock_${unidad}`
+      // El mapeo vive en unidades.ts. Antes se resolvia con
+      // `stock_${unidad}` como fallback, que para 'lata' apuntaba a
+      // `stock_lata` (la columna es `stock_latas`) y dejaba toda venta de
+      // latas sueltas en "stock insuficiente".
+      const stockKey = columnaStockDe(unidad)
+      if (!stockKey) {
+        return { error: `Presentacion no reconocida: ${label}.`, status: 400 }
+      }
       const stockDisponible = (prod[stockKey] as number) ?? 0
       if (stockDisponible < cantidad) {
         return { error: `Stock insuficiente de ${label} para ${prod.nombre}. Disponible: ${stockDisponible}.`, status: 400 }

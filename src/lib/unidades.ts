@@ -140,3 +140,43 @@ export function topProductosEnLitros(
 
   return { filas, sinUnidad }
 }
+
+// ── Unidad de venta -> columna de stock ─────────────────────
+//
+// Fuente unica del mapeo. Estaba duplicado y mal en los dos lugares que lo
+// usaban, con dos fallos distintos:
+//
+//   1. `calcular-pedido.ts` lo resolvia como `stock_${unidad}` cuando la
+//      unidad no estaba en su mapa. Para 'lata' eso daba `stock_lata`, que no
+//      existe (la columna es `stock_latas`), asi que leia undefined -> 0 y
+//      pedir latas sueltas SIEMPRE fallaba con "stock insuficiente".
+//
+//   2. La ruta de status mandaba a `stock_caja24` todo lo que no fuera
+//      caja12 ni barril_pet, asi que entregar un `barril_acero` descontaba
+//      cajas de 24 y nunca tocaba `stock_barril_acero`.
+//
+// `mix24` no aparece a proposito: se arma con latas sueltas de varios
+// estilos, asi que su descuento es por estilo contra `stock_latas` y no cabe
+// en un mapeo de una sola columna. Quien lo maneje lo trata aparte.
+
+export const COLUMNA_STOCK_POR_UNIDAD = {
+  lata: 'stock_latas',
+  caja12: 'stock_caja12',
+  caja24: 'stock_caja24',
+  barril_pet: 'stock_barril_pet',
+  barril_acero: 'stock_barril_acero',
+  barril10_pet: 'stock_barril10_pet',
+  barril10_acero: 'stock_barril10_acero',
+} as const satisfies Record<string, ColumnaStock>
+
+/**
+ * Columna de stock que le corresponde a una unidad de venta, o null si no
+ * hay una sola columna que la represente ('mix24', o una unidad desconocida).
+ *
+ * Devuelve null en vez de adivinar: descontar de la columna equivocada es
+ * peor que no descontar, porque corrompe el inventario en silencio.
+ */
+export function columnaStockDe(unidad: string | null | undefined): ColumnaStock | null {
+  if (!unidad) return null
+  return (COLUMNA_STOCK_POR_UNIDAD as Record<string, ColumnaStock>)[unidad] ?? null
+}
