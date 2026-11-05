@@ -3,6 +3,7 @@ import { useState, useMemo } from 'react'
 import { METODOS_PAGO } from '../../../src/lib/pagos'
 import { tipoLabel, nivelLabel } from '../../../src/lib/clientes'
 import * as XLSX from 'xlsx'
+import ImportarExcel from './ImportarExcel'
 
 const entregaConfig: Record<string, { label: string, color: string, bg: string }> = {
   pendiente: { label: 'Pendiente', color: '#f59e0b', bg: '#fef3c7' },
@@ -58,7 +59,7 @@ const Overlay = ({ onClose, children }: { onClose: () => void, children: React.R
 
 const Label = ({ children }: { children: string }) => <label style={{ ...SL, display: 'block', marginBottom: 4 }}>{children}</label>
 
-export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCreate }: { pedidos: any[], saldos: any[], pagos: any[], canEdit: boolean, canCreate: boolean }) {
+export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCreate, puedeDescuento }: { pedidos: any[], saldos: any[], pagos: any[], canEdit: boolean, canCreate: boolean, puedeDescuento: boolean }) {
   const [data, setData] = useState(pedidos)
   const [menuId, setMenuId] = useState<string | null>(null)
   const [statusModalId, setStatusModalId] = useState<string | null>(null)
@@ -73,6 +74,7 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
   const [filterAno, setFilterAno] = useState(''); const [filterMes, setFilterMes] = useState('')
   const [filterZona, setFilterZona] = useState('')
   const [showExport, setShowExport] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [expPeriodo, setExpPeriodo] = useState<'todo' | 'ano' | 'meses'>('todo')
   const [expAno, setExpAno] = useState(new Date().getFullYear())
   const [expMeses, setExpMeses] = useState<number[]>([])
@@ -275,6 +277,12 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
             Exportar
           </button>
+          {canCreate && (
+            <button onClick={() => setShowImport(true)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5-5 5 5M12 5v10"/></svg>
+              Cargar Excel
+            </button>
+          )}
           {canCreate && (
             <a href="/admin/pedidos/nuevo" style={{ display: 'flex', alignItems: 'center', gap: 8, background: '#E8531D', color: '#fff', padding: '9px 20px', borderRadius: 8, textDecoration: 'none', fontSize: 13, fontWeight: 600 }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
@@ -684,6 +692,10 @@ export default function PedidosClient({ pedidos, saldos, pagos, canEdit, canCrea
           </div>
         </Overlay>
       )}
+      {showImport && (
+        <ImportarExcel onClose={() => setShowImport(false)} puedeDescuento={puedeDescuento} />
+      )}
+
     </div>
   )
 }
