@@ -151,7 +151,46 @@ export type ResultadoComision = {
   iepsTasa: number
 }
 
-const redondea2 = (n: number) => Math.round(n * 100) / 100
+// ── Aritmetica en centavos enteros ──────────────────────────
+//
+// Todo el dinero se calcula en centavos y con BigInt, no en pesos con float.
+// La razon no es el error acumulado (es minusculo) sino el DETERMINISMO en el
+// medio centavo exacto: con float, 3629.55 * 0.10 da 362.95499999999998, asi
+// que `Math.round(x * 100) / 100` entrega 362.95 cuando la regla dice 362.96.
+// Que un reparto de comision dependa de la representacion binaria del
+// resultado intermedio no es aceptable en dinero.
+//
+// Con enteros la regla queda explicita: medio centavo redondea HACIA ARRIBA
+// en valor absoluto, siempre.
+
+/** Las tasas vienen con 4 decimales (numeric(6,4)); 1e6 da holgura. */
+const ESCALA_TASA = 1_000_000n
+/** Los porcentajes vienen con 3 decimales (numeric(6,3)). */
+const ESCALA_PCT = 1_000n
+
+/**
+ * Division entera con redondeo de medio hacia arriba (en valor absoluto).
+ * Es la unica regla de redondeo del archivo.
+ */
+function divRedondeada(num: bigint, den: bigint): bigint {
+  if (den === 0n) return 0n
+  if (den < 0n) { num = -num; den = -den }
+  return num >= 0n
+    ? (2n * num + den) / (2n * den)
+    : -((2n * -num + den) / (2n * den))
+}
+
+/**
+ * Pesos -> centavos. El `Math.round` aqui es seguro: los montos de la DB
+ * traen 2 decimales (numeric(12,2)), asi que el error del float es de
+ * ordenes de magnitud menos que el medio centavo que decide el redondeo.
+ */
+const aCentavos = (n: number | null | undefined) => BigInt(Math.round((n || 0) * 100))
+
+/** Centavos -> pesos, para la frontera publica de la funcion. */
+const aPesos = (c: bigint) => Number(c) / 100
+
+const escalar = (n: number, escala: bigint) => BigInt(Math.round(n * Number(escala)))
 
 /** Mes de una fecha de la DB, sin pasar por Date. Ver regla 3. */
 export const periodoDe = (fecha: string) => fecha.slice(0, 7)
@@ -211,7 +250,11 @@ export function calcularComision(entrada: EntradaComision): ResultadoComision {
   const iepsTasa = entrada.iepsTasa ?? IEPS_TASA_DEFAULT
 
   const porId = new Map(pedidos.map(p => [p.id, p]))
-  const divisorImpuestos = (1 + ivaTasa) * (1 + iepsTasa)
+
+  // (1 + tasa) como fraccion exacta, para dividir sin pasar por float.
+  const divisorImpuestos =
+    (ESCALA_TASA + escalar(ivaTasa, ESCALA_TASA)) * (ESCALA_TASA + escalar(iepsTasa, ESCALA_TASA))
+  const escalaImpuestos = ESCALA_TASA * ESCALA_TASA
 
   // Orden cronologico estable: el tope de sobrepago se consume en el orden en
   // que se cobro, asi que el excedente cae en el pago mas reciente y no en el
@@ -224,86 +267,97 @@ export function calcularComision(entrada: EntradaComision): ResultadoComision {
         : a.fecha_pago.localeCompare(b.fecha_pago)
     )
 
-  /** Saldo que a cada pedido le queda por comisionar, para topar el sobrepago. */
-  const restante = new Map<string, number>()
-  const porPedido = new Map<string, RenglonPedido>()
-  let cobradoDelPeriodo = 0
+  /** Saldo en centavos que a cada pedido le queda por comisionar. */
+  const restante = new Map<string, bigint>()
+  /** Cobrado del periodo por pedido, en centavos. Suma exacta, sin redondeos intermedios. */
+  const cobradoPorPedido = new Map<string, bigint>()
+  let cobradoDelPeriodo = 0n
 
   for (const pago of vivos) {
     const pedido = porId.get(pago.pedido_id)!
 
-    const conEnvio = pedido.total_con_envio || 0
+    const conEnvio = aCentavos(pedido.total_con_envio)
     if (!restante.has(pedido.id)) restante.set(pedido.id, conEnvio)
 
     const disponible = restante.get(pedido.id)!
     // Lo que exceda el total del pedido es un sobrepago: no es venta y no
     // comisiona. Se descuenta del disponible aunque el pago sea de otro mes,
     // porque el tope es del pedido, no del periodo.
-    const computable = Math.max(0, Math.min(pago.monto || 0, disponible))
-    restante.set(pedido.id, disponible - computable)
+    const monto = aCentavos(pago.monto)
+    const computable = monto < disponible ? monto : disponible
+    const neto = computable > 0n ? computable : 0n
+    restante.set(pedido.id, disponible - neto)
 
     if (periodoDe(pago.fecha_pago) !== periodo) continue
-    if (computable <= 0) continue
+    if (neto <= 0n) continue
 
-    // Fuera el envio. El descuento ya viene restado del numerador, y los dos
-    // montos salen de pedidos_saldo para no reimplementar su redondeo.
-    const mercancia = (pedido.total || 0) - (pedido.descuento_monto || 0)
-    const factor = conEnvio > 0 ? mercancia / conEnvio : 0
-    const base = (computable * factor) / divisorImpuestos
-
-    cobradoDelPeriodo += computable
-    const previo = porPedido.get(pedido.id)
-    if (previo) {
-      previo.cobrado += computable
-      previo.base += base
-    } else {
-      porPedido.set(pedido.id, { pedido_id: pedido.id, cobrado: computable, base })
-    }
+    cobradoDelPeriodo += neto
+    cobradoPorPedido.set(pedido.id, (cobradoPorPedido.get(pedido.id) ?? 0n) + neto)
   }
 
-  // Se redondea por pedido y la base es la suma de esos redondeos, para que
-  // el desglose siempre cuadre con el total que se muestra.
-  const detalle = [...porPedido.values()]
-    .map(r => ({ ...r, cobrado: redondea2(r.cobrado), base: redondea2(r.base) }))
-    .sort((a, b) => b.base - a.base)
+  // La base se redondea UNA vez por pedido, sobre el cobrado del mes ya
+  // acumulado: varios pagos del mismo pedido comparten el mismo factor, asi
+  // que sumarlos antes de dividir es exacto y ademas evita que el redondeo
+  // dependa de en cuantos pagos llego el dinero.
+  const detalle: RenglonPedido[] = []
+  let baseCentavos = 0n
 
-  const base = redondea2(detalle.reduce((s, r) => s + r.base, 0))
+  for (const [pedidoId, cobrado] of cobradoPorPedido) {
+    const pedido = porId.get(pedidoId)!
+    const conEnvio = aCentavos(pedido.total_con_envio)
+    // Fuera el envio. El descuento ya viene restado del numerador, y los dos
+    // montos salen de pedidos_saldo para no reimplementar su redondeo.
+    const mercancia = aCentavos(pedido.total) - aCentavos(pedido.descuento_monto)
+
+    const base = conEnvio > 0n
+      ? divRedondeada(cobrado * mercancia * escalaImpuestos, conEnvio * divisorImpuestos)
+      : 0n
+
+    baseCentavos += base
+    detalle.push({ pedido_id: pedidoId, cobrado: aPesos(cobrado), base: aPesos(base) })
+  }
+
+  detalle.sort((a, b) => b.base - a.base)
 
   const escalera = [...tramos].sort((a, b) => a.desde - b.desde)
   const sinEsquema = escalera.length === 0
 
-  // Mismo criterio: cada renglon redondeado y la comision es su suma.
+  // Cada renglon se redondea y la comision es la suma de los renglones, para
+  // que el desglose siempre cuadre con el total que se muestra.
+  let comisionCentavos = 0n
   const porTramo: RenglonTramo[] = escalera.map(t => {
-    const techo = t.hasta ?? Infinity
-    const porcion = Math.max(0, Math.min(base, techo) - t.desde)
-    return {
-      ...t,
-      porcion: redondea2(porcion),
-      comision: redondea2((porcion * t.porcentaje) / 100),
-    }
+    const desde = aCentavos(t.desde)
+    const techo = t.hasta === null ? baseCentavos : aCentavos(t.hasta)
+    const dentro = (techo < baseCentavos ? techo : baseCentavos) - desde
+    const porcion = dentro > 0n ? dentro : 0n
+    const comision = divRedondeada(porcion * escalar(t.porcentaje, ESCALA_PCT), 100n * ESCALA_PCT)
+    comisionCentavos += comision
+    return { ...t, porcion: aPesos(porcion), comision: aPesos(comision) }
   })
-
-  const comision = redondea2(porTramo.reduce((s, t) => s + t.comision, 0))
 
   // Donde cae el siguiente peso, con [desde, hasta). Ver el comentario de
   // `tramoActual` en el tipo: a proposito no es el ultimo tramo con porcion.
-  const indiceActual = escalera.findIndex(t => base >= t.desde && base < (t.hasta ?? Infinity))
+  const indiceActual = escalera.findIndex(
+    t => baseCentavos >= aCentavos(t.desde) && (t.hasta === null || baseCentavos < aCentavos(t.hasta))
+  )
   const tramoActual = indiceActual >= 0 ? escalera[indiceActual] : null
   const siguienteTramo = indiceActual >= 0 ? escalera[indiceActual + 1] ?? null : null
 
   const ultimo = escalera[escalera.length - 1]
-  const topado = !sinEsquema && ultimo.hasta !== null && base >= ultimo.hasta
+  const topado = !sinEsquema && ultimo.hasta !== null && baseCentavos >= aCentavos(ultimo.hasta)
 
   return {
-    base,
-    comision,
-    cobrado: redondea2(cobradoDelPeriodo),
+    base: aPesos(baseCentavos),
+    comision: aPesos(comisionCentavos),
+    cobrado: aPesos(cobradoDelPeriodo),
     detalle,
     porTramo,
     tramoActual,
     siguienteTramo,
     faltaParaSiguiente:
-      tramoActual && tramoActual.hasta !== null ? redondea2(tramoActual.hasta - base) : null,
+      tramoActual && tramoActual.hasta !== null
+        ? aPesos(aCentavos(tramoActual.hasta) - baseCentavos)
+        : null,
     tasaMarginal: tramoActual ? tramoActual.porcentaje : null,
     sinEsquema,
     topado,

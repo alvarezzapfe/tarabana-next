@@ -523,3 +523,96 @@ test('validarTramos: detecta dos tramos con el mismo inicio', () => {
   ])
   assert.match(e.join(' '), /mismo monto/)
 })
+
+// ── Redondeo determinista del medio centavo ─────────────────
+//
+// El calculo corre en centavos enteros justo por esto. Con float,
+// 3629.55 * 0.10 da 362.95499999999998 y `Math.round(x*100)/100` entregaba
+// 362.95, o sea el medio centavo se iba para abajo por como quedo la
+// representacion binaria, no por una regla. Con enteros la regla es
+// explicita: medio centavo SIEMPRE hacia arriba.
+
+test('medio centavo exacto: redondea hacia arriba, no segun el float', () => {
+  // El caso real que lo saco a la luz: base de 13,629.55 (20,000 cobrados
+  // netos de impuestos) con el tramo de 10,000 en adelante al 10%. La porcion
+  // es 3,629.55 y su 10% es 362.955: medio centavo exacto.
+  const escalera: Tramo[] = [
+    { desde: 0, hasta: 5_000, porcentaje: 5 },
+    { desde: 5_000, hasta: 10_000, porcentaje: 8 },
+    { desde: 10_000, hasta: null, porcentaje: 10 },
+  ]
+  const r = sinImpuestos({
+    pagos: [pago('g1', 'p1', 13_629.55)],
+    pedidos: [pedido('p1', 13_629.55)],
+    tramos: escalera,
+  })
+
+  assert.equal(r.base, 13_629.55)
+  assert.equal(r.porTramo[2].porcion, 3_629.55)
+  // 362.955 -> 362.96. Antes salia 362.95.
+  assert.equal(r.porTramo[2].comision, 362.96)
+  // 250 + 400 + 362.96
+  assert.equal(r.comision, 1_012.96)
+})
+
+test('medio centavo en varios tramos a la vez', () => {
+  // Cada tramo cae en medio centavo: 1,000.10 * 0.5% = 5.0005 -> 5.01 y
+  // 1,000.10 * 1.5% = 15.0015 -> 15.00 (no es medio, baja), mas el tercero.
+  const escalera: Tramo[] = [
+    { desde: 0, hasta: 100.1, porcentaje: 0.5 },
+    { desde: 100.1, hasta: 200.2, porcentaje: 1.5 },
+    { desde: 200.2, hasta: null, porcentaje: 2.5 },
+  ]
+  const r = sinImpuestos({
+    pagos: [pago('g1', 'p1', 300)],
+    pedidos: [pedido('p1', 300)],
+    tramos: escalera,
+  })
+
+  // 100.10 * 0.5% = 0.5005 -> 0.50 | 100.10 * 1.5% = 1.5015 -> 1.50
+  // 99.80 * 2.5% = 2.495 -> 2.50 (medio centavo, hacia arriba)
+  assert.deepEqual(r.porTramo.map(t => t.comision), [0.5, 1.5, 2.5])
+  assert.equal(r.comision, 4.5)
+})
+
+test('el resultado no depende de en cuantos pagos llego el dinero', () => {
+  const unPago = sinImpuestos({
+    pagos: [pago('g1', 'p1', 999.99)],
+    pedidos: [pedido('p1', 999.99)],
+    tramos: ESCALERA,
+  })
+  const tresPagos = sinImpuestos({
+    pagos: [
+      pago('g1', 'p1', 333.33, `${PERIODO}-10`),
+      pago('g2', 'p1', 333.33, `${PERIODO}-15`),
+      pago('g3', 'p1', 333.33, `${PERIODO}-20`),
+    ],
+    pedidos: [pedido('p1', 999.99)],
+    tramos: ESCALERA,
+  })
+
+  // La base se redondea una vez por pedido sobre el cobrado ya acumulado, no
+  // pago por pago, asi que fraccionar el cobro no cambia la comision.
+  assert.equal(unPago.base, tresPagos.base)
+  assert.equal(unPago.comision, tresPagos.comision)
+})
+
+test('con impuestos reales el medio centavo tambien es determinista', () => {
+  // Se corre dos veces con los pagos en orden distinto: mismo resultado.
+  const pedidos = [pedido('p1', 7_777.77, { descuento_monto: 777.77, total_con_envio: 7_250 })]
+  const a = calcularComision({
+    pagos: [pago('g1', 'p1', 3_625, `${PERIODO}-02`), pago('g2', 'p1', 3_625, `${PERIODO}-03`)],
+    pedidos, tramos: ESCALERA, periodo: PERIODO,
+  })
+  const b = calcularComision({
+    pagos: [pago('g2', 'p1', 3_625, `${PERIODO}-03`), pago('g1', 'p1', 3_625, `${PERIODO}-02`)],
+    pedidos, tramos: ESCALERA, periodo: PERIODO,
+  })
+
+  assert.equal(a.base, b.base)
+  assert.equal(a.comision, b.comision)
+  // Y los centavos son centavos: nunca mas de 2 decimales.
+  for (const v of [a.base, a.comision, ...a.porTramo.map(t => t.comision)]) {
+    assert.equal(Math.round(v * 100), v * 100, `${v} tiene mas de 2 decimales`)
+  }
+})
