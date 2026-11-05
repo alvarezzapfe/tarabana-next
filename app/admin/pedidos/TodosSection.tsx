@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import PedidosClient from './PedidosClient'
-import { canWrite, isVendedor } from '../../../src/lib/roles'
+import { canManageAsAdmin, canWrite, isVendedor } from '../../../src/lib/roles'
 
 export default async function TodosSection() {
   const supabase = await createServerSupabaseClient()
@@ -9,6 +9,9 @@ export default async function TodosSection() {
   const canEdit = canWrite(myProfile?.role)
   // El vendedor levanta pedidos pero no los edita ni registra pagos.
   const canCreate = canEdit || isVendedor(myProfile?.role)
+  // Descuento y costo de envio son de admin y super admin, en la carga
+  // masiva igual que en el formulario de un pedido.
+  const puedeDescuento = canManageAsAdmin(myProfile?.role)
 
   const [{ data: pedidos }, { data: saldos }, { data: pagos }] = await Promise.all([
     supabase
@@ -19,5 +22,5 @@ export default async function TodosSection() {
     supabase.from('pagos').select('*').order('fecha_pago', { ascending: false }),
   ])
 
-  return <PedidosClient pedidos={pedidos || []} saldos={saldos || []} pagos={pagos || []} canEdit={canEdit} canCreate={canCreate} />
+  return <PedidosClient pedidos={pedidos || []} saldos={saldos || []} pagos={pagos || []} canEdit={canEdit} canCreate={canCreate} puedeDescuento={puedeDescuento} />
 }
