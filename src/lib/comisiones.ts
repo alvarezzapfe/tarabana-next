@@ -46,6 +46,8 @@
  * despues se ajustan.
  */
 
+import { periodoMx } from './fechas.ts'
+
 /** Fallback si no se puede leer `app_config.impuestos`. Mismos valores que siembra la migracion. */
 export const IVA_TASA_DEFAULT = 0.16
 /** IEPS de cerveza hasta 14 grados GL. */
@@ -195,10 +197,15 @@ const escalar = (n: number, escala: bigint) => BigInt(Math.round(n * Number(esca
 /** Mes de una fecha de la DB, sin pasar por Date. Ver regla 3. */
 export const periodoDe = (fecha: string) => fecha.slice(0, 7)
 
-/** Mes de un Date, en hora local. */
-export function periodoDeFecha(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-}
+/**
+ * Mes de un instante, en la zona del negocio.
+ *
+ * Antes usaba `getFullYear`/`getMonth`, o sea la zona de DONDE CORRE: en el
+ * servidor (UTC) eso significa que entre las 18:00 y la medianoche del ultimo
+ * dia del mes, cerrar un corte apuntaba al mes SIGUIENTE. Lo llaman la ruta
+ * de cortes y ComisionesSection, las dos del lado del servidor.
+ */
+export const periodoDeFecha = (d: Date): string => periodoMx(d)
 
 /** 'YYYY-MM' -> 'YYYY-MM-01', que es como `comision_cortes.periodo` lo guarda. */
 export const primerDiaDelPeriodo = (periodo: string) => `${periodo}-01`

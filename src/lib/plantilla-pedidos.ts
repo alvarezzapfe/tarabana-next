@@ -35,6 +35,9 @@ const ENCABEZADOS_BASE: Encabezado[] = [
   { clave: 'presentacion', titulo: 'presentacion', ancho: 20 },
   { clave: 'cantidad', titulo: 'cantidad', ancho: 10 },
   { clave: 'condiciones_pago', titulo: 'condiciones_pago', ancho: 18 },
+  { clave: 'fecha_pedido', titulo: 'fecha_pedido', ancho: 14, nota: 'Vacio = hoy. Nunca futura.' },
+  { clave: 'fecha_entrega', titulo: 'fecha_entrega', ancho: 14, nota: 'Entrega programada. Opcional.' },
+  { clave: 'orden_compra', titulo: 'orden_compra', ancho: 18 },
   { clave: 'notas', titulo: 'notas', ancho: 30 },
 ]
 
@@ -43,6 +46,7 @@ const ENCABEZADOS_ADMIN: Encabezado[] = [
   { clave: 'descuento_tipo', titulo: 'descuento_tipo', ancho: 16 },
   { clave: 'descuento_valor', titulo: 'descuento_valor', ancho: 16 },
   { clave: 'descuento_motivo', titulo: 'descuento_motivo', ancho: 26 },
+  { clave: 'folio_factura', titulo: 'folio_factura', ancho: 16 },
 ]
 
 export type OpcionesPlantilla = {
@@ -156,6 +160,22 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
       type: 'list', allowBlank: true, formulae: [rango('C', CONDICIONES_PAGO.length)],
       showErrorMessage: true, errorTitle: 'Condiciones invalidas', error: 'Elige una opcion de la lista.',
     }
+    // Formato de fecha explicito: sin el, Excel guarda la fecha como numero
+    // de serie y el lector recibe "46327" en vez de una fecha.
+    for (const clave of ['fecha_pedido', 'fecha_entrega']) {
+      const celda = captura.getCell(r, col(clave))
+      celda.numFmt = 'yyyy-mm-dd'
+      celda.dataValidation = {
+        type: 'date', operator: 'lessThanOrEqual', allowBlank: true,
+        // El tope es hoy mas un ano: la validacion de Excel es una ayuda, el
+        // "no futura" de verdad lo imponen crearPedido y el trigger.
+        formulae: [new Date(Date.now() + 365 * 86400000)],
+        showErrorMessage: true, errorStyle: 'warning',
+        errorTitle: 'Fecha fuera de rango',
+        error: 'Usa el formato AAAA-MM-DD. La fecha del pedido no puede ser futura.',
+      }
+    }
+
     const celdaCant = captura.getCell(r, col('cantidad'))
     celdaCant.numFmt = '0'
     celdaCant.dataValidation = {
@@ -204,6 +224,9 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
   linea('presentacion', 'Elige de la lista. La hoja Productos dice que presentaciones tienen precio y stock.')
   linea('cantidad', 'Numero entero mayor a 0. Son piezas: cajas, barriles o latas, segun la presentacion.')
   linea('condiciones_pago', `Opcional, por default Contado. Opciones: ${CONDICIONES_PAGO.map(c => c.label).join(', ')}. Todos los renglones del mismo pedido tienen que coincidir.`)
+  linea('fecha_pedido', 'Opcional, por default hoy. Formato AAAA-MM-DD o DD/MM/AAAA. Nunca futura. De esta fecha sale el vencimiento y el mes en los reportes, NO de cuando se sube el archivo.')
+  linea('fecha_entrega', 'Opcional. La entrega programada, que el cliente ve en su portal. No puede ser antes de la fecha del pedido.')
+  linea('orden_compra', 'Opcional. La OC del cliente; se puede buscar por ella en la pantalla de Pedidos.')
   linea('notas', 'Opcional. Se guarda en el pedido; si hay varias en el mismo pedido se usa la primera.')
 
   if (puedeDescuento) {
@@ -211,11 +234,13 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
     linea('descuento_tipo', 'Opcional: "porcentaje" o "monto".')
     linea('descuento_valor', 'El numero del descuento. Si el tipo es porcentaje, de 0 a 100.')
     linea('descuento_motivo', 'Obligatorio si hay descuento.')
+    linea('folio_factura', 'Opcional. El folio de la factura emitida.')
   }
   inst.addRow([])
 
   titulo('Reglas y limites')
   linea('Precios', 'No se capturan: salen del nivel de precio de cada cliente y del catalogo, al momento de confirmar.')
+  linea('Fechas', 'Una sola por pedido: si dos renglones de la misma referencia traen fechas distintas, el pedido se marca en rojo.')
   linea('Stock', 'Se valida contra el inventario, y acumulando dentro del archivo: dos pedidos del mismo archivo no se reparten la misma caja.')
   linea('Repetidos', 'Si el mismo producto y presentacion aparece dos veces en el mismo pedido, las cantidades se suman.')
   linea('Limites', `${LIMITE_RENGLONES} renglones, ${LIMITE_PEDIDOS} pedidos por archivo, ${LIMITE_PARTIDAS} partidas por pedido, 2 MB.`)
@@ -225,6 +250,7 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
   }
   if (esVendedor) {
     linea('Tu cartera', 'La hoja Clientes solo trae tus clientes, y el pedido queda asignado a ti.')
+    linea('Fecha', 'Como vendedor la fecha del pedido es siempre hoy: deja la columna vacia. Una fecha retroactiva cambiaria el periodo de tu comision, y lo captura la oficina.')
   }
 
   // ── Productos ─────────────────────────────────────────────

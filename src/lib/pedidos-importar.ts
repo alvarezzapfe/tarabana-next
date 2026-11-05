@@ -33,12 +33,13 @@ export const LIMITE_PEDIDOS = 200
 export const LIMITE_PARTIDAS = 50
 
 export const COLUMNAS_BASE = [
-  'referencia', 'cliente', 'producto', 'presentacion', 'cantidad', 'condiciones_pago', 'notas',
+  'referencia', 'cliente', 'producto', 'presentacion', 'cantidad', 'condiciones_pago',
+  'fecha_pedido', 'fecha_entrega', 'orden_compra', 'notas',
 ] as const
 
 /** Solo se generan y se leen si quien sube es admin o super admin. */
 export const COLUMNAS_ADMIN = [
-  'costo_envio', 'descuento_tipo', 'descuento_valor', 'descuento_motivo',
+  'costo_envio', 'descuento_tipo', 'descuento_valor', 'descuento_motivo', 'folio_factura',
 ] as const
 
 /**
@@ -81,8 +82,15 @@ export type Catalogo = {
 }
 
 export type OpcionesImport = {
-  /** Puede capturar costo de envio y descuento. */
+  /** Puede capturar costo de envio, descuento y folio de factura. */
   puedeDescuento: boolean
+  /**
+   * Un vendedor captura siempre con la fecha de hoy: mover un pedido a un mes
+   * anterior le cambiaria el periodo de comision, que pudo quedar cerrado.
+   */
+  esVendedor: boolean
+  /** Hoy en Mexico, 'YYYY-MM-DD'. Se inyecta para poder probarlo. */
+  hoy: string
 }
 
 export type ErrorFila = { fila: number | null; mensaje: string }
@@ -105,6 +113,10 @@ export type PedidoPlan = {
   clienteNombre: string
   nivelPrecio: string | null
   condiciones_pago: string
+  fecha_pedido: string
+  fecha_entrega: string | null
+  orden_compra: string | null
+  folio_factura: string | null
   notas: string | null
   costo_envio: number
   descuento_tipo: string | null
@@ -158,6 +170,32 @@ export function parseCantidad(texto: string): number | null {
   const n = Number(limpio)
   if (!Number.isFinite(n) || !Number.isInteger(n) || n <= 0) return null
   return n
+}
+
+/**
+ * Fecha de una celda, normalizada a 'YYYY-MM-DD'.
+ *
+ * Excel entrega las fechas de tres formas segun el formato de la celda: ya
+ * como 'YYYY-MM-DD' (lo que hace el lector con una celda de tipo fecha),
+ * como 'DD/MM/YYYY' si se capturo como texto, o como un timestamp completo.
+ * Se aceptan las tres y se rechaza cualquier otra cosa, en vez de dejar que
+ * Postgres adivine.
+ */
+export function parseFecha(texto: string): string | null {
+  const t = texto.trim()
+  if (!t) return null
+
+  const iso = t.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`
+
+  // DD/MM/YYYY o DD-MM-YYYY. Dia primero: es el formato de Mexico.
+  const latino = t.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (latino) {
+    const d = Number(latino[1]), m = Number(latino[2]), a = Number(latino[3])
+    if (m < 1 || m > 12 || d < 1 || d > 31) return null
+    return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+  }
+  return null
 }
 
 function parseMonto(texto: string): number | null {
@@ -296,6 +334,62 @@ export function construirPlan(
     }
 
     const notas = filasDelPedido.map(f => (f.valores.notas || '').trim()).find(Boolean) || null
+    const ordenCompra = filasDelPedido.map(f => (f.valores.orden_compra || '').trim()).find(Boolean) || null
+    const folioFactura = opciones.puedeDescuento
+      ? filasDelPedido.map(f => (f.valores.folio_factura || '').trim()).find(Boolean) || null
+      : null
+
+    // ── Fecha del pedido ────────────────────────────────────
+    const textosFecha = [...new Set(filasDelPedido.map(f => (f.valores.fecha_pedido || '').trim()).filter(Boolean))]
+    let fechaPedido = opciones.hoy
+    if (textosFecha.length > 1) {
+      errores.push({
+        fila: null,
+        mensaje: `La referencia "${referencia}" tiene fechas de pedido distintas (${textosFecha.join(', ')}).`,
+      })
+    } else if (textosFecha.length === 1) {
+      const parseada = parseFecha(textosFecha[0])
+      if (!parseada) {
+        errores.push({
+          fila: numerosFila[0],
+          mensaje: `Fecha de pedido "${textosFecha[0]}" no valida. Usa AAAA-MM-DD o DD/MM/AAAA.`,
+        })
+      } else if (parseada > opciones.hoy) {
+        errores.push({
+          fila: numerosFila[0],
+          mensaje: `La fecha del pedido no puede ser futura (${parseada}, hoy es ${opciones.hoy}).`,
+        })
+      } else if (opciones.esVendedor && parseada !== opciones.hoy) {
+        errores.push({
+          fila: numerosFila[0],
+          mensaje: 'Como vendedor solo puedes capturar con la fecha de hoy. Pide a la oficina que lo capture con fecha retroactiva.',
+        })
+      } else {
+        fechaPedido = parseada
+      }
+    }
+
+    // ── Entrega programada ──────────────────────────────────
+    const textosEntrega = [...new Set(filasDelPedido.map(f => (f.valores.fecha_entrega || '').trim()).filter(Boolean))]
+    let fechaEntrega: string | null = null
+    if (textosEntrega.length > 1) {
+      errores.push({ fila: null, mensaje: `La referencia "${referencia}" tiene fechas de entrega distintas.` })
+    } else if (textosEntrega.length === 1) {
+      const parseada = parseFecha(textosEntrega[0])
+      if (!parseada) {
+        errores.push({
+          fila: numerosFila[0],
+          mensaje: `Fecha de entrega "${textosEntrega[0]}" no valida. Usa AAAA-MM-DD o DD/MM/AAAA.`,
+        })
+      } else if (parseada < fechaPedido) {
+        errores.push({
+          fila: numerosFila[0],
+          mensaje: `La entrega (${parseada}) no puede ser antes de la fecha del pedido (${fechaPedido}).`,
+        })
+      } else {
+        fechaEntrega = parseada
+      }
+    }
 
     // ── Envio y descuento (solo admin) ──────────────────────
     let costoEnvio = 0
@@ -516,6 +610,10 @@ export function construirPlan(
       clienteNombre: cliente?.nombre ?? (textosCliente[0] || '—'),
       nivelPrecio: cliente?.nivel_precio ?? null,
       condiciones_pago: condiciones,
+      fecha_pedido: fechaPedido,
+      fecha_entrega: fechaEntrega,
+      orden_compra: ordenCompra,
+      folio_factura: folioFactura,
       notas,
       costo_envio: costoEnvio,
       descuento_tipo: descuentoTipo,
@@ -537,7 +635,8 @@ export function construirPlan(
     pedidos.push({
       referencia: '(sin referencia)',
       cliente_id: null, clienteNombre: '—', nivelPrecio: null,
-      condiciones_pago: 'contado', notas: null, costo_envio: 0,
+      condiciones_pago: 'contado', fecha_pedido: opciones.hoy, fecha_entrega: null,
+      orden_compra: null, folio_factura: null, notas: null, costo_envio: 0,
       descuento_tipo: null, descuento_valor: null, descuento_motivo: null,
       partidas: [], subtotal: 0, descuentoMonto: 0, total: 0,
       errores: sinReferencia, valido: false,

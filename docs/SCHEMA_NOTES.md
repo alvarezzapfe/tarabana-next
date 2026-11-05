@@ -245,3 +245,81 @@ con `COMMENT` y ya no las lee nada del código. Se tiran con
 escaleras estén capturadas**: mientras no lo estén, `comision_pct` es el único
 registro del porcentaje que se pactó con cada vendedor. Esa migración trae un
 guard que aborta si `comision_tramos` está vacía.
+
+## Había DOS triggers de `fecha_vencimiento` en `pedidos`
+
+Encontrado el 2026-11-05, al aplicar `20261105000000_pedidos_fechas.sql`.
+
+`public.pedidos` tenía dos triggers BEFORE escribiendo la misma columna:
+
+| trigger | función | dispara en | base del cálculo |
+|---|---|---|---|
+| `trg_calc_fecha_vencimiento` | `calc_fecha_vencimiento()` | insert, update de `condiciones_pago`, `fecha_pedido`, `fecha_vencimiento` | `fecha_pedido` |
+| `trg_fecha_vencimiento` | `set_fecha_vencimiento()` | insert, update de `condiciones_pago` | `created_at` |
+
+El segundo **no existía en ninguna migración, ni en `tarabana_schema.sql`, ni
+en estas notas**: se creó directo contra la base. Los dos son BEFORE sobre la
+misma tabla, así que Postgres los corre en orden **alfabético** —
+`trg_c...` y después `trg_f...` — y el no documentado corría al final y pisaba
+el resultado del documentado.
+
+El síntoma, medido contra producción antes de arreglarlo:
+
+```
+INSERT con fecha_pedido = 2026-10-01 y condiciones 30_dias
+  esperado (fecha_pedido + 30)   2026-10-31
+  real     (created_at  + 30)    2026-12-05
+```
+
+Un `fecha_vencimiento` capturado a mano en el INSERT también se perdía. El
+UPDATE de `fecha_pedido` sí funcionaba, porque el viejo no dispara con
+`update of fecha_pedido` y ahí no alcanzaba a pisar — lo que hacía el bug
+especialmente confuso de leer.
+
+### La fuente de `set_fecha_vencimiento()`, textual
+
+Rescatada con `pg_get_functiondef` antes de tirarla. Queda aquí porque no
+existía en ningún archivo del repo y, una vez borrada, no hay de dónde
+recuperarla:
+
+```sql
+CREATE OR REPLACE FUNCTION public.set_fecha_vencimiento()
+ RETURNS trigger
+ LANGUAGE plpgsql
+AS $function$
+begin
+  if new.condiciones_pago = '15_dias' then
+    new.fecha_vencimiento := (new.created_at::date + 15);
+  elsif new.condiciones_pago = '30_dias' then
+    new.fecha_vencimiento := (new.created_at::date + 30);
+  else
+    new.fecha_vencimiento := new.created_at::date;
+  end if;
+  return new;
+end $function$
+```
+
+Confirma el diagnóstico al pie de la letra: la base es `new.created_at::date`,
+y ese `::date` se evalúa en la zona del servidor (UTC). Dos consecuencias que
+ya se midieron contra producción:
+
+* una fecha de pedido retroactiva no tenía ningún efecto sobre el
+  vencimiento;
+* entre las 18:00 y la medianoche de CDMX el vencimiento salía un día tarde,
+  porque `created_at::date` en UTC ya era el día siguiente.
+
+En efecto hacía lo mismo que la versión documentada de
+`calc_fecha_vencimiento()` en `20260803200000` (que usaba
+`created_at + interval '15 days'`): dos funciones distintas, con nombres
+distintos, calculando lo mismo, y sólo una en el repo.
+
+Lo tira `20261105100000_pedidos_trigger_duplicado.sql`, que además deja un
+guard: si `public.pedidos` termina con algo distinto de exactamente
+`trg_calc_fecha_vencimiento`, la migración aborta.
+
+**La lección operativa:** `drop trigger if exists <nombre>` sólo protege del
+nombre que uno conoce. Cuando una migración reemplaza un trigger, vale la
+pena listar los que quedan en la tabla y abortar si hay más de uno. Y antes de
+dar por buena una migración de trigger, probarla con un INSERT real: la
+estructura, la vista y el backfill de `20261105000000` pasaron todas las
+verificaciones, y el bug sólo apareció al insertar una fila de prueba.

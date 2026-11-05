@@ -5,6 +5,7 @@ import { createClient } from '../../../../src/lib/supabase'
 import { canManageAsAdmin, isVendedor } from '../../../../src/lib/roles'
 import { precioSufijo } from '../../../../src/lib/clientes'
 import { nombreLegible } from '../../../../src/lib/metricas'
+import { esFutura, etiquetaFecha, hoyMx } from '../../../../src/lib/fechas'
 import MixBuilder, { type MixProduct, type MixResult } from '../../../../src/components/MixBuilder'
 import MatrizProductos from './MatrizProductos'
 import Carrito, { type Descuento } from './Carrito'
@@ -81,6 +82,10 @@ export default function NuevoPedidoPage() {
   const [clienteId, setClienteId] = useState(searchParams.get('cliente') || '')
   const [vendedorId, setVendedorId] = useState('')
   const [condiciones, setCondiciones] = useState('contado')
+  const [fechaPedido, setFechaPedido] = useState(hoyMx())
+  const [fechaEntrega, setFechaEntrega] = useState('')
+  const [ordenCompra, setOrdenCompra] = useState('')
+  const [folioFactura, setFolioFactura] = useState('')
   const [notas, setNotas] = useState('')
   const [busqueda, setBusqueda] = useState('')
 
@@ -123,8 +128,8 @@ export default function NuevoPedidoPage() {
       // pregunta es "a quien le vendi hace poco". Con RLS, un vendedor ve
       // solo sus pedidos, que es justo lo que le sirve.
       const { data: ultimos } = await supabase
-        .from('pedidos').select('cliente_id, created_at')
-        .order('created_at', { ascending: false }).limit(120)
+        .from('pedidos').select('cliente_id, fecha_pedido')
+        .order('fecha_pedido', { ascending: false }).limit(120)
       const vistos: string[] = []
       for (const p of ultimos || []) {
         if (p.cliente_id && !vistos.includes(p.cliente_id)) vistos.push(p.cliente_id)
@@ -275,10 +280,10 @@ export default function NuevoPedidoPage() {
 
     const { data: ultimo } = await supabase
       .from('pedidos')
-      .select('id, created_at, pedido_items(producto_id, unidad, cantidad, metadata)')
+      .select('id, fecha_pedido, pedido_items(producto_id, unidad, cantidad, metadata)')
       .eq('cliente_id', cliente.id)
       .neq('status', 'cancelado')
-      .order('created_at', { ascending: false })
+      .order('fecha_pedido', { ascending: false })
       .limit(1)
       .maybeSingle()
 
@@ -340,7 +345,7 @@ export default function NuevoPedidoPage() {
     setCantidades(nuevas)
     setMixes(nuevosMixes)
 
-    const fecha = new Date(ultimo.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'long' })
+    const fecha = etiquetaFecha(ultimo.fecha_pedido)
     const vacio = Object.keys(nuevas).length === 0 && nuevosMixes.length === 0
     setAviso(
       vacio
@@ -383,6 +388,18 @@ export default function NuevoPedidoPage() {
     if (!clienteId) lista.push('Falta elegir el cliente.')
     if (partidas.length === 0) lista.push('El carrito esta vacio.')
 
+    if (!fechaPedido) lista.push('Falta la fecha del pedido.')
+    else if (esFutura(fechaPedido)) lista.push('La fecha del pedido no puede ser futura.')
+    // Un vendedor captura siempre con la fecha de hoy: mover un pedido a un
+    // mes anterior le cambiaria el periodo de comision, que pudo quedar
+    // cerrado. Lo valida tambien crearPedido y el trigger de la DB.
+    else if (esVendedor && fechaPedido !== hoyMx()) {
+      lista.push('Como vendedor solo puedes capturar con la fecha de hoy.')
+    }
+    if (fechaEntrega && fechaEntrega < fechaPedido) {
+      lista.push('La entrega no puede ser antes de la fecha del pedido.')
+    }
+
     for (const p of partidas) {
       if (p.unidad === 'mix24') continue
       const disponible = stockPorClave[p.producto_id]
@@ -400,7 +417,7 @@ export default function NuevoPedidoPage() {
       if (descuento.tipo === 'monto' && val > subtotal) lista.push('El descuento no puede ser mayor al subtotal.')
     }
     return lista
-  }, [clienteId, partidas, stockPorClave, puedeDescuento, descuento])
+  }, [clienteId, partidas, stockPorClave, puedeDescuento, descuento, fechaPedido, fechaEntrega, esVendedor])
 
   // ── Confirmar ─────────────────────────────────────────────
   const confirmar = async () => {
@@ -416,6 +433,10 @@ export default function NuevoPedidoPage() {
       body: JSON.stringify({
         cliente_id: clienteId,
         condiciones_pago: condiciones,
+        fecha_pedido: fechaPedido,
+        fecha_entrega: fechaEntrega || null,
+        orden_compra: ordenCompra.trim() || null,
+        folio_factura: folioFactura.trim() || null,
         items: partidas,
         notas,
         vendedor_id: esVendedor ? null : (vendedorId || null),
@@ -527,6 +548,68 @@ export default function NuevoPedidoPage() {
               })}
             </div>
           </div>
+
+          <div>
+            <label style={lbl}>Fecha del pedido</label>
+            <input
+              type="date"
+              value={fechaPedido}
+              max={hoyMx()}
+              // El vendedor no la mueve: su fecha es hoy y punto.
+              disabled={esVendedor}
+              onChange={e => setFechaPedido(e.target.value)}
+              style={{
+                width: '100%', padding: '9px 11px', boxSizing: 'border-box',
+                background: esVendedor ? '#f9fafb' : '#fff',
+                border: `1px solid ${BORDE}`, borderRadius: 8,
+                color: esVendedor ? GRIS : TINTA, fontSize: 12.5, outline: 'none',
+                cursor: esVendedor ? 'not-allowed' : 'text',
+              }}
+            />
+            <p style={{ margin: '5px 0 0', color: GRIS_SUAVE, fontSize: 11 }}>
+              {esVendedor
+                ? 'Siempre hoy. La oficina puede capturar con fecha retroactiva.'
+                : fechaPedido !== hoyMx()
+                  ? 'Retroactiva: el vencimiento se calcula desde esta fecha.'
+                  : 'De aqui sale el vencimiento y el mes en los reportes.'}
+            </p>
+          </div>
+
+          <div>
+            <label style={lbl}>Entrega programada</label>
+            <input
+              type="date"
+              value={fechaEntrega}
+              min={fechaPedido}
+              onChange={e => setFechaEntrega(e.target.value)}
+              style={{ width: '100%', padding: '9px 11px', boxSizing: 'border-box', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none' }}
+            />
+            <p style={{ margin: '5px 0 0', color: GRIS_SUAVE, fontSize: 11 }}>
+              Opcional. El cliente la ve en su portal.
+            </p>
+          </div>
+
+          <div>
+            <label style={lbl}>Orden de compra</label>
+            <input
+              value={ordenCompra}
+              onChange={e => setOrdenCompra(e.target.value)}
+              placeholder="OC del cliente"
+              style={{ width: '100%', padding: '9px 11px', boxSizing: 'border-box', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none' }}
+            />
+          </div>
+
+          {puedeDescuento && (
+            <div>
+              <label style={lbl}>Folio de factura</label>
+              <input
+                value={folioFactura}
+                onChange={e => setFolioFactura(e.target.value)}
+                placeholder="Opcional"
+                style={{ width: '100%', padding: '9px 11px', boxSizing: 'border-box', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none' }}
+              />
+            </div>
+          )}
 
           {!esVendedor && vendedores.length > 0 && (
             <div>

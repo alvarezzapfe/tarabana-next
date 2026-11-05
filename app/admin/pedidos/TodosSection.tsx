@@ -13,14 +13,32 @@ export default async function TodosSection() {
   // masiva igual que en el formulario de un pedido.
   const puedeDescuento = canManageAsAdmin(myProfile?.role)
 
-  const [{ data: pedidos }, { data: saldos }, { data: pagos }] = await Promise.all([
+  const [{ data: pedidos }, { data: saldos }, { data: pagos }, { data: vendedores }] = await Promise.all([
     supabase
       .from('pedidos')
-      .select('*, profiles!pedidos_cliente_id_fkey(id, full_name, email, phone, tipo_consumidor, nivel_precio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
+      // `select('*')` ya trae las columnas nuevas de la migracion de fechas
+      // (fecha_pedido, orden_compra, folio_factura, fecha_entrega_real).
+      // `vendedores(nombre)` es nuevo: la tabla tiene columna de vendedor.
+      .select('*, profiles!pedidos_cliente_id_fkey(id, full_name, email, razon_social, phone, tipo_consumidor, nivel_precio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), vendedores(id, nombre), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
+      // Por fecha del PEDIDO, no por fecha de captura.
+      .order('fecha_pedido', { ascending: false })
       .order('created_at', { ascending: false }),
     supabase.from('pedidos_saldo').select('*'),
     supabase.from('pagos').select('*').order('fecha_pago', { ascending: false }),
+    // Para el filtro por vendedor: la lista completa, no solo los que
+    // aparecen en los pedidos cargados.
+    supabase.from('vendedores').select('id, nombre').order('nombre'),
   ])
 
-  return <PedidosClient pedidos={pedidos || []} saldos={saldos || []} pagos={pagos || []} canEdit={canEdit} canCreate={canCreate} puedeDescuento={puedeDescuento} />
+  return (
+    <PedidosClient
+      pedidos={pedidos || []}
+      saldos={saldos || []}
+      pagos={pagos || []}
+      vendedores={vendedores || []}
+      canEdit={canEdit}
+      canCreate={canCreate}
+      puedeDescuento={puedeDescuento}
+    />
+  )
 }

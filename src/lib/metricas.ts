@@ -17,6 +17,8 @@
  * no cuadra con Cobrado ni con Por cobrar.
  */
 
+import { diasEntre, fechaMx, periodoDeFechaDB, periodoMx, sumarDias } from './fechas.ts'
+
 /**
  * Ventana de inactividad de un cliente.
  *
@@ -46,6 +48,16 @@ export type FilaSaldo = {
   status: string
   estado_cobro: string
   dias_vencido: number | null
+  /**
+   * Fecha del PEDIDO, 'YYYY-MM-DD'. Es la que agrupa por mes y la que mide la
+   * antiguedad del saldo.
+   *
+   * No es `created_at`: eso es cuando se CAPTURO. Un pedido levantado el lunes
+   * y capturado el jueves pertenece al lunes, y si se captura con fecha
+   * retroactiva la diferencia puede ser de meses.
+   */
+  fecha_pedido: string
+  /** AUDITORIA: cuando se capturo. No se usa para agrupar. */
   created_at: string
 }
 
@@ -87,13 +99,19 @@ export function hayVencidos(filas: FilaSaldo[]): boolean {
   return filas.some(f => f.estado_cobro === 'vencido')
 }
 
-/** Clientes con al menos un pedido en los ultimos `dias`. */
+/**
+ * Clientes con al menos un pedido en los ultimos `dias`.
+ *
+ * La ventana se compara como fecha, no como instante: `fecha_pedido` no tiene
+ * hora, asi que restarle milisegundos a un `Date` metia un corrimiento de
+ * hasta un dia segun la hora en que se mirara la pantalla.
+ */
 export function clientesActivosDe(filas: FilaSaldo[], ahora = new Date(), dias = DIAS_CLIENTE_ACTIVO): number {
-  const corte = ahora.getTime() - dias * 86400000
+  const corte = sumarDias(fechaMx(ahora), -dias)
   const ids = new Set<string>()
   for (const f of filas) {
     if (!f.cliente_id) continue
-    if (new Date(f.created_at).getTime() >= corte) ids.add(f.cliente_id)
+    if (f.fecha_pedido >= corte) ids.add(f.cliente_id)
   }
   return ids.size
 }
@@ -102,7 +120,24 @@ export function clientesActivosDe(filas: FilaSaldo[], ahora = new Date(), dias =
 
 export type Mes = { clave: string; etiqueta: string }
 
-const clave = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+/**
+ * Clave de mes, en la zona del negocio.
+ *
+ * Antes era `getFullYear`/`getMonth`, que es la zona de donde corre el codigo.
+ * En un servidor en UTC, un pedido de las 19:00 del 31 de octubre caia en
+ * noviembre; en el navegador de alguien en CDMX, en octubre. La misma grafica
+ * daba numeros distintos segun donde se calculara.
+ */
+const clave = (d: Date) => periodoMx(d)
+
+/**
+ * Mes de una fila, desde su `fecha_pedido`.
+ *
+ * Se corta el string y no se pasa por `Date` a proposito: `fecha_pedido` es
+ * una columna `date`, sin hora ni zona, y `new Date('2026-08-01')` seria
+ * medianoche UTC, que en CDMX es el 31 de julio.
+ */
+const claveDeFila = (f: FilaSaldo) => periodoDeFechaDB(f.fecha_pedido)
 
 /**
  * Los ultimos `n` meses hasta el actual, siempre completos.
@@ -123,11 +158,11 @@ export function ultimosMeses(n = 12, ahora = new Date()): Mes[] {
   return meses
 }
 
-/** Agrupa por mes de creacion. Devuelve un mapa clave -> filas. */
+/** Agrupa por mes del PEDIDO. Devuelve un mapa clave -> filas. */
 export function porMes(filas: FilaSaldo[]): Map<string, FilaSaldo[]> {
   const mapa = new Map<string, FilaSaldo[]>()
   for (const f of filas) {
-    const k = clave(new Date(f.created_at))
+    const k = claveDeFila(f)
     const actual = mapa.get(k)
     if (actual) actual.push(f)
     else mapa.set(k, [f])
@@ -308,10 +343,9 @@ export function requierenAtencion(filas: FilaSaldo[], ahora = new Date()): FilaA
     if (saldo <= 0) continue
 
     const diasVencido = Math.max(0, f.dias_vencido || 0)
-    const diasAbierto = Math.max(
-      0,
-      Math.floor((ahora.getTime() - new Date(f.created_at).getTime()) / 86400000)
-    )
+    // Dias desde la fecha del PEDIDO, no desde la captura: un pedido
+    // capturado hoy con fecha de hace dos meses lleva dos meses abierto.
+    const diasAbierto = Math.max(0, diasEntre(f.fecha_pedido, fechaMx(ahora)))
     if (diasVencido === 0 && diasAbierto <= DIAS_ATENCION) continue
 
     salida.push({

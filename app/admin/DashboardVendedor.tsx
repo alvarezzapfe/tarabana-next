@@ -13,6 +13,7 @@ import {
   type FilaSaldo,
 } from '../../src/lib/metricas'
 import type { ComisionDeVendedor } from '../../src/lib/comisiones'
+import { etiquetaFecha } from '../../src/lib/fechas'
 
 /**
  * Inicio del vendedor.
@@ -86,7 +87,7 @@ export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, c
   const ultimos = useMemo(
     () =>
       [...saldos]
-        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .sort((a, b) => b.fecha_pedido.localeCompare(a.fecha_pedido))
         .slice(0, 8),
     [saldos]
   )
@@ -151,7 +152,7 @@ export default function DashboardVendedor({ saldos, clientesEnCartera, nombre, c
                       #{f.id.slice(-6).toUpperCase()}
                     </span>
                     <span style={{ display: 'block', color: '#9ca3af', fontSize: 11 }}>
-                      {new Date(f.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })} · {f.estado_cobro}
+                      {etiquetaFecha(f.fecha_pedido)} · {f.estado_cobro}
                     </span>
                   </span>
                   <span style={{ color: '#374151', fontSize: 12.5, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}>

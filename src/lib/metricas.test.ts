@@ -11,6 +11,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   antiguedadCartera,
+  clientesActivosDe,
   nombreLegible,
   requierenAtencion,
   serieFacturadoVsCobrado,
@@ -32,7 +33,11 @@ function fila(over: Partial<FilaSaldo> = {}): FilaSaldo {
     status: 'confirmado',
     estado_cobro: 'pendiente',
     dias_vencido: 0,
-    created_at: '2026-11-01T00:00:00Z',
+    fecha_pedido: '2026-11-01',
+    // A proposito en otro mes que fecha_pedido: si alguna metrica volviera a
+    // agrupar por created_at, los tests de abajo fallarian en vez de pasar
+    // por accidente.
+    created_at: '2026-06-15T00:00:00Z',
     ...over,
   }
 }
@@ -107,8 +112,8 @@ test('antiguedadCartera: sin cartera devuelve los cinco tramos en cero', () => {
 
 test('serieFacturadoVsCobrado: las dos barras suman el facturado', () => {
   const filas = [
-    fila({ created_at: '2026-11-03T00:00:00Z', total: 1_000, pagado: 400, saldo: 600 }),
-    fila({ created_at: '2026-11-04T00:00:00Z', total: 500, pagado: 500, saldo: 0 }),
+    fila({ fecha_pedido: '2026-11-03', total: 1_000, pagado: 400, saldo: 600 }),
+    fila({ fecha_pedido: '2026-11-04', total: 500, pagado: 500, saldo: 0 }),
   ]
 
   const serie = serieFacturadoVsCobrado(filas, 3, AHORA)
@@ -129,7 +134,7 @@ test('serieFacturadoVsCobrado: un mes sin nada va en cero y su pct es null', () 
 })
 
 test('serieFacturadoVsCobrado: un sobrepago no deja pendiente negativo', () => {
-  const filas = [fila({ created_at: '2026-11-03T00:00:00Z', total: 1_000, pagado: 1_200, saldo: -200 })]
+  const filas = [fila({ fecha_pedido: '2026-11-03', total: 1_000, pagado: 1_200, saldo: -200 })]
   const mes = serieFacturadoVsCobrado(filas, 1, AHORA)[0]
   assert.equal(mes.pendiente, 0)
 })
@@ -138,14 +143,14 @@ test('serieFacturadoVsCobrado: un sobrepago no deja pendiente negativo', () => {
 
 test('requierenAtencion: entra lo vencido y lo que lleva mas de 30 dias abierto', () => {
   const filas = [
-    fila({ id: 'viejo', saldo: 500, dias_vencido: 90, created_at: '2026-08-01T00:00:00Z' }),
-    fila({ id: 'medio', saldo: 900, dias_vencido: 10, created_at: '2026-10-20T00:00:00Z' }),
+    fila({ id: 'viejo', saldo: 500, dias_vencido: 90, fecha_pedido: '2026-08-01' }),
+    fila({ id: 'medio', saldo: 900, dias_vencido: 10, fecha_pedido: '2026-10-20' }),
     // Sin vencer por fecha, pero con 40 dias de saldo abierto.
-    fila({ id: 'abierto', saldo: 300, dias_vencido: 0, created_at: '2026-09-20T00:00:00Z' }),
+    fila({ id: 'abierto', saldo: 300, dias_vencido: 0, fecha_pedido: '2026-09-20' }),
     // Reciente y al corriente: no molesta.
-    fila({ id: 'nuevo', saldo: 700, dias_vencido: 0, created_at: '2026-11-01T00:00:00Z' }),
+    fila({ id: 'nuevo', saldo: 700, dias_vencido: 0, fecha_pedido: '2026-11-01' }),
     // Pagado: fuera, aunque sea viejo.
-    fila({ id: 'pagado', saldo: 0, pagado: 1_000, dias_vencido: 90, created_at: '2026-08-01T00:00:00Z' }),
+    fila({ id: 'pagado', saldo: 0, pagado: 1_000, dias_vencido: 90, fecha_pedido: '2026-08-01' }),
   ]
 
   const r = requierenAtencion(filas, AHORA)
@@ -271,4 +276,45 @@ test('un barril de 20 L pesa mas que una caja de 24, que es el punto de medir en
   ])
   // Por piezas serian 1 vs 2 y "Latera" ganaria; por volumen, 20 vs 17.04.
   assert.deepEqual(filas.map(f => f.nombre), ['Barrilera', 'Latera'])
+})
+
+// ── fecha_pedido vs created_at ──────────────────────────────
+
+test('agrupa por fecha_pedido y NO por created_at', () => {
+  // El caso que motivo la columna: un pedido levantado en agosto y capturado
+  // en noviembre pertenece a agosto.
+  const filas = [
+    fila({ fecha_pedido: '2026-08-20', created_at: '2026-11-05T18:00:00Z', total: 1_000, pagado: 0, saldo: 1_000 }),
+  ]
+
+  const serie = serieFacturadoVsCobrado(filas, 4, new Date('2026-11-05T12:00:00-06:00'))
+  const agosto = serie.find(m => m.mes.startsWith('ago'))
+  const noviembre = serie.find(m => m.mes.startsWith('nov'))
+
+  assert.equal(agosto?.facturado, 1_000, 'no cayo en agosto')
+  assert.equal(noviembre?.facturado, 0, 'cayo en noviembre, o sea agrupo por created_at')
+})
+
+test('la antiguedad del saldo se mide desde fecha_pedido', () => {
+  // Capturado hoy, con fecha de hace dos meses: lleva dos meses abierto, no
+  // cero dias.
+  const r = requierenAtencion(
+    [fila({ id: 'retro', saldo: 500, dias_vencido: 0, fecha_pedido: '2026-09-05', created_at: '2026-11-05T12:00:00Z' })],
+    new Date('2026-11-05T12:00:00-06:00')
+  )
+
+  assert.equal(r.length, 1, 'quedo fuera, o sea midio desde la captura')
+  assert.equal(r[0].diasAbierto, 61)
+})
+
+test('clientes activos: la ventana corre sobre fecha_pedido', () => {
+  const ahora = new Date('2026-11-05T12:00:00-06:00')
+  const filas = [
+    // Dentro de los 90 dias.
+    fila({ cliente_id: 'dentro', fecha_pedido: '2026-09-01' }),
+    // Fuera, aunque se haya capturado hoy.
+    fila({ cliente_id: 'fuera', fecha_pedido: '2026-01-10', created_at: '2026-11-05T12:00:00Z' }),
+  ]
+
+  assert.equal(clientesActivosDe(filas, ahora), 1)
 })

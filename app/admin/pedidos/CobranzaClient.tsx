@@ -6,7 +6,7 @@ import { METODOS_PAGO } from '../../../src/lib/pagos'
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 
-interface Saldo { id: string; cliente_id: string; total: number; pagado: number; saldo: number; estado_cobro: string; dias_vencido: number; fecha_vencimiento: string; condiciones_pago: string; created_at: string; status: string }
+interface Saldo { id: string; cliente_id: string; total: number; pagado: number; saldo: number; estado_cobro: string; dias_vencido: number; fecha_vencimiento: string; condiciones_pago: string; fecha_pedido: string; created_at: string; status: string }
 interface Pago { id: string; pedido_id: string; monto: number; metodo: string; referencia: string; fecha_pago: string; notas: string; cancelado_at: string | null; cancelado_motivo: string | null; created_at: string }
 interface Cliente { id: string; full_name: string; email: string }
 
@@ -98,7 +98,7 @@ export default function CobranzaClient() {
 
   // Payment flow
   const openPayModal = (clienteId: string) => {
-    const openSaldos = saldos.filter(s => s.cliente_id === clienteId && s.saldo > 0).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    const openSaldos = saldos.filter(s => s.cliente_id === clienteId && s.saldo > 0).sort((a, b) => a.fecha_pedido.localeCompare(b.fecha_pedido))
     setPayApps(openSaldos.map(s => ({ pedido_id: s.id, monto: 0, saldo: s.saldo })))
     setPayMonto('')
     setPayRef('')
@@ -153,7 +153,7 @@ export default function CobranzaClient() {
   if (!authorized) return <div><p style={{ color: '#6b7280', fontSize: 14 }}>Sin permisos de cobranza.</p></div>
 
   const panelCliente = panelClienteId ? clientes[panelClienteId] : null
-  const panelSaldos = panelClienteId ? saldos.filter(s => s.cliente_id === panelClienteId && s.saldo > 0).sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()) : []
+  const panelSaldos = panelClienteId ? saldos.filter(s => s.cliente_id === panelClienteId && s.saldo > 0).sort((a, b) => a.fecha_pedido.localeCompare(b.fecha_pedido)) : []
 
   return (
     <div style={{ fontFamily: 'system-ui, sans-serif' }}>
