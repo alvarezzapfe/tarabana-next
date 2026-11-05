@@ -33,7 +33,7 @@ export default function MisPedidosPage() {
         .from('pedidos')
         .select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
         .eq('cliente_id', user.id)
-        .order('created_at', { ascending: false })
+        .order('fecha_pedido', { ascending: false })
       setPedidos(data || [])
       setLoading(false)
     }
@@ -63,7 +63,9 @@ export default function MisPedidosPage() {
             const sc = statusConfig[p.status] || { label: p.status, color: '#888', bg: '#f5f5f5' }
             const items = p.pedido_items as any[]
             const isExpanded = expanded === p.id
-            const fecha = new Date(p.created_at)
+            // La fecha del PEDIDO, no la de captura: es la que el cliente
+            // reconoce como el dia en que lo pidio.
+            const fecha = new Date(`${String(p.fecha_pedido).slice(0, 10)}T12:00:00`)
 
             return (
               <div key={p.id} style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>

@@ -24,9 +24,14 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
   const [fechaEntrega, setFechaEntrega] = useState(
     pedido.fecha_entrega ? new Date(pedido.fecha_entrega).toISOString().slice(0, 16) : ''
   )
+  // Antes esto leia `created_at` y el valor nunca se mandaba en el PATCH: un
+  // campo que parecia editable y descartaba lo que escribias. Ahora edita
+  // `fecha_pedido`, que es la fecha de negocio.
   const [fechaPedido, setFechaPedido] = useState(
-    pedido.created_at ? new Date(pedido.created_at).toISOString().slice(0, 16) : ''
+    pedido.fecha_pedido ? String(pedido.fecha_pedido).slice(0, 10) : ''
   )
+  const [ordenCompra, setOrdenCompra] = useState(pedido.orden_compra || '')
+  const [folioFactura, setFolioFactura] = useState(pedido.folio_factura || '')
 
   const handleSave = async () => {
     setSaving(true)
@@ -47,6 +52,9 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
         notas: notas || null,
         notas_internas: notasInternas || null,
         fecha_entrega: fechaEntrega || null,
+        fecha_pedido: fechaPedido || null,
+        orden_compra: ordenCompra.trim() || null,
+        folio_factura: folioFactura.trim() || null,
       }),
     })
 

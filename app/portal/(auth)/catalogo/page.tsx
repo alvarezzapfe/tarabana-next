@@ -59,7 +59,7 @@ export default function CatalogoPage() {
       const [{ data: p }, { data: prods }, { data: peds }] = await Promise.all([
         supabase.from('profiles').select('*').eq('id', user.id).single(),
         supabase.from('productos').select('id, nombre, estilo, abv, descripcion, imagen_url, precio_lata_publico, precio_lata_taproom, precio_barril_pet_publico, precio_barril_pet_taproom, stock_caja24, stock_caja12, stock_barril_pet, stock_latas').eq('activo', true).order('nombre'),
-        supabase.from('pedidos').select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre))').eq('cliente_id', user.id).order('created_at', { ascending: false }),
+        supabase.from('pedidos').select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre))').eq('cliente_id', user.id).order('fecha_pedido', { ascending: false }),
       ])
       setProfile(p)
       setProductos(prods || [])
@@ -128,7 +128,7 @@ export default function CatalogoPage() {
     setPedidoOk(true)
     setCart([])
     setShowCart(false)
-    const { data: peds } = await supabase.from('pedidos').select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre))').eq('cliente_id', user!.id).order('created_at', { ascending: false })
+    const { data: peds } = await supabase.from('pedidos').select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre))').eq('cliente_id', user!.id).order('fecha_pedido', { ascending: false })
     setPedidos(peds || [])
     setCheckingOut(false)
   }
@@ -446,7 +446,8 @@ export default function CatalogoPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {historial.map((p: any) => {
                 const s = sc[p.status] || { label: p.status, color: '#888', bg: '#f5f5f5' }
-                const fecha = new Date(p.created_at)
+                // La fecha del PEDIDO, no la de captura.
+                const fecha = new Date(`${String(p.fecha_pedido).slice(0, 10)}T12:00:00`)
                 return (
                   <div key={p.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 20px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>

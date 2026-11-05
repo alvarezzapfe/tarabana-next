@@ -6,6 +6,7 @@ import { cargarCatalogoImport } from '../../../../../src/lib/catalogo-import'
 import { cargarStockMap, crearPedido } from '../../../../../src/lib/crear-pedido'
 import { LIMITE_BYTES, leerHojaCaptura } from '../../../../../src/lib/leer-xlsx'
 import { columnaStockDe } from '../../../../../src/lib/unidades'
+import { hoyMx } from '../../../../../src/lib/fechas'
 import {
   COLUMNAS_ADMIN, COLUMNAS_BASE,
   construirPlan, itemsParaCrear,
@@ -79,7 +80,13 @@ export async function POST(request: Request) {
   if ('error' in catalogo)
     return NextResponse.json({ error: catalogo.error }, { status: catalogo.status })
 
-  const plan = construirPlan(lectura.filas, catalogo, { puedeDescuento })
+  // `hoyMx()` y no `new Date()`: la fecha de negocio es la de Mexico, y de
+  // ella dependen el default de fecha_pedido y la validacion de "no futura".
+  const plan = construirPlan(lectura.filas, catalogo, {
+    puedeDescuento,
+    esVendedor,
+    hoy: hoyMx(),
+  })
 
   const avisos: string[] = [...plan.erroresGlobales]
   if (lectura.columnasDesconocidas.length) {
@@ -135,6 +142,10 @@ export async function POST(request: Request) {
         cliente_id: pedido.cliente_id!,
         items: itemsParaCrear(pedido),
         condiciones_pago: pedido.condiciones_pago,
+        fecha_pedido: pedido.fecha_pedido,
+        fecha_entrega: pedido.fecha_entrega,
+        orden_compra: pedido.orden_compra,
+        folio_factura: pedido.folio_factura,
         notas: notaDe(pedido, archivo.name),
         costo_envio: pedido.costo_envio,
         descuento_tipo: pedido.descuento_tipo,

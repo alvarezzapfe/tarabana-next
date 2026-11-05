@@ -14,10 +14,16 @@
  *      cartera. El vendedor_id del body se ignora.
  *   5. El precio sale del `nivel_precio` DEL CLIENTE, nunca del body.
  *   6. Stock suficiente, via calcularPedido.
- *   7. Pedido y partidas, o ninguno de los dos.
+ *   7. Fecha del pedido: nunca futura, y para un vendedor siempre hoy.
+ *   8. Pedido y partidas, o ninguno de los dos.
+ *
+ * La regla 7 la impone tambien el trigger `calc_fecha_vencimiento` en la DB.
+ * Aqui va para dar un error legible antes de llegar a Postgres, no para
+ * sustituirlo.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { canManageAsAdmin, canWrite, isVendedor } from './roles'
+import { hoyMx } from './fechas'
 import { precioSufijo } from './clientes'
 import { calcularPedido } from './calcular-pedido'
 import { logAction } from './audit'
@@ -34,6 +40,18 @@ export type DatosPedido = {
   cliente_id: string
   items: ItemCrudo[]
   condiciones_pago?: string | null
+  /**
+   * Fecha del pedido, 'YYYY-MM-DD'. Si no viene, hoy en Mexico.
+   *
+   * Retroactiva solo para staff: un vendedor captura siempre con la fecha de
+   * hoy, porque mover un pedido a un mes anterior le cambiaria el periodo de
+   * comision, que pudo quedar cerrado ya.
+   */
+  fecha_pedido?: string | null
+  /** Entrega PROGRAMADA. La real la llena la ruta de status al entregar. */
+  fecha_entrega?: string | null
+  orden_compra?: string | null
+  folio_factura?: string | null
   notas?: string | null
   vendedor_id?: string | null
   costo_envio?: number | null
@@ -66,7 +84,7 @@ export type ContextoPedido = {
 }
 
 export type ResultadoPedido =
-  | { ok: true; pedido_id: string; total: number; sufijo: 'publico' | 'taproom' }
+  | { ok: true; pedido_id: string; total: number; sufijo: 'publico' | 'taproom'; fecha_pedido: string }
   | { ok: false; error: string; status: number }
 
 const malo = (error: string, status = 400): ResultadoPedido => ({ ok: false, error, status })
@@ -123,6 +141,29 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
   const costoEnvio = Number(datos.costo_envio ?? 0)
   if (!Number.isFinite(costoEnvio) || costoEnvio < 0) return malo('Costo de envio invalido')
 
+  // ── Fecha del pedido ──────────────────────────────────────
+  //
+  // `hoyMx()` y no `new Date()`: despues de las 18:00 de CDMX la fecha del
+  // servidor ya es manana, asi que un pedido de la noche quedaria fechado al
+  // dia siguiente y el vendedor no podria capturar nada.
+  const hoy = hoyMx()
+  const fechaPedido = (datos.fecha_pedido || '').trim() || hoy
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fechaPedido)) {
+    return malo('La fecha del pedido debe venir como YYYY-MM-DD')
+  }
+  if (fechaPedido > hoy) {
+    return malo(`La fecha del pedido no puede ser futura (llego ${fechaPedido}, hoy es ${hoy})`)
+  }
+  if (esVendedor && fechaPedido !== hoy) {
+    return malo('Un vendedor solo puede capturar pedidos con la fecha de hoy. Pide a la oficina que lo capture con fecha retroactiva.', 403)
+  }
+
+  const fechaEntrega = (datos.fecha_entrega || '').trim() || null
+  if (fechaEntrega && !/^\d{4}-\d{2}-\d{2}/.test(fechaEntrega)) {
+    return malo('La fecha de entrega debe venir como YYYY-MM-DD')
+  }
+
   // ── Vendedor: su ficha y su cartera ───────────────────────
   let vendedorFinal: string | null = datos.vendedor_id || null
   if (esVendedor) {
@@ -163,6 +204,12 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
     vendedor_id: vendedorFinal,
     tipo_precio: calculo.sufijo,
     condiciones_pago: datos.condiciones_pago || 'contado',
+    // `fecha_vencimiento` NO se manda: lo calcula el trigger desde
+    // fecha_pedido y las condiciones de pago.
+    fecha_pedido: fechaPedido,
+    fecha_entrega: fechaEntrega,
+    orden_compra: datos.orden_compra?.trim() || null,
+    folio_factura: datos.folio_factura?.trim() || null,
     notas: datos.notas || null,
     total: calculo.total,
     status: 'confirmado',
@@ -192,7 +239,12 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
   logAction({
     actorId: ctx.userId, actorEmail: ctx.userEmail, actorRole: role,
     accion: 'pedido.crear', entidad: 'pedidos', entidadId: pedido.id,
-    detalle: { cliente_id: datos.cliente_id, total: calculo.total, vendedor_id: vendedorFinal },
+    detalle: {
+      cliente_id: datos.cliente_id, total: calculo.total, vendedor_id: vendedorFinal,
+      fecha_pedido: fechaPedido,
+      ...(fechaPedido !== hoy ? { retroactiva: true } : {}),
+      ...(datos.orden_compra ? { orden_compra: datos.orden_compra } : {}),
+    },
     request: ctx.request,
   })
 
@@ -217,5 +269,5 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
     }
   }
 
-  return { ok: true, pedido_id: pedido.id, total: calculo.total, sufijo: calculo.sufijo }
+  return { ok: true, pedido_id: pedido.id, total: calculo.total, sufijo: calculo.sufijo, fecha_pedido: fechaPedido }
 }

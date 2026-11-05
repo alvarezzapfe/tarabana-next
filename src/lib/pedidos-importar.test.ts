@@ -16,7 +16,7 @@ import {
 } from './leer-xlsx.ts'
 import {
   COLUMNAS_ADMIN, COLUMNAS_BASE, LIMITE_PARTIDAS, LIMITE_PEDIDOS, PRESENTACIONES,
-  construirPlan, itemsParaCrear, norm, parseCantidad,
+  construirPlan, itemsParaCrear, norm, parseCantidad, parseFecha,
   type Catalogo,
 } from './pedidos-importar.ts'
 import { combinacionesDisponibles, construirPlantilla } from './plantilla-pedidos.ts'
@@ -52,8 +52,11 @@ const CATALOGO: Catalogo = {
 const filas = (...renglones: Record<string, string>[]) =>
   renglones.map((valores, i) => ({ fila: i + 2, valores }))
 
-const plan = (fs: ReturnType<typeof filas>, puedeDescuento = true) =>
-  construirPlan(fs, CATALOGO, { puedeDescuento })
+/** Hoy fijo en los tests: una fecha movil haria fallar los casos de borde. */
+const HOY = '2026-11-05'
+
+const plan = (fs: ReturnType<typeof filas>, puedeDescuento = true, esVendedor = false) =>
+  construirPlan(fs, CATALOGO, { puedeDescuento, esVendedor, hoy: HOY })
 
 const partida = (over: Record<string, string> = {}) => ({
   referencia: 'P1', cliente: 'uno@cliente.mx', producto: 'Magma',
@@ -76,7 +79,12 @@ async function xlsxDe(
 }
 
 test('lector: ida y vuelta por un .xlsx real', async () => {
-  const bytes = await xlsxDe([['P1', 'uno@cliente.mx', 'Magma', 'Caja 24 latas', 2, 'Contado', 'urge']])
+  // Las columnas van en el orden de COLUMNAS_BASE: ..., condiciones_pago,
+  // fecha_pedido, fecha_entrega, orden_compra, notas.
+  const bytes = await xlsxDe([[
+    'P1', 'uno@cliente.mx', 'Magma', 'Caja 24 latas', 2, 'Contado',
+    '2026-10-20', '2026-10-25', 'OC-991', 'urge',
+  ]])
   const r = await leerHojaCaptura(bytes, TODAS)
 
   assert.ok(r.ok, !r.ok ? r.error : '')
@@ -86,6 +94,8 @@ test('lector: ida y vuelta por un .xlsx real', async () => {
   assert.equal(r.filas[0].fila, 2)
   assert.equal(r.filas[0].valores.cliente, 'uno@cliente.mx')
   assert.equal(r.filas[0].valores.cantidad, '2')
+  assert.equal(r.filas[0].valores.fecha_pedido, '2026-10-20')
+  assert.equal(r.filas[0].valores.orden_compra, 'OC-991')
   assert.equal(r.filas[0].valores.notas, 'urge')
 })
 
@@ -273,7 +283,7 @@ test('cliente por id tambien funciona', () => {
   }
   const p2 = construirPlan(
     filas(partida({ cliente: '11111111-2222-3333-4444-555555555555' })),
-    conUuid, { puedeDescuento: true }
+    conUuid, { puedeDescuento: true, esVendedor: false, hoy: HOY }
   )
   assert.equal(p2.pedidos[0].cliente_id, '11111111-2222-3333-4444-555555555555')
 })
@@ -448,7 +458,7 @@ test('tope de partidas por pedido', () => {
   const fs = filas(...Array.from({ length: LIMITE_PARTIDAS + 1 }, (_, i) =>
     partida({ producto: `Producto ${i}`, presentacion: 'Lata', cantidad: '1' })
   ))
-  const p = construirPlan(fs, anchos, { puedeDescuento: true })
+  const p = construirPlan(fs, anchos, { puedeDescuento: true, esVendedor: false, hoy: HOY })
   assert.match(p.pedidos[0].errores.map(e => e.mensaje).join(' '), new RegExp(`limite es ${LIMITE_PARTIDAS}`))
 })
 
@@ -545,7 +555,7 @@ test('plantilla: capturada y vuelta a leer, llega completa al validador', async 
   if (!r.ok) return
   assert.deepEqual(r.columnasDesconocidas, [])
 
-  const p = construirPlan(r.filas, CATALOGO, { puedeDescuento: true })
+  const p = construirPlan(r.filas, CATALOGO, { puedeDescuento: true, esVendedor: false, hoy: HOY })
   assert.equal(p.pedidos.length, 1)
   const ped = p.pedidos[0]
   assert.equal(ped.valido, true, JSON.stringify(ped.errores))
@@ -617,4 +627,82 @@ test('plantilla: la hoja Productos solo lista combinaciones que se pueden pedir'
       precio_barril_acero_publico: 1800, stock_barril_acero: 4 },
   ])
   assert.deepEqual(sinLata.map(c => c.presentacion), ['Barril 20L Acero'])
+})
+
+// ── Fechas en el Excel ──────────────────────────────────────
+
+test('parseFecha acepta los tres formatos que entrega Excel', () => {
+  assert.equal(parseFecha('2026-10-20'), '2026-10-20')
+  // Timestamp completo, por si la celda es de tipo fecha con hora.
+  assert.equal(parseFecha('2026-10-20T00:00:00.000Z'), '2026-10-20')
+  // Dia primero, que es como se captura en Mexico.
+  assert.equal(parseFecha('20/10/2026'), '2026-10-20')
+  assert.equal(parseFecha('5/3/2026'), '2026-03-05')
+  assert.equal(parseFecha('20-10-2026'), '2026-10-20')
+})
+
+test('parseFecha rechaza lo que no es una fecha en vez de adivinar', () => {
+  for (const basura of ['', 'urge', '20/13/2026', '0/10/2026', '46327', '2026/10/20']) {
+    assert.equal(parseFecha(basura), null, `acepto "${basura}"`)
+  }
+})
+
+test('sin fecha_pedido el pedido toma hoy', () => {
+  const p = plan(filas(partida()))
+  assert.equal(p.pedidos[0].fecha_pedido, HOY)
+  assert.equal(p.pedidos[0].valido, true, JSON.stringify(p.pedidos[0].errores))
+})
+
+test('una fecha retroactiva se respeta', () => {
+  const p = plan(filas(partida({ fecha_pedido: '20/10/2026' })))
+  assert.equal(p.pedidos[0].fecha_pedido, '2026-10-20')
+  assert.equal(p.pedidos[0].valido, true, JSON.stringify(p.pedidos[0].errores))
+})
+
+test('una fecha futura se rechaza', () => {
+  const p = plan(filas(partida({ fecha_pedido: '2027-01-01' })))
+  assert.equal(p.pedidos[0].valido, false)
+  assert.match(p.pedidos[0].errores.map(e => e.mensaje).join(' '), /no puede ser futura/)
+})
+
+test('un vendedor no puede capturar con fecha retroactiva', () => {
+  const retro = plan(filas(partida({ fecha_pedido: '2026-10-20' })), true, true)
+  assert.equal(retro.pedidos[0].valido, false)
+  assert.match(retro.pedidos[0].errores.map(e => e.mensaje).join(' '), /solo puedes capturar con la fecha de hoy/)
+
+  // Con la de hoy, o vacia, si pasa.
+  assert.equal(plan(filas(partida({ fecha_pedido: HOY })), true, true).pedidos[0].valido, true)
+  assert.equal(plan(filas(partida()), true, true).pedidos[0].valido, true)
+})
+
+test('dos fechas distintas en la misma referencia es un error', () => {
+  const p = plan(filas(
+    partida({ fecha_pedido: '2026-10-20' }),
+    partida({ producto: 'Brisa', fecha_pedido: '2026-10-21' }),
+  ))
+  assert.equal(p.pedidos[0].valido, false)
+  assert.match(p.pedidos[0].errores.map(e => e.mensaje).join(' '), /fechas de pedido distintas/)
+})
+
+test('la entrega no puede ser antes del pedido', () => {
+  const p = plan(filas(partida({ fecha_pedido: '2026-10-20', fecha_entrega: '2026-10-19' })))
+  assert.equal(p.pedidos[0].valido, false)
+  assert.match(p.pedidos[0].errores.map(e => e.mensaje).join(' '), /antes de la fecha del pedido/)
+
+  const ok = plan(filas(partida({ fecha_pedido: '2026-10-20', fecha_entrega: '2026-10-25' })))
+  assert.equal(ok.pedidos[0].valido, true, JSON.stringify(ok.pedidos[0].errores))
+  assert.equal(ok.pedidos[0].fecha_entrega, '2026-10-25')
+})
+
+test('orden de compra y folio de factura llegan al plan', () => {
+  const p = plan(filas(partida({ orden_compra: 'OC-4471', folio_factura: 'A-1234' })))
+  assert.equal(p.pedidos[0].orden_compra, 'OC-4471')
+  assert.equal(p.pedidos[0].folio_factura, 'A-1234')
+})
+
+test('el folio de factura es de admin: sin permiso no se guarda', () => {
+  const p = plan(filas(partida({ folio_factura: 'A-1234' })), false)
+  // No es un error de captura — la columna no existe en su plantilla —, pero
+  // tampoco se guarda a escondidas.
+  assert.equal(p.pedidos[0].folio_factura, null)
 })

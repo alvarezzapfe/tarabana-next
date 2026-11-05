@@ -81,3 +81,18 @@ export function etiquetaFecha(fecha: string | null | undefined): string {
     day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
   })
 }
+
+/**
+ * Dias entre dos fechas 'YYYY-MM-DD'. Positivo si `hasta` es posterior.
+ *
+ * Se ancla a mediodia UTC para que la resta no dependa de la zona ni del
+ * horario de verano: con medianoche, una diferencia de 60 minutos puede
+ * cambiar el resultado en un dia entero.
+ */
+export function diasEntre(desde: string, hasta: string): number {
+  const ms = (f: string) => {
+    const [a, m, d] = f.slice(0, 10).split('-').map(Number)
+    return Date.UTC(a, m - 1, d, 12)
+  }
+  return Math.round((ms(hasta) - ms(desde)) / 86400000)
+}
