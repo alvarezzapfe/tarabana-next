@@ -1,6 +1,7 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import PedidosClient from './PedidosClient'
-import { canManageAsAdmin, canWrite, isVendedor } from '../../../src/lib/roles'
+import { STAFF_ROLES, canManageAsAdmin, canWrite, isVendedor } from '../../../src/lib/roles'
+import { nombreLegible } from '../../../src/lib/metricas'
 
 export default async function TodosSection() {
   const supabase = await createServerSupabaseClient()
@@ -13,7 +14,7 @@ export default async function TodosSection() {
   // masiva igual que en el formulario de un pedido.
   const puedeDescuento = canManageAsAdmin(myProfile?.role)
 
-  const [{ data: pedidos }, { data: saldos }, { data: pagos }, { data: vendedores }] = await Promise.all([
+  const [{ data: pedidos }, { data: saldos }, { data: pagos }, { data: vendedores }, { data: staff }] = await Promise.all([
     supabase
       .from('pedidos')
       // `select('*')` ya trae las columnas nuevas de la migracion de fechas
@@ -28,6 +29,14 @@ export default async function TodosSection() {
     // Para el filtro por vendedor: la lista completa, no solo los que
     // aparecen en los pedidos cargados.
     supabase.from('vendedores').select('id, nombre').order('nombre'),
+    // Para "registrado por" en la pestana de Pagos del panel:
+    // `pagos.registrado_por` apunta a auth.users, que no se puede embeber
+    // desde `pagos` porque la FK no va a `profiles`. Son pocas filas.
+    //
+    // La policy `profiles_staff_read` deja leer esto al staff; a un vendedor
+    // le llega vacio y la columna muestra un guion, que es la degradacion
+    // correcta — un vendedor tampoco registra pagos.
+    supabase.from('profiles').select('id, full_name, email, razon_social').in('role', [...STAFF_ROLES]),
   ])
 
   return (
@@ -36,9 +45,11 @@ export default async function TodosSection() {
       saldos={saldos || []}
       pagos={pagos || []}
       vendedores={vendedores || []}
+      staff={(staff || []).map(p => ({ id: p.id, nombre: nombreLegible(p) }))}
       canEdit={canEdit}
       canCreate={canCreate}
       puedeDescuento={puedeDescuento}
+      esVendedor={isVendedor(myProfile?.role)}
     />
   )
 }

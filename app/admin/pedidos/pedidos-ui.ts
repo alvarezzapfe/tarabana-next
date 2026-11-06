@@ -39,6 +39,58 @@ export const statusDe = (k: string) => STATUS.find(s => s.key === k) ?? STATUS[0
 export const cobroDe = (k: string) => COBRO.find(c => c.key === k) ?? COBRO[2]
 
 /**
+ * El chip unico de Estado.
+ *
+ * El status del pedido y el estado de cobro son dos cosas distintas, pero
+ * dos chips por fila compiten entre si y acaba sin leerse ninguno. Gana el
+ * que pide accion — cancelado, vencido, parcial, pagado — y el otro baja a
+ * la linea gris de abajo.
+ *
+ * Un cancelado no lleva nada de cobro: `pedidos_saldo` lo excluye, asi que
+ * su saldo no existe y un chip de cobro ahi seria inventado.
+ *
+ * `urgencia` es para ordenar, y no sigue el orden de prioridad del chip:
+ * cancelado manda en el chip pero es lo ultimo que hay que atender.
+ */
+export function estadoDe(f: FilaPedido): {
+  label: string
+  color: string
+  fondo: string
+  sub: string | null
+  urgencia: number
+} {
+  const st = statusDe(f.status)
+
+  if (f.status === 'cancelado') {
+    const c = statusDe('cancelado')
+    return { label: c.label, color: c.color, fondo: c.fondo, sub: null, urgencia: 4 }
+  }
+
+  if (f.saldo > 0 && (f.estado_cobro === 'vencido' || f.dias_vencido > 0)) {
+    const c = cobroDe('vencido')
+    // Los dias van en el chip: "Vencido" sin numero no dice si urge.
+    const label = f.dias_vencido > 0 ? `${c.label} ${f.dias_vencido} d` : c.label
+    return { label, color: c.color, fondo: c.fondo, sub: st.label, urgencia: 0 }
+  }
+
+  if (f.estado_cobro === 'parcial' || f.estado_cobro === 'pagado') {
+    const c = cobroDe(f.estado_cobro)
+    return { label: c.label, color: c.color, fondo: c.fondo, sub: st.label, urgencia: c.key === 'parcial' ? 1 : 3 }
+  }
+
+  // Cobro pendiente: lo que informa es en que va el pedido. El cobro baja a
+  // la linea gris, salvo que repita la palabra del chip.
+  const cb = cobroDe(f.estado_cobro)
+  return {
+    label: st.label,
+    color: st.color,
+    fondo: st.fondo,
+    sub: cb.label === st.label ? null : cb.label,
+    urgencia: 2,
+  }
+}
+
+/**
  * Los chips de filtro rapido.
  *
  * `vencidos` y `con_saldo` no son status: son estados de COBRO, y por eso van
@@ -73,6 +125,8 @@ export type PagoFila = {
   metodo: string | null
   referencia: string | null
   fecha_pago: string
+  /** auth.users(id). Se resuelve a nombre con el catalogo de staff. */
+  registrado_por: string | null
   cancelado_at: string | null
   cancelado_motivo: string | null
 }
@@ -84,6 +138,8 @@ export type FilaPedido = {
   /** Solo para el panel de auditoria. */
   created_at: string
   cliente: string
+  /** Email o razon social: la segunda linea de la celda de cliente. */
+  cliente_sub: string | null
   cliente_id: string | null
   vendedor: string | null
   vendedor_id: string | null
@@ -127,6 +183,24 @@ function uno<T>(v: unknown): T | null {
 
 export const folioDe = (id: string) => `#${id.slice(-6).toUpperCase()}`
 
+type Perfil = { full_name: string | null; email: string | null; razon_social: string | null }
+
+/**
+ * La segunda linea del cliente.
+ *
+ * `nombreLegible` ya eligio uno de los tres datos (razon social, nombre,
+ * email); aqui va el siguiente que aporte algo distinto, para que la celda
+ * diga quien es Y como ubicarlo sin gastar dos columnas.
+ */
+function subtituloCliente(perfil: Perfil, nombre: string): string | null {
+  const clave = nombre.trim().toLowerCase()
+  for (const crudo of [perfil.email, perfil.razon_social]) {
+    const v = texto(crudo)
+    if (v && v.toLowerCase() !== clave) return v
+  }
+  return null
+}
+
 /**
  * Arma las filas de la tabla a partir de las tres consultas.
  *
@@ -150,6 +224,7 @@ export function armarFilas(
       metodo: texto(p.metodo),
       referencia: texto(p.referencia),
       fecha_pago: String(p.fecha_pago ?? '').slice(0, 10),
+      registrado_por: texto(p.registrado_por),
       cancelado_at: texto(p.cancelado_at),
       cancelado_motivo: texto(p.cancelado_motivo),
     }
@@ -192,6 +267,7 @@ export function armarFilas(
     const total = s ? num(s.total_con_envio) : Math.max(0, subtotal - descuento) + costoEnvio
     const cobrado = s ? num(s.pagado) : 0
     const saldo = s ? num(s.saldo) : 0
+    const nombre = perfil ? nombreLegible(perfil) : 'Cliente sin nombre'
 
     return {
       id,
@@ -200,7 +276,8 @@ export function armarFilas(
       // fuente unica, con la tabla como respaldo para los cancelados.
       fecha_pedido: String((s?.fecha_pedido ?? p.fecha_pedido) ?? '').slice(0, 10),
       created_at: String(p.created_at ?? ''),
-      cliente: perfil ? nombreLegible(perfil) : 'Cliente sin nombre',
+      cliente: nombre,
+      cliente_sub: perfil ? subtituloCliente(perfil, nombre) : null,
       cliente_id: perfil?.id ?? (texto(p.cliente_id) as string | null),
       vendedor: vend?.nombre ?? null,
       vendedor_id: texto(p.vendedor_id) as string | null,
@@ -229,6 +306,71 @@ export function armarFilas(
       pagos: pagosPorPedido.get(id) ?? [],
     }
   })
+}
+
+// ── Linea de tiempo ─────────────────────────────────────────
+
+export type EstadoPaso = 'hecho' | 'actual' | 'pendiente' | 'cancelado'
+
+export type PasoPedido = {
+  key: string
+  label: string
+  estado: EstadoPaso
+  /** 'YYYY-MM-DD', o null si ese dato no se guarda en ningun lado. */
+  fecha: string | null
+}
+
+/** El orden en que avanza un pedido. 'enviado' ya pasó por confirmado. */
+const AVANCE = ['pendiente', 'confirmado', 'enviado', 'entregado']
+
+/**
+ * Los pasos de la linea de tiempo del panel.
+ *
+ * Confirmado no lleva fecha, y no es un olvido: `pedidos` no guarda cuando
+ * se confirmo — no existe una columna `confirmado_at` —, asi que la unica
+ * fuente seria `audit_log`, que solo lee super_admin. Se marca alcanzado por
+ * el status y sin fecha, que es honesto, en vez de inventar una.
+ *
+ * Un cancelado corta la linea: lo que venia despues nunca paso, y pintar
+ * cuatro pasos grises debajo de un cancelado solo confunde.
+ *
+ * Pagado puede estar alcanzado sin Entregado — pago por adelantado —, y en
+ * ese caso la linea queda con un hueco. Es lo que de verdad ocurrio.
+ */
+export function pasosDe(f: FilaPedido): PasoPedido[] {
+  const creado = f.created_at ? f.created_at.slice(0, 10) : f.fecha_pedido
+
+  if (f.status === 'cancelado') {
+    return [
+      { key: 'creado', label: 'Creado', estado: 'hecho', fecha: creado },
+      { key: 'cancelado', label: 'Cancelado', estado: 'cancelado', fecha: null },
+    ]
+  }
+
+  const i = AVANCE.indexOf(f.status)
+  const avance = i < 0 ? 0 : i
+  const pagado = f.total > 0 && f.estado_cobro === 'pagado'
+
+  // La fecha de Pagado es la del pago que cerro el saldo: el ultimo vigente.
+  const vigentes = f.pagos.filter(p => !p.cancelado_at).map(p => p.fecha_pago).sort()
+  const fechaPago = pagado && vigentes.length ? vigentes[vigentes.length - 1] : null
+
+  const crudos = [
+    { key: 'creado', label: 'Creado', alcanzado: true, fecha: creado },
+    { key: 'confirmado', label: 'Confirmado', alcanzado: avance >= 1, fecha: null },
+    { key: 'entregado', label: 'Entregado', alcanzado: avance >= 3, fecha: f.fecha_entrega_real },
+    { key: 'pagado', label: 'Pagado', alcanzado: pagado, fecha: fechaPago },
+  ]
+
+  // El ultimo alcanzado es el paso "actual": el que esta pasando ahora.
+  const ultimo = crudos.reduce((acc, paso, idx) => (paso.alcanzado ? idx : acc), 0)
+
+  return crudos.map((paso, idx) => ({
+    key: paso.key,
+    label: paso.label,
+    fecha: paso.fecha,
+    estado: !paso.alcanzado ? 'pendiente' : idx === ultimo ? 'actual' : 'hecho',
+  }))
 }
 
 // ── Filtros ─────────────────────────────────────────────────
@@ -298,7 +440,31 @@ export function filtrar(filas: FilaPedido[], f: Filtros): FilaPedido[] {
 
 export type ColumnaOrden =
   | 'folio' | 'fecha_pedido' | 'cliente' | 'vendedor' | 'litros'
-  | 'total' | 'cobrado' | 'saldo' | 'status' | 'estado_cobro' | 'entrega' | 'orden_compra'
+  | 'total' | 'cobrado' | 'saldo' | 'estado' | 'entrega' | 'orden_compra'
+
+/**
+ * Las columnas que se esconden solas.
+ *
+ * Vendedor, entrega y OC vienen vacias en la mayoria de los filtros, y una
+ * columna de guiones no informa: solo le quita ancho al cliente. Se ocultan
+ * cuando NINGUNA fila del filtro las trae, y el boton de Columnas las
+ * fuerza.
+ */
+export const COLUMNAS_OPCIONALES = ['vendedor', 'entrega', 'orden_compra'] as const
+
+export type ColumnaOpcional = (typeof COLUMNAS_OPCIONALES)[number]
+
+const TRAE_DATO: Record<ColumnaOpcional, (f: FilaPedido) => boolean> = {
+  vendedor: f => !!f.vendedor,
+  entrega: f => !!(f.fecha_entrega_real || f.fecha_entrega),
+  orden_compra: f => !!f.orden_compra,
+}
+
+/** Cuales de las opcionales traen dato en al menos una fila del filtro. */
+export const columnasConDato = (filas: FilaPedido[]): Record<ColumnaOpcional, boolean> =>
+  Object.fromEntries(
+    COLUMNAS_OPCIONALES.map(k => [k, filas.some(TRAE_DATO[k])])
+  ) as Record<ColumnaOpcional, boolean>
 
 export type Orden = { columna: ColumnaOrden; asc: boolean }
 
@@ -312,9 +478,9 @@ const valorDe = (f: FilaPedido, c: ColumnaOrden): string | number => {
     case 'total': return f.total
     case 'cobrado': return f.cobrado
     case 'saldo': return f.saldo
-    case 'status': return f.status
-    // Ordenar por cobro es ordenar por urgencia: lo mas vencido primero.
-    case 'estado_cobro': return f.dias_vencido
+    // Ordenar por estado es ordenar por urgencia: primero lo vencido, y
+    // entre lo vencido lo que lleva mas dias esperando.
+    case 'estado': return estadoDe(f).urgencia * 1e6 - f.dias_vencido
     case 'entrega': return f.fecha_entrega_real || f.fecha_entrega || ''
     case 'orden_compra': return norm(f.orden_compra || '')
   }

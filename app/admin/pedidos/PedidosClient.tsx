@@ -1,17 +1,19 @@
 'use client'
-import { useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { etiquetaFecha } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import ImportarExcel from './ImportarExcel'
 import FiltrosPedidos from './FiltrosPedidos'
 import TablaPedidos from './TablaPedidos'
 import DrawerPago from './DrawerPago'
+import PanelPedido from './PanelPedido'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
-  type FilaPedido, type Filtros, type Orden,
-  FILTROS_VACIOS, STATUS, armarFilas, card, cobroDe, filtrar, moneda,
-  ordenar, statusDe, tabular, totalesDe,
+  type ColumnaOpcional, type FilaPedido, type Filtros, type Orden,
+  COLUMNAS_OPCIONALES, FILTROS_VACIOS, STATUS, armarFilas, card, cobroDe,
+  columnasConDato, estadoDe, filtrar, moneda, ordenar, statusDe, tabular,
+  totalesDe,
 } from './pedidos-ui'
 
 /**
@@ -25,36 +27,121 @@ import {
  * Word — en vez de tener su propia version.
  */
 
+/**
+ * Tabla o tarjetas, nunca las dos.
+ *
+ * El `display` de `.pd-movil` vive aqui y NO en un style inline: un
+ * `display: flex` inline le gana siempre a la clase, y por eso las tarjetas
+ * se pintaban tambien en desktop, debajo de la tabla, con cada pedido dos
+ * veces. Si se vuelve a necesitar flex en esa lista, va en el CSS.
+ */
 const CSS = `
   .pd-tabla { display: block; }
   .pd-movil { display: none; }
-  @media (max-width: 860px) {
+  .pd-herramientas { display: flex; }
+  @media (max-width: 767px) {
     .pd-tabla { display: none; }
-    .pd-movil { display: block; }
+    .pd-movil { display: flex; flex-direction: column; gap: 10px; }
+    .pd-herramientas { display: none; }
   }
 `
+
+const ETIQUETA_COLUMNA: Record<ColumnaOpcional, string> = {
+  vendedor: 'Vendedor',
+  entrega: 'Entrega',
+  orden_compra: 'OC',
+}
+
+/**
+ * La preferencia de columnas, en localStorage y leida como store externo.
+ *
+ * Va con `useSyncExternalStore` y no con un `useState` que se llena en un
+ * efecto: localStorage no existe en el render del servidor, y este hook es
+ * el que sabe servir un snapshot distinto en servidor y en cliente sin
+ * desacomodar la hidratacion.
+ *
+ * Solo guarda lo que se eligio A MANO. Lo que no esta aqui lo decide el
+ * dato, en `columnas`.
+ */
+type PrefColumnas = Partial<Record<ColumnaOpcional, boolean>>
+
+const CLAVE_COLUMNAS = 'tarabana.pedidos.columnas'
+const SIN_PREFERENCIA: PrefColumnas = {}
+
+const oyentesCols = new Set<() => void>()
+let crudoCols: string | null = null
+let prefCols: PrefColumnas = SIN_PREFERENCIA
+
+/** Tiene que devolver la MISMA referencia si nada cambio, o React cicla. */
+function snapshotColumnas(): PrefColumnas {
+  let crudo: string | null = null
+  try {
+    crudo = localStorage.getItem(CLAVE_COLUMNAS)
+  } catch {
+    // Modo privado: se trabaja sin preferencia guardada.
+  }
+  if (crudo !== crudoCols) {
+    crudoCols = crudo
+    let dato: unknown = null
+    try {
+      dato = crudo ? JSON.parse(crudo) : null
+    } catch {
+      dato = null
+    }
+    prefCols = dato && typeof dato === 'object' ? (dato as PrefColumnas) : SIN_PREFERENCIA
+  }
+  return prefCols
+}
+
+function suscribirColumnas(cambio: () => void) {
+  oyentesCols.add(cambio)
+  // Otra pestana con la misma tabla: la preferencia se sigue ahi tambien.
+  window.addEventListener('storage', cambio)
+  return () => {
+    oyentesCols.delete(cambio)
+    window.removeEventListener('storage', cambio)
+  }
+}
+
+function guardarColumnas(pref: PrefColumnas) {
+  try {
+    localStorage.setItem(CLAVE_COLUMNAS, JSON.stringify(pref))
+  } catch {
+    // Sin cuota para guardar: la sesion actual igual respeta la eleccion.
+    crudoCols = JSON.stringify(pref)
+    prefCols = pref
+  }
+  for (const cambio of oyentesCols) cambio()
+}
 
 type Props = {
   pedidos: Record<string, unknown>[]
   saldos: Record<string, unknown>[]
   pagos: Record<string, unknown>[]
   vendedores: { id: string; nombre: string }[]
+  /** Para resolver `pagos.registrado_por` a un nombre en el panel. */
+  staff: { id: string; nombre: string }[]
   canEdit: boolean
   canCreate: boolean
   puedeDescuento: boolean
+  esVendedor: boolean
 }
 
+/** El parametro de la URL que abre el panel. */
+const PARAM_PANEL = 'pedido'
+
 export default function PedidosClient(props: Props) {
-  const { pedidos, saldos, pagos, vendedores, canEdit, canCreate, puedeDescuento } = props
+  const { pedidos, saldos, pagos, vendedores, staff, canEdit, canCreate, puedeDescuento, esVendedor } = props
   const router = useRouter()
+  const searchParams = useSearchParams()
 
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS)
   const [orden, setOrden] = useState<Orden>({ columna: 'fecha_pedido', asc: false })
-  const [expandida, setExpandida] = useState<string | null>(null)
+  const [menuCols, setMenuCols] = useState(false)
+  const colsPref = useSyncExternalStore(suscribirColumnas, snapshotColumnas, () => SIN_PREFERENCIA)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [pagoDe, setPagoDe] = useState<FilaPedido | null>(null)
   const [statusPedido, setStatusPedido] = useState<FilaPedido | null>(null)
-  const [envioDe, setEnvioDe] = useState<FilaPedido | null>(null)
   const [importar, setImportar] = useState(false)
   const [trabajando, setTrabajando] = useState('')
   const [aviso, setAviso] = useState('')
@@ -64,6 +151,64 @@ export default function PedidosClient(props: Props) {
   const filtradas = useMemo(() => ordenar(filtrar(todas, filtros), orden), [todas, filtros, orden])
   const totales = useMemo(() => totalesDe(filtradas), [filtradas])
   const seleccionadas = useMemo(() => filtradas.filter(f => seleccion.has(f.id)), [filtradas, seleccion])
+
+  /**
+   * Las columnas opcionales.
+   *
+   * Por default se esconden las que no traen dato en NINGUNA fila del
+   * filtro: una columna de guiones no informa y le quita ancho al cliente.
+   * La eleccion a mano pesa mas que eso y se guarda, para no volver a
+   * prenderla cada vez que se entra.
+   */
+  const conDato = useMemo(() => columnasConDato(filtradas), [filtradas])
+  const columnas = useMemo(
+    () => Object.fromEntries(
+      COLUMNAS_OPCIONALES.map(k => [k, colsPref[k] ?? conDato[k]])
+    ) as Record<ColumnaOpcional, boolean>,
+    [colsPref, conDato]
+  )
+
+  const alternarColumna = (k: ColumnaOpcional) =>
+    guardarColumnas({ ...colsPref, [k]: !columnas[k] })
+
+  /**
+   * El panel de detalle vive en `?pedido=<id>`.
+   *
+   * Se mueve con `history.pushState` y no con `router.push`: las dos cosas
+   * las sigue `useSearchParams`, pero la del router vuelve al servidor y
+   * recargaria las tres consultas de pedidos cada vez que se abre o cierra
+   * el panel. Abrir es push — asi el boton Atras cierra, que en movil es lo
+   * que uno intenta —, y cerrar es replace, para no dejar basura en el
+   * historial.
+   */
+  const abierta = searchParams.get(PARAM_PANEL)
+
+  const urlCon = (id: string | null) => {
+    const q = new URLSearchParams(searchParams.toString())
+    if (id) q.set(PARAM_PANEL, id)
+    else q.delete(PARAM_PANEL)
+    const texto = q.toString()
+    return texto ? `?${texto}` : window.location.pathname
+  }
+
+  const abrirPanel = (id: string) => window.history.pushState(null, '', urlCon(id))
+  const cerrarPanel = () => window.history.replaceState(null, '', urlCon(null))
+
+  /**
+   * El pedido del panel sale de TODAS las filas y no de las filtradas: un
+   * link con `?pedido=` tiene que abrir aunque los filtros de quien lo
+   * recibe dejen ese pedido fuera.
+   */
+  const pedidoPanel = useMemo(
+    () => (abierta ? todas.find(f => f.id === abierta) ?? null : null),
+    [abierta, todas]
+  )
+
+  /** `pagos.registrado_por` es un uuid de auth.users; aqui se vuelve nombre. */
+  const nombrePor = useMemo(() => {
+    const mapa = new Map(staff.map(s => [s.id, s.nombre]))
+    return (id: string | null) => (id ? mapa.get(id) ?? null : null)
+  }, [staff])
 
   const refrescar = () => { router.refresh(); setSeleccion(new Set()) }
 
@@ -249,7 +394,7 @@ export default function PedidosClient(props: Props) {
       setError(d.error || 'No se pudo eliminar el pedido.')
       return
     }
-    setExpandida(null)
+    cerrarPanel()
     setAviso(`${fila.folio} eliminado.`)
     refrescar()
   }
@@ -329,49 +474,104 @@ export default function PedidosClient(props: Props) {
         </div>
       )}
 
+      <div className="pd-herramientas" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setMenuCols(v => !v)}
+            style={{ padding: '6px 11px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 7, color: TINTA_MEDIA, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Columnas
+          </button>
+          {menuCols && (
+            <>
+              {/* Un fondo invisible cierra el menu al picar afuera, sin
+                  listeners sueltos en document. */}
+              <div onClick={() => setMenuCols(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+              <div
+                style={{
+                  position: 'absolute', top: 'calc(100% + 5px)', right: 0, zIndex: 41,
+                  minWidth: 190, padding: '7px 0', background: '#fff',
+                  border: `1px solid ${BORDE}`, borderRadius: 9,
+                  boxShadow: '0 8px 24px rgba(17,24,39,0.12)',
+                }}
+              >
+                {COLUMNAS_OPCIONALES.map(k => (
+                  <label
+                    key={k}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', color: TINTA_MEDIA, fontSize: 12.5, cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={columnas[k]}
+                      onChange={() => alternarColumna(k)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {ETIQUETA_COLUMNA[k]}
+                    {!conDato[k] && (
+                      <span style={{ marginLeft: 'auto', color: GRIS_SUAVE, fontSize: 10.5 }}>vacía</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="pd-tabla" style={{ ...card, padding: '6px 14px 0', maxHeight: '72vh', overflowY: 'auto' }}>
         <TablaPedidos
           filas={filtradas}
           orden={orden}
           onOrden={setOrden}
-          expandida={expandida}
-          onExpandir={setExpandida}
+          columnas={columnas}
+          abierta={abierta}
+          onAbrir={abrirPanel}
           seleccion={seleccion}
           onSeleccion={setSeleccion}
           canEdit={canEdit}
           onPago={setPagoDe}
           onStatus={setStatusPedido}
-          onEnvio={setEnvioDe}
-          onCancelarPago={cancelarPago}
-          onEliminar={eliminar}
         />
       </div>
 
-      {/* Movil: una tarjeta por pedido. */}
-      <div className="pd-movil" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Movil: una tarjeta por pedido, y SOLO abajo de 768px. El display
+          lo pone `.pd-movil` en el CSS; no va inline. */}
+      <div className="pd-movil">
         {filtradas.length === 0 && (
           <p style={{ padding: '36px 0', textAlign: 'center', color: GRIS_SUAVE, fontSize: 13 }}>
             Ningun pedido coincide con los filtros.
           </p>
         )}
         {filtradas.map(f => {
-          const st = statusDe(f.status)
-          const cb = cobroDe(f.estado_cobro)
+          const es = estadoDe(f)
           return (
             <div key={f.id} style={{ ...card, padding: '13px 15px' }}>
+              {/* El cuerpo de la tarjeta abre el panel, igual que la fila en
+                  desktop; los botones de abajo quedan aparte para que no se
+                  disparen los dos. En movil el panel ocupa la pantalla. */}
+              <div onClick={() => abrirPanel(f.id)} style={{ cursor: 'pointer' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
                 <span className="font-mono" style={{ color: TINTA, fontSize: 13, fontWeight: 700 }}>{f.folio}</span>
                 <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 11 }}>{etiquetaFecha(f.fecha_pedido)}</span>
                 <span style={{ ...tabular, marginLeft: 'auto', color: TINTA, fontSize: 15, fontWeight: 700 }}>{moneda(f.total)}</span>
               </div>
 
-              <p style={{ margin: '0 0 8px', color: TINTA_MEDIA, fontSize: 12.5 }}>{f.cliente}</p>
+              <p style={{ margin: 0, color: TINTA, fontSize: 12.5, fontWeight: 600 }}>{f.cliente}</p>
+              {f.cliente_sub && (
+                <p style={{ margin: '1px 0 0', color: GRIS_SUAVE, fontSize: 11 }}>{f.cliente_sub}</p>
+              )}
 
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 9 }}>
-                <span style={{ padding: '2px 8px', borderRadius: 99, background: st.fondo, color: st.color, fontSize: 10.5, fontWeight: 600 }}>{st.label}</span>
-                <span style={{ padding: '2px 8px', borderRadius: 99, background: cb.fondo, color: cb.color, fontSize: 10.5, fontWeight: 600 }}>
-                  {cb.label}{f.dias_vencido > 0 ? ` · ${f.dias_vencido} d` : ''}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 9px' }}>
+                {/* Un solo chip de estado, igual que en la tabla. */}
+                <span style={{ padding: '2px 8px', borderRadius: 99, background: es.fondo, color: es.color, fontSize: 10.5, fontWeight: 600 }}>
+                  {es.label}
                 </span>
+                {es.sub && (
+                  <span style={{ padding: '2px 8px', borderRadius: 99, background: PISTA, color: GRIS, fontSize: 10.5 }}>
+                    {es.sub}
+                  </span>
+                )}
                 {f.litros > 0 && (
                   <span style={{ ...tabular, padding: '2px 8px', borderRadius: 99, background: PISTA, color: GRIS, fontSize: 10.5 }}>
                     {formatLitros(f.litros)}
@@ -398,11 +598,15 @@ export default function PedidosClient(props: Props) {
                 </div>
               )}
 
+              </div>
+
+              {/* Registrar pago primero: en movil es la unica razon por la
+                  que alguien abre esta pantalla de pie en una entrega. */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <a href={`/admin/pedidos/${f.id}/edit`} style={{ ...btn('#fff', GRIS, BORDE), padding: '6px 11px', fontSize: 12, textDecoration: 'none' }}>Ver</a>
                 {canEdit && f.saldo > 0 && f.status !== 'cancelado' && (
                   <button type="button" onClick={() => setPagoDe(f)} style={{ ...btn('#fff', ACENTO, ACENTO), padding: '6px 11px', fontSize: 12 }}>Registrar pago</button>
                 )}
+                <a href={`/admin/pedidos/${f.id}/edit`} style={{ ...btn('#fff', GRIS, BORDE), padding: '6px 11px', fontSize: 12, textDecoration: 'none' }}>Ver</a>
                 {canEdit && f.status !== 'cancelado' && (
                   <button type="button" onClick={() => setStatusPedido(f)} style={{ ...btn('#fff', GRIS, BORDE), padding: '6px 11px', fontSize: 12 }}>Status</button>
                 )}
@@ -469,115 +673,29 @@ export default function PedidosClient(props: Props) {
         </div>
       )}
 
-      {envioDe && (
-        <ModalEnvio
-          pedido={envioDe}
+      {pedidoPanel && (
+        <PanelPedido
+          /* `key` por pedido: el panel guarda estado propio — la pestana
+             activa, el formulario de envio, la actividad cargada — y si el
+             `?pedido=` cambia sin remontar, ese estado quedaria describiendo
+             al pedido anterior. */
+          key={pedidoPanel.id}
+          pedido={pedidoPanel}
+          canEdit={canEdit}
           puedeDescuento={puedeDescuento}
-          onCerrar={() => setEnvioDe(null)}
-          onListo={msg => { setEnvioDe(null); setAviso(msg); refrescar() }}
-          onError={setError}
+          esVendedor={esVendedor}
+          nombrePor={nombrePor}
+          tapado={!!pagoDe || !!statusPedido || importar}
+          onCerrar={cerrarPanel}
+          onPago={setPagoDe}
+          onStatus={setStatusPedido}
+          onCancelarPago={cancelarPago}
+          onEliminar={eliminar}
+          onGuardado={msg => { setAviso(msg); refrescar() }}
         />
       )}
 
       {importar && <ImportarExcel onClose={() => setImportar(false)} puedeDescuento={puedeDescuento} />}
-    </div>
-  )
-}
-
-/**
- * Captura de datos de envio: paqueteria, guia y costo.
- *
- * Es la UNICA entrada para paqueteria y guia en todo el admin — el
- * formulario de edicion no las toca —, asi que no puede desaparecer aunque
- * sea poco frecuente.
- *
- * El costo solo lo edita admin, igual que en el resto: la ruta lo valida
- * tambien, esto es para no ofrecer un campo que va a ser rechazado.
- */
-function ModalEnvio({ pedido, puedeDescuento, onCerrar, onListo, onError }: {
-  pedido: FilaPedido
-  puedeDescuento: boolean
-  onCerrar: () => void
-  onListo: (mensaje: string) => void
-  onError: (mensaje: string) => void
-}) {
-  const [paqueteria, setPaqueteria] = useState(pedido.paqueteria || '')
-  const [guia, setGuia] = useState(pedido.guia_envio || '')
-  const [costo, setCosto] = useState(pedido.costo_envio ? String(Math.round(pedido.costo_envio)) : '')
-  const [enviando, setEnviando] = useState(false)
-
-  const guardar = async () => {
-    setEnviando(true)
-    const res = await fetch(`/api/admin/pedidos/${pedido.id}/envio`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        paqueteria: paqueteria.trim() || null,
-        guia_envio: guia.trim() || null,
-        ...(puedeDescuento ? { costo_envio: Number(costo.replace(/[^\d.]/g, '')) || 0 } : {}),
-      }),
-    })
-    if (res.ok) { onListo(`Envio actualizado en ${pedido.folio}.`); return }
-    const d = await res.json().catch(() => ({}))
-    onError(d.error || 'No se pudo guardar el envio.')
-    setEnviando(false)
-  }
-
-  const campo: React.CSSProperties = {
-    width: '100%', padding: '9px 11px', background: '#fff',
-    border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA,
-    fontSize: 13, outline: 'none', boxSizing: 'border-box',
-  }
-  const lbl: React.CSSProperties = {
-    display: 'block', color: GRIS, fontSize: 10.5, fontWeight: 600,
-    textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 5,
-  }
-
-  return (
-    <div
-      onClick={onCerrar}
-      style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
-    >
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: '22px 24px', width: 'min(400px, 100%)' }}>
-        <h3 style={{ margin: '0 0 4px', color: TINTA, fontSize: 15, fontWeight: 700 }}>Datos de envio</h3>
-        <p style={{ margin: '0 0 16px', color: GRIS, fontSize: 12 }}>
-          <span className="font-mono">{pedido.folio}</span> · {pedido.cliente}
-        </p>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <label style={lbl}>Paqueteria</label>
-            <input autoFocus value={paqueteria} onChange={e => setPaqueteria(e.target.value)} placeholder="DHL, Estafeta, propia..." style={campo} />
-          </div>
-          <div>
-            <label style={lbl}>Guia</label>
-            <input value={guia} onChange={e => setGuia(e.target.value)} placeholder="Numero de rastreo" style={campo} />
-          </div>
-          {puedeDescuento && (
-            <div>
-              <label style={lbl}>Costo de envio</label>
-              <input value={costo} onChange={e => setCosto(e.target.value)} inputMode="decimal" placeholder="0" style={{ ...campo, ...tabular }} />
-              <p style={{ margin: '5px 0 0', color: GRIS_SUAVE, fontSize: 11 }}>
-                Se suma al total del pedido y cambia el saldo.
-              </p>
-            </div>
-          )}
-        </div>
-
-        <div style={{ display: 'flex', gap: 9, marginTop: 18 }}>
-          <button type="button" onClick={onCerrar} style={{ flex: 1, padding: '10px', background: '#fff', border: `1px solid ${PISTA}`, borderRadius: 8, color: GRIS, fontSize: 12.5, cursor: 'pointer' }}>
-            Cancelar
-          </button>
-          <button
-            type="button"
-            onClick={guardar}
-            disabled={enviando}
-            style={{ flex: 1, padding: '10px', background: ACENTO, border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: enviando ? 0.6 : 1 }}
-          >
-            {enviando ? 'Guardando...' : 'Guardar'}
-          </button>
-        </div>
-      </div>
     </div>
   )
 }
