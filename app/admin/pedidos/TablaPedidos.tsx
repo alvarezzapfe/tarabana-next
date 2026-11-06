@@ -1,5 +1,5 @@
 'use client'
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { etiquetaFecha } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import {
@@ -11,8 +11,10 @@ import {
 /**
  * Tabla de Pedidos.
  *
- * Header fijo, orden por cualquier columna, totales del filtro al pie y la
- * fila que abre el panel de detalle con partidas y pagos.
+ * Header fijo, orden por cualquier columna y totales del filtro al pie. El
+ * detalle ya no es una fila que se expande: la fila abre `PanelPedido`, que
+ * vive en el padre. Una fila que crece empujaba la tabla y no daba ancho
+ * para cuatro pestanas.
  *
  * El total de la columna es `total_con_envio`, no `pedidos.total`: ese es el
  * importe BRUTO antes de descuento y envio, y usarlo haria que la suma del
@@ -79,24 +81,20 @@ type Props = {
   onOrden: (o: Orden) => void
   /** Que opcionales se pintan. Lo decide el padre: dato + preferencia. */
   columnas: Record<ColumnaOpcional, boolean>
-  expandida: string | null
-  onExpandir: (id: string | null) => void
+  /** El pedido con el panel abierto, para marcar su fila. */
+  abierta: string | null
+  onAbrir: (id: string) => void
   seleccion: Set<string>
   onSeleccion: (s: Set<string>) => void
   canEdit: boolean
   onPago: (f: FilaPedido) => void
   onStatus: (f: FilaPedido) => void
-  /** Las tres acciones poco frecuentes viven en el panel de detalle. */
-  onEnvio: (f: FilaPedido) => void
-  onCancelarPago: (f: FilaPedido, pagoId: string) => void
-  onEliminar: (f: FilaPedido) => void
 }
 
 export default function TablaPedidos(props: Props) {
   const {
-    filas, orden, onOrden, columnas, expandida, onExpandir,
+    filas, orden, onOrden, columnas, abierta, onAbrir,
     seleccion, onSeleccion, canEdit, onPago, onStatus,
-    onEnvio, onCancelarPago, onEliminar,
   } = props
 
   /** El menu de la fila, anclado al boton en coordenadas de ventana. */
@@ -238,176 +236,158 @@ export default function TablaPedidos(props: Props) {
         <tbody>
           {filas.map((f, i) => {
             const es = estadoDe(f)
-            const abierta = expandida === f.id
+            const esta = abierta === f.id
             const sel = seleccion.has(f.id)
             const puedeCobrar = canEdit && f.saldo > 0 && f.status !== 'cancelado'
             const clases = [
               'tp-fila',
               i % 2 ? 'tp-par' : '',
               sel ? 'tp-sel' : '',
-              abierta ? 'tp-abierta' : '',
+              esta ? 'tp-abierta' : '',
             ].filter(Boolean).join(' ')
 
             return (
-              <Fragment key={f.id}>
-                {/* Toda la fila abre el detalle: es lo que se quiere el 90%
-                    de las veces, y deja la columna de acciones para lo que
-                    de verdad hace algo. */}
-                <tr
-                  className={clases}
-                  onClick={() => onExpandir(abierta ? null : f.id)}
-                  style={{ height: 52, cursor: 'pointer' }}
-                >
-                  {canEdit && (
-                    <td style={{ ...td, paddingLeft: 2 }} onClick={e => e.stopPropagation()}>
-                      <input type="checkbox" checked={sel} onChange={() => alternar(f.id)} style={{ cursor: 'pointer' }} />
-                    </td>
-                  )}
-
-                  <td style={td}>
-                    <span className="font-mono" style={{ color: TINTA, fontWeight: 600 }}>{f.folio}</span>
+              /* Toda la fila abre el panel de detalle: es lo que se quiere el
+                 90% de las veces, y deja la columna de acciones para lo que
+                 de verdad hace algo. */
+              <tr
+                key={f.id}
+                className={clases}
+                onClick={() => onAbrir(f.id)}
+                style={{ height: 52, cursor: 'pointer' }}
+              >
+                {canEdit && (
+                  <td style={{ ...td, paddingLeft: 2 }} onClick={e => e.stopPropagation()}>
+                    <input type="checkbox" checked={sel} onChange={() => alternar(f.id)} style={{ cursor: 'pointer' }} />
                   </td>
+                )}
 
-                  <td style={{ ...td, ...tabular }}>{etiquetaFecha(f.fecha_pedido)}</td>
+                <td style={td}>
+                  <span className="font-mono" style={{ color: TINTA, fontWeight: 600 }}>{f.folio}</span>
+                </td>
 
-                  <td style={{ ...td, width: '100%', minWidth: ANCHO_CLIENTE, overflow: 'hidden' }}>
+                <td style={{ ...td, ...tabular }}>{etiquetaFecha(f.fecha_pedido)}</td>
+
+                <td style={{ ...td, width: '100%', minWidth: ANCHO_CLIENTE, overflow: 'hidden' }}>
+                  <span
+                    style={{ display: 'block', color: TINTA, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                    title={f.cliente}
+                  >
+                    {f.cliente}
+                  </span>
+                  {f.cliente_sub && (
                     <span
-                      style={{ display: 'block', color: TINTA, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                      title={f.cliente}
+                      style={{ display: 'block', marginTop: 1, color: GRIS_SUAVE, fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis' }}
+                      title={f.cliente_sub}
                     >
-                      {f.cliente}
+                      {f.cliente_sub}
                     </span>
-                    {f.cliente_sub && (
-                      <span
-                        style={{ display: 'block', marginTop: 1, color: GRIS_SUAVE, fontSize: 10.5, overflow: 'hidden', textOverflow: 'ellipsis' }}
-                        title={f.cliente_sub}
-                      >
-                        {f.cliente_sub}
-                      </span>
-                    )}
-                  </td>
-
-                  {columnas.vendedor && (
-                    <td style={{ ...td, color: f.vendedor ? TINTA_MEDIA : GRIS_SUAVE, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.vendedor || 'Sin vendedor'}>
-                      {f.vendedor || '—'}
-                    </td>
                   )}
+                </td>
 
-                  <td style={{ ...td, ...tabular, textAlign: 'right', color: GRIS }}>
-                    {f.litros > 0 ? formatLitros(f.litros) : '—'}
+                {columnas.vendedor && (
+                  <td style={{ ...td, color: f.vendedor ? TINTA_MEDIA : GRIS_SUAVE, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.vendedor || 'Sin vendedor'}>
+                    {f.vendedor || '—'}
                   </td>
+                )}
 
-                  <td style={{ ...td, ...tabular, textAlign: 'right', color: TINTA, fontWeight: 600 }}>
-                    {moneda(f.total)}
-                  </td>
+                <td style={{ ...td, ...tabular, textAlign: 'right', color: GRIS }}>
+                  {f.litros > 0 ? formatLitros(f.litros) : '—'}
+                </td>
 
-                  <td style={{ ...td, ...tabular, textAlign: 'right', color: f.cobrado > 0 ? '#047857' : GRIS_SUAVE }}>
-                    {f.cobrado > 0 ? moneda(f.cobrado) : '—'}
-                  </td>
+                <td style={{ ...td, ...tabular, textAlign: 'right', color: TINTA, fontWeight: 600 }}>
+                  {moneda(f.total)}
+                </td>
 
-                  {/* Saldo con barrita de avance: el numero dice cuanto falta,
-                      la barra dice que tan lejos esta de cerrarse. */}
-                  <td style={{ ...td, textAlign: 'right' }}>
-                    <span style={{ ...tabular, display: 'block', color: f.saldo > 0 ? (f.dias_vencido > 0 ? ROJO : TINTA_MEDIA) : GRIS_SUAVE, fontWeight: f.saldo > 0 ? 600 : 400 }}>
-                      {f.saldo > 0 ? moneda(f.saldo) : '—'}
+                <td style={{ ...td, ...tabular, textAlign: 'right', color: f.cobrado > 0 ? '#047857' : GRIS_SUAVE }}>
+                  {f.cobrado > 0 ? moneda(f.cobrado) : '—'}
+                </td>
+
+                {/* Saldo con barrita de avance: el numero dice cuanto falta,
+                    la barra dice que tan lejos esta de cerrarse. */}
+                <td style={{ ...td, textAlign: 'right' }}>
+                  <span style={{ ...tabular, display: 'block', color: f.saldo > 0 ? (f.dias_vencido > 0 ? ROJO : TINTA_MEDIA) : GRIS_SUAVE, fontWeight: f.saldo > 0 ? 600 : 400 }}>
+                    {f.saldo > 0 ? moneda(f.saldo) : '—'}
+                  </span>
+                  {f.total > 0 && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end', marginTop: 3 }}>
+                      <span style={{ width: 54, height: 3, background: PISTA, borderRadius: 2, overflow: 'hidden' }}>
+                        <span style={{ display: 'block', width: `${f.pctCobrado}%`, height: '100%', background: f.pctCobrado >= 100 ? '#047857' : ACENTO, borderRadius: 2 }} />
+                      </span>
+                      <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 9.5, minWidth: 26, textAlign: 'right' }}>
+                        {Math.round(f.pctCobrado)}%
+                      </span>
                     </span>
-                    {f.total > 0 && (
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end', marginTop: 3 }}>
-                        <span style={{ width: 54, height: 3, background: PISTA, borderRadius: 2, overflow: 'hidden' }}>
-                          <span style={{ display: 'block', width: `${f.pctCobrado}%`, height: '100%', background: f.pctCobrado >= 100 ? '#047857' : ACENTO, borderRadius: 2 }} />
-                        </span>
-                        <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 9.5, minWidth: 26, textAlign: 'right' }}>
-                          {Math.round(f.pctCobrado)}%
-                        </span>
-                      </span>
-                    )}
-                  </td>
+                  )}
+                </td>
 
-                  {/* Un solo chip: gana el estado que pide accion, el otro
-                      dato baja en gris. */}
-                  <td style={td}>
-                    <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, background: es.fondo, color: es.color, fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                      {es.label}
+                {/* Un solo chip: gana el estado que pide accion, el otro
+                    dato baja en gris. */}
+                <td style={td}>
+                  <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, background: es.fondo, color: es.color, fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                    {es.label}
+                  </span>
+                  {es.sub && (
+                    <span style={{ display: 'block', marginTop: 2, color: GRIS_SUAVE, fontSize: 10 }}>
+                      {es.sub}
                     </span>
-                    {es.sub && (
-                      <span style={{ display: 'block', marginTop: 2, color: GRIS_SUAVE, fontSize: 10 }}>
-                        {es.sub}
-                      </span>
-                    )}
+                  )}
+                </td>
+
+                {columnas.entrega && (
+                  <td style={{ ...td, ...tabular, color: f.fecha_entrega_real ? '#047857' : GRIS }}>
+                    {f.fecha_entrega_real
+                      ? etiquetaFecha(f.fecha_entrega_real)
+                      : f.fecha_entrega
+                        ? <span title="Programada">{etiquetaFecha(f.fecha_entrega)}</span>
+                        : '—'}
                   </td>
+                )}
 
-                  {columnas.entrega && (
-                    <td style={{ ...td, ...tabular, color: f.fecha_entrega_real ? '#047857' : GRIS }}>
-                      {f.fecha_entrega_real
-                        ? etiquetaFecha(f.fecha_entrega_real)
-                        : f.fecha_entrega
-                          ? <span title="Programada">{etiquetaFecha(f.fecha_entrega)}</span>
-                          : '—'}
-                    </td>
-                  )}
+                {columnas.orden_compra && (
+                  <td style={{ ...td, color: f.orden_compra ? TINTA_MEDIA : GRIS_SUAVE, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.orden_compra || ''}>
+                    {f.orden_compra || '—'}
+                  </td>
+                )}
 
-                  {columnas.orden_compra && (
-                    <td style={{ ...td, color: f.orden_compra ? TINTA_MEDIA : GRIS_SUAVE, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.orden_compra || ''}>
-                      {f.orden_compra || '—'}
-                    </td>
-                  )}
-
-                  {/* Una sola accion a la vista. El resto en el menu: tres
-                      botones por fila convierten la columna en ruido. */}
-                  <td style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      {puedeCobrar && (
-                        <button
-                          type="button"
-                          onClick={() => onPago(f)}
-                          style={{
-                            padding: '5px 10px', background: '#fff', border: `1px solid ${ACENTO}`,
-                            borderRadius: 6, color: ACENTO, fontSize: 11, fontWeight: 600,
-                            cursor: 'pointer', whiteSpace: 'nowrap',
-                          }}
-                        >
-                          Registrar pago
-                        </button>
-                      )}
+                {/* Una sola accion a la vista. El resto en el menu: tres
+                    botones por fila convierten la columna en ruido. */}
+                <td style={{ ...td, textAlign: 'right' }} onClick={e => e.stopPropagation()}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    {puedeCobrar && (
                       <button
                         type="button"
-                        className="tp-mas"
-                        title="Más acciones"
-                        aria-label={`Más acciones de ${f.folio}`}
-                        onMouseDown={e => e.stopPropagation()}
-                        onClick={e => {
-                          const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
-                          setMenu(m => (m && m.fila.id === f.id ? null : { fila: f, x: r.right, y: r.bottom + 4 }))
-                        }}
+                        onClick={() => onPago(f)}
                         style={{
-                          padding: '3px 7px', background: '#fff', border: `1px solid ${BORDE}`,
-                          borderRadius: 6, color: GRIS, fontSize: 13, lineHeight: 1.1,
-                          cursor: 'pointer',
+                          padding: '5px 10px', background: '#fff', border: `1px solid ${ACENTO}`,
+                          borderRadius: 6, color: ACENTO, fontSize: 11, fontWeight: 600,
+                          cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >
-                        ⋯
+                        Registrar pago
                       </button>
-                    </span>
-                  </td>
-                </tr>
-
-                {abierta && (
-                  <tr>
-                    <td
-                      colSpan={visibles.length + (canEdit ? 2 : 1)}
-                      style={{ padding: 0, background: '#fafafa', borderBottom: `1px solid ${BORDE}` }}
+                    )}
+                    <button
+                      type="button"
+                      className="tp-mas"
+                      title="Más acciones"
+                      aria-label={`Más acciones de ${f.folio}`}
+                      onMouseDown={e => e.stopPropagation()}
+                      onClick={e => {
+                        const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+                        setMenu(m => (m && m.fila.id === f.id ? null : { fila: f, x: r.right, y: r.bottom + 4 }))
+                      }}
+                      style={{
+                        padding: '3px 7px', background: '#fff', border: `1px solid ${BORDE}`,
+                        borderRadius: 6, color: GRIS, fontSize: 13, lineHeight: 1.1,
+                        cursor: 'pointer',
+                      }}
                     >
-                      <Detalle
-                        fila={f}
-                        canEdit={canEdit}
-                        onEnvio={onEnvio}
-                        onCancelarPago={onCancelarPago}
-                        onEliminar={onEliminar}
-                      />
-                    </td>
-                  </tr>
-                )}
-              </Fragment>
+                      ⋯
+                    </button>
+                  </span>
+                </td>
+              </tr>
             )
           })}
         </tbody>
@@ -492,153 +472,6 @@ function MenuFila({ fila, x, y, canEdit, onStatus, onCerrar }: {
         </button>
       )}
       <a href={`/api/pedidos/${fila.id}/documento`} style={item}>Descargar Word</a>
-    </div>
-  )
-}
-
-/**
- * Panel de detalle del pedido: partidas, pagos y las acciones poco
- * frecuentes.
- *
- * Envio, cancelar un pago y eliminar el pedido viven aqui y no en la fila:
- * son cosas que se hacen una vez cada tanto, y meterlas junto a Registrar
- * pago convertiria la columna de acciones en una hilera de botones.
- *
- * Importa que esten: la paqueteria y la guia NO se pueden editar en ningun
- * otro lado — el formulario de edicion no las toca.
- */
-function Detalle({ fila, canEdit, onEnvio, onCancelarPago, onEliminar }: {
-  fila: FilaPedido
-  canEdit: boolean
-  onEnvio: (f: FilaPedido) => void
-  onCancelarPago: (f: FilaPedido, pagoId: string) => void
-  onEliminar: (f: FilaPedido) => void
-}) {
-  const sub: React.CSSProperties = {
-    margin: '0 0 8px', color: GRIS_SUAVE, fontSize: 10,
-    fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em',
-  }
-  const celda: React.CSSProperties = { padding: '4px 6px', fontSize: 11.5, color: TINTA_MEDIA }
-
-  return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 24, padding: '14px 10px 16px 14px' }}>
-      <div>
-        <p style={sub}>Partidas</p>
-        {fila.items.length === 0 ? (
-          <p style={{ margin: 0, color: GRIS_SUAVE, fontSize: 11.5 }}>Sin partidas.</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              {fila.items.map((it, i) => (
-                <tr key={i} style={{ borderTop: i ? `1px solid ${PISTA}` : 'none' }}>
-                  <td style={celda}>{it.nombre}</td>
-                  <td style={{ ...celda, color: GRIS, fontSize: 10.5 }}>{it.unidad || '—'}</td>
-                  <td style={{ ...celda, ...tabular, textAlign: 'right' }}>{it.cantidad}</td>
-                  <td style={{ ...celda, ...tabular, textAlign: 'right', color: GRIS }}>{moneda(it.precio)}</td>
-                  <td style={{ ...celda, ...tabular, textAlign: 'right', fontWeight: 600 }}>{moneda(it.subtotal)}</td>
-                  <td style={{ ...celda, ...tabular, textAlign: 'right', color: GRIS_SUAVE, fontSize: 10.5 }}>
-                    {it.litros > 0 ? formatLitros(it.litros) : ''}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-
-        {/* El desglose, que explica por que el total no es la suma de arriba */}
-        <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${BORDE}`, display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 11, color: GRIS }}>
-          <span>Subtotal <strong style={{ ...tabular, color: TINTA_MEDIA }}>{moneda(fila.subtotal)}</strong></span>
-          {fila.descuento > 0 && <span>Descuento <strong style={{ ...tabular, color: ACENTO }}>−{moneda(fila.descuento)}</strong></span>}
-          {fila.costo_envio > 0 && <span>Envío <strong style={{ ...tabular, color: TINTA_MEDIA }}>{moneda(fila.costo_envio)}</strong></span>}
-          <span>Total <strong style={{ ...tabular, color: TINTA }}>{moneda(fila.total)}</strong></span>
-        </div>
-      </div>
-
-      <div>
-        <p style={sub}>Pagos</p>
-        {fila.pagos.length === 0 ? (
-          <p style={{ margin: 0, color: GRIS_SUAVE, fontSize: 11.5 }}>Sin pagos registrados.</p>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              {fila.pagos.map((pg, i) => {
-                const cancelado = !!pg.cancelado_at
-                return (
-                  <tr key={pg.id} style={{ borderTop: i ? `1px solid ${PISTA}` : 'none', opacity: cancelado ? 0.5 : 1 }}>
-                    <td style={{ ...celda, ...tabular }}>{etiquetaFecha(pg.fecha_pago)}</td>
-                    <td style={{ ...celda, color: GRIS, fontSize: 10.5 }}>{pg.metodo || '—'}</td>
-                    <td style={{ ...celda, color: GRIS_SUAVE, fontSize: 10.5, maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis' }} title={pg.referencia || ''}>
-                      {pg.referencia || ''}
-                    </td>
-                    <td style={{ ...celda, ...tabular, textAlign: 'right', fontWeight: 600, textDecoration: cancelado ? 'line-through' : 'none' }}>
-                      {moneda(pg.monto)}
-                    </td>
-                    <td style={{ ...celda, textAlign: 'right' }}>
-                      {cancelado ? (
-                        <span style={{ color: ROJO, fontSize: 10 }} title={pg.cancelado_motivo || ''}>cancelado</span>
-                      ) : canEdit ? (
-                        <button
-                          type="button"
-                          onClick={() => onCancelarPago(fila, pg.id)}
-                          style={{ padding: '2px 7px', background: '#fff', border: `1px solid ${PISTA}`, borderRadius: 5, color: GRIS_SUAVE, fontSize: 10, cursor: 'pointer' }}
-                        >
-                          cancelar
-                        </button>
-                      ) : null}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        )}
-
-        <div style={{ marginTop: 10, paddingTop: 9, borderTop: `1px solid ${BORDE}`, display: 'flex', flexWrap: 'wrap', gap: 14, fontSize: 11, color: GRIS }}>
-          {fila.condiciones_pago && <span>Condiciones <strong style={{ color: TINTA_MEDIA }}>{fila.condiciones_pago.replace('_', ' ')}</strong></span>}
-          {fila.fecha_vencimiento && <span>Vence <strong style={{ ...tabular, color: fila.dias_vencido > 0 ? ROJO : TINTA_MEDIA }}>{etiquetaFecha(fila.fecha_vencimiento)}</strong></span>}
-          {fila.folio_factura && <span>Factura <strong style={{ color: TINTA_MEDIA }}>{fila.folio_factura}</strong></span>}
-          {/* created_at es auditoria: cuando se CAPTURO, no la fecha del pedido. */}
-          <span title="Cuándo se capturó en el sistema">
-            Capturado <strong style={{ color: GRIS_SUAVE }}>{etiquetaFecha(fila.created_at)}</strong>
-          </span>
-          {/* La ficha del cliente se llega desde aqui: el nombre de la fila
-              ya no es un link, porque la fila entera abre este panel. */}
-          {fila.cliente_id && (
-            <a href={`/admin/clientes/edit/${fila.cliente_id}`} style={{ color: ACENTO, textDecoration: 'none', fontWeight: 600 }}>
-              Ficha del cliente →
-            </a>
-          )}
-        </div>
-
-        {fila.notas && (
-          <p style={{ margin: '9px 0 0', color: GRIS, fontSize: 11.5, whiteSpace: 'pre-wrap' }}>{fila.notas}</p>
-        )}
-
-        {/* Envio y eliminar: lo poco frecuente, pero sin otro lugar donde vivir. */}
-        {canEdit && (
-          <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${BORDE}`, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-            <span style={{ color: GRIS, fontSize: 11 }}>
-              {fila.paqueteria || fila.guia_envio
-                ? <>Envio: <strong style={{ color: TINTA_MEDIA }}>{fila.paqueteria || 's/paqueteria'}</strong>{fila.guia_envio ? ` · guia ${fila.guia_envio}` : ''}</>
-                : 'Sin datos de envio'}
-            </span>
-            <button
-              type="button"
-              onClick={() => onEnvio(fila)}
-              style={{ padding: '4px 10px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 6, color: TINTA_MEDIA, fontSize: 11, fontWeight: 600, cursor: 'pointer' }}
-            >
-              {fila.paqueteria || fila.guia_envio ? 'Editar envio' : 'Capturar envio'}
-            </button>
-            <button
-              type="button"
-              onClick={() => onEliminar(fila)}
-              style={{ marginLeft: 'auto', padding: '4px 10px', background: '#fff', border: '1px solid #fecaca', borderRadius: 6, color: ROJO, fontSize: 11, cursor: 'pointer' }}
-            >
-              Eliminar pedido
-            </button>
-          </div>
-        )}
-      </div>
     </div>
   )
 }

@@ -125,6 +125,8 @@ export type PagoFila = {
   metodo: string | null
   referencia: string | null
   fecha_pago: string
+  /** auth.users(id). Se resuelve a nombre con el catalogo de staff. */
+  registrado_por: string | null
   cancelado_at: string | null
   cancelado_motivo: string | null
 }
@@ -222,6 +224,7 @@ export function armarFilas(
       metodo: texto(p.metodo),
       referencia: texto(p.referencia),
       fecha_pago: String(p.fecha_pago ?? '').slice(0, 10),
+      registrado_por: texto(p.registrado_por),
       cancelado_at: texto(p.cancelado_at),
       cancelado_motivo: texto(p.cancelado_motivo),
     }
@@ -303,6 +306,71 @@ export function armarFilas(
       pagos: pagosPorPedido.get(id) ?? [],
     }
   })
+}
+
+// ── Linea de tiempo ─────────────────────────────────────────
+
+export type EstadoPaso = 'hecho' | 'actual' | 'pendiente' | 'cancelado'
+
+export type PasoPedido = {
+  key: string
+  label: string
+  estado: EstadoPaso
+  /** 'YYYY-MM-DD', o null si ese dato no se guarda en ningun lado. */
+  fecha: string | null
+}
+
+/** El orden en que avanza un pedido. 'enviado' ya pasó por confirmado. */
+const AVANCE = ['pendiente', 'confirmado', 'enviado', 'entregado']
+
+/**
+ * Los pasos de la linea de tiempo del panel.
+ *
+ * Confirmado no lleva fecha, y no es un olvido: `pedidos` no guarda cuando
+ * se confirmo — no existe una columna `confirmado_at` —, asi que la unica
+ * fuente seria `audit_log`, que solo lee super_admin. Se marca alcanzado por
+ * el status y sin fecha, que es honesto, en vez de inventar una.
+ *
+ * Un cancelado corta la linea: lo que venia despues nunca paso, y pintar
+ * cuatro pasos grises debajo de un cancelado solo confunde.
+ *
+ * Pagado puede estar alcanzado sin Entregado — pago por adelantado —, y en
+ * ese caso la linea queda con un hueco. Es lo que de verdad ocurrio.
+ */
+export function pasosDe(f: FilaPedido): PasoPedido[] {
+  const creado = f.created_at ? f.created_at.slice(0, 10) : f.fecha_pedido
+
+  if (f.status === 'cancelado') {
+    return [
+      { key: 'creado', label: 'Creado', estado: 'hecho', fecha: creado },
+      { key: 'cancelado', label: 'Cancelado', estado: 'cancelado', fecha: null },
+    ]
+  }
+
+  const i = AVANCE.indexOf(f.status)
+  const avance = i < 0 ? 0 : i
+  const pagado = f.total > 0 && f.estado_cobro === 'pagado'
+
+  // La fecha de Pagado es la del pago que cerro el saldo: el ultimo vigente.
+  const vigentes = f.pagos.filter(p => !p.cancelado_at).map(p => p.fecha_pago).sort()
+  const fechaPago = pagado && vigentes.length ? vigentes[vigentes.length - 1] : null
+
+  const crudos = [
+    { key: 'creado', label: 'Creado', alcanzado: true, fecha: creado },
+    { key: 'confirmado', label: 'Confirmado', alcanzado: avance >= 1, fecha: null },
+    { key: 'entregado', label: 'Entregado', alcanzado: avance >= 3, fecha: f.fecha_entrega_real },
+    { key: 'pagado', label: 'Pagado', alcanzado: pagado, fecha: fechaPago },
+  ]
+
+  // El ultimo alcanzado es el paso "actual": el que esta pasando ahora.
+  const ultimo = crudos.reduce((acc, paso, idx) => (paso.alcanzado ? idx : acc), 0)
+
+  return crudos.map((paso, idx) => ({
+    key: paso.key,
+    label: paso.label,
+    fecha: paso.fecha,
+    estado: !paso.alcanzado ? 'pendiente' : idx === ultimo ? 'actual' : 'hecho',
+  }))
 }
 
 // ── Filtros ─────────────────────────────────────────────────
