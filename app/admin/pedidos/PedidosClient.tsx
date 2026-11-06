@@ -1,5 +1,5 @@
 'use client'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { useRouter } from 'next/navigation'
 import { etiquetaFecha } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
@@ -9,9 +9,10 @@ import TablaPedidos from './TablaPedidos'
 import DrawerPago from './DrawerPago'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
-  type FilaPedido, type Filtros, type Orden,
-  FILTROS_VACIOS, STATUS, armarFilas, card, cobroDe, filtrar, moneda,
-  ordenar, statusDe, tabular, totalesDe,
+  type ColumnaOpcional, type FilaPedido, type Filtros, type Orden,
+  COLUMNAS_OPCIONALES, FILTROS_VACIOS, STATUS, armarFilas, card, cobroDe,
+  columnasConDato, estadoDe, filtrar, moneda, ordenar, statusDe, tabular,
+  totalesDe,
 } from './pedidos-ui'
 
 /**
@@ -25,14 +26,92 @@ import {
  * Word — en vez de tener su propia version.
  */
 
+/**
+ * Tabla o tarjetas, nunca las dos.
+ *
+ * El `display` de `.pd-movil` vive aqui y NO en un style inline: un
+ * `display: flex` inline le gana siempre a la clase, y por eso las tarjetas
+ * se pintaban tambien en desktop, debajo de la tabla, con cada pedido dos
+ * veces. Si se vuelve a necesitar flex en esa lista, va en el CSS.
+ */
 const CSS = `
   .pd-tabla { display: block; }
   .pd-movil { display: none; }
-  @media (max-width: 860px) {
+  .pd-herramientas { display: flex; }
+  @media (max-width: 767px) {
     .pd-tabla { display: none; }
-    .pd-movil { display: block; }
+    .pd-movil { display: flex; flex-direction: column; gap: 10px; }
+    .pd-herramientas { display: none; }
   }
 `
+
+const ETIQUETA_COLUMNA: Record<ColumnaOpcional, string> = {
+  vendedor: 'Vendedor',
+  entrega: 'Entrega',
+  orden_compra: 'OC',
+}
+
+/**
+ * La preferencia de columnas, en localStorage y leida como store externo.
+ *
+ * Va con `useSyncExternalStore` y no con un `useState` que se llena en un
+ * efecto: localStorage no existe en el render del servidor, y este hook es
+ * el que sabe servir un snapshot distinto en servidor y en cliente sin
+ * desacomodar la hidratacion.
+ *
+ * Solo guarda lo que se eligio A MANO. Lo que no esta aqui lo decide el
+ * dato, en `columnas`.
+ */
+type PrefColumnas = Partial<Record<ColumnaOpcional, boolean>>
+
+const CLAVE_COLUMNAS = 'tarabana.pedidos.columnas'
+const SIN_PREFERENCIA: PrefColumnas = {}
+
+const oyentesCols = new Set<() => void>()
+let crudoCols: string | null = null
+let prefCols: PrefColumnas = SIN_PREFERENCIA
+
+/** Tiene que devolver la MISMA referencia si nada cambio, o React cicla. */
+function snapshotColumnas(): PrefColumnas {
+  let crudo: string | null = null
+  try {
+    crudo = localStorage.getItem(CLAVE_COLUMNAS)
+  } catch {
+    // Modo privado: se trabaja sin preferencia guardada.
+  }
+  if (crudo !== crudoCols) {
+    crudoCols = crudo
+    let dato: unknown = null
+    try {
+      dato = crudo ? JSON.parse(crudo) : null
+    } catch {
+      dato = null
+    }
+    prefCols = dato && typeof dato === 'object' ? (dato as PrefColumnas) : SIN_PREFERENCIA
+  }
+  return prefCols
+}
+
+function suscribirColumnas(cambio: () => void) {
+  oyentesCols.add(cambio)
+  // Otra pestana con la misma tabla: la preferencia se sigue ahi tambien.
+  window.addEventListener('storage', cambio)
+  return () => {
+    oyentesCols.delete(cambio)
+    window.removeEventListener('storage', cambio)
+  }
+}
+
+function guardarColumnas(pref: PrefColumnas) {
+  try {
+    localStorage.setItem(CLAVE_COLUMNAS, JSON.stringify(pref))
+  } catch {
+    // Sin cuota para guardar: la sesion actual igual respeta la eleccion.
+    crudoCols = JSON.stringify(pref)
+    prefCols = pref
+  }
+  for (const cambio of oyentesCols) cambio()
+}
 
 type Props = {
   pedidos: Record<string, unknown>[]
@@ -51,6 +130,8 @@ export default function PedidosClient(props: Props) {
   const [filtros, setFiltros] = useState<Filtros>(FILTROS_VACIOS)
   const [orden, setOrden] = useState<Orden>({ columna: 'fecha_pedido', asc: false })
   const [expandida, setExpandida] = useState<string | null>(null)
+  const [menuCols, setMenuCols] = useState(false)
+  const colsPref = useSyncExternalStore(suscribirColumnas, snapshotColumnas, () => SIN_PREFERENCIA)
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [pagoDe, setPagoDe] = useState<FilaPedido | null>(null)
   const [statusPedido, setStatusPedido] = useState<FilaPedido | null>(null)
@@ -64,6 +145,25 @@ export default function PedidosClient(props: Props) {
   const filtradas = useMemo(() => ordenar(filtrar(todas, filtros), orden), [todas, filtros, orden])
   const totales = useMemo(() => totalesDe(filtradas), [filtradas])
   const seleccionadas = useMemo(() => filtradas.filter(f => seleccion.has(f.id)), [filtradas, seleccion])
+
+  /**
+   * Las columnas opcionales.
+   *
+   * Por default se esconden las que no traen dato en NINGUNA fila del
+   * filtro: una columna de guiones no informa y le quita ancho al cliente.
+   * La eleccion a mano pesa mas que eso y se guarda, para no volver a
+   * prenderla cada vez que se entra.
+   */
+  const conDato = useMemo(() => columnasConDato(filtradas), [filtradas])
+  const columnas = useMemo(
+    () => Object.fromEntries(
+      COLUMNAS_OPCIONALES.map(k => [k, colsPref[k] ?? conDato[k]])
+    ) as Record<ColumnaOpcional, boolean>,
+    [colsPref, conDato]
+  )
+
+  const alternarColumna = (k: ColumnaOpcional) =>
+    guardarColumnas({ ...colsPref, [k]: !columnas[k] })
 
   const refrescar = () => { router.refresh(); setSeleccion(new Set()) }
 
@@ -329,11 +429,57 @@ export default function PedidosClient(props: Props) {
         </div>
       )}
 
+      <div className="pd-herramientas" style={{ justifyContent: 'flex-end', marginBottom: 8 }}>
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setMenuCols(v => !v)}
+            style={{ padding: '6px 11px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 7, color: TINTA_MEDIA, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+          >
+            Columnas
+          </button>
+          {menuCols && (
+            <>
+              {/* Un fondo invisible cierra el menu al picar afuera, sin
+                  listeners sueltos en document. */}
+              <div onClick={() => setMenuCols(false)} style={{ position: 'fixed', inset: 0, zIndex: 40 }} />
+              <div
+                style={{
+                  position: 'absolute', top: 'calc(100% + 5px)', right: 0, zIndex: 41,
+                  minWidth: 190, padding: '7px 0', background: '#fff',
+                  border: `1px solid ${BORDE}`, borderRadius: 9,
+                  boxShadow: '0 8px 24px rgba(17,24,39,0.12)',
+                }}
+              >
+                {COLUMNAS_OPCIONALES.map(k => (
+                  <label
+                    key={k}
+                    style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px', color: TINTA_MEDIA, fontSize: 12.5, cursor: 'pointer' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={columnas[k]}
+                      onChange={() => alternarColumna(k)}
+                      style={{ cursor: 'pointer' }}
+                    />
+                    {ETIQUETA_COLUMNA[k]}
+                    {!conDato[k] && (
+                      <span style={{ marginLeft: 'auto', color: GRIS_SUAVE, fontSize: 10.5 }}>vacía</span>
+                    )}
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
       <div className="pd-tabla" style={{ ...card, padding: '6px 14px 0', maxHeight: '72vh', overflowY: 'auto' }}>
         <TablaPedidos
           filas={filtradas}
           orden={orden}
           onOrden={setOrden}
+          columnas={columnas}
           expandida={expandida}
           onExpandir={setExpandida}
           seleccion={seleccion}
@@ -347,16 +493,16 @@ export default function PedidosClient(props: Props) {
         />
       </div>
 
-      {/* Movil: una tarjeta por pedido. */}
-      <div className="pd-movil" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Movil: una tarjeta por pedido, y SOLO abajo de 768px. El display
+          lo pone `.pd-movil` en el CSS; no va inline. */}
+      <div className="pd-movil">
         {filtradas.length === 0 && (
           <p style={{ padding: '36px 0', textAlign: 'center', color: GRIS_SUAVE, fontSize: 13 }}>
             Ningun pedido coincide con los filtros.
           </p>
         )}
         {filtradas.map(f => {
-          const st = statusDe(f.status)
-          const cb = cobroDe(f.estado_cobro)
+          const es = estadoDe(f)
           return (
             <div key={f.id} style={{ ...card, padding: '13px 15px' }}>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
@@ -365,13 +511,21 @@ export default function PedidosClient(props: Props) {
                 <span style={{ ...tabular, marginLeft: 'auto', color: TINTA, fontSize: 15, fontWeight: 700 }}>{moneda(f.total)}</span>
               </div>
 
-              <p style={{ margin: '0 0 8px', color: TINTA_MEDIA, fontSize: 12.5 }}>{f.cliente}</p>
+              <p style={{ margin: 0, color: TINTA, fontSize: 12.5, fontWeight: 600 }}>{f.cliente}</p>
+              {f.cliente_sub && (
+                <p style={{ margin: '1px 0 0', color: GRIS_SUAVE, fontSize: 11 }}>{f.cliente_sub}</p>
+              )}
 
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 9 }}>
-                <span style={{ padding: '2px 8px', borderRadius: 99, background: st.fondo, color: st.color, fontSize: 10.5, fontWeight: 600 }}>{st.label}</span>
-                <span style={{ padding: '2px 8px', borderRadius: 99, background: cb.fondo, color: cb.color, fontSize: 10.5, fontWeight: 600 }}>
-                  {cb.label}{f.dias_vencido > 0 ? ` · ${f.dias_vencido} d` : ''}
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', margin: '8px 0 9px' }}>
+                {/* Un solo chip de estado, igual que en la tabla. */}
+                <span style={{ padding: '2px 8px', borderRadius: 99, background: es.fondo, color: es.color, fontSize: 10.5, fontWeight: 600 }}>
+                  {es.label}
                 </span>
+                {es.sub && (
+                  <span style={{ padding: '2px 8px', borderRadius: 99, background: PISTA, color: GRIS, fontSize: 10.5 }}>
+                    {es.sub}
+                  </span>
+                )}
                 {f.litros > 0 && (
                   <span style={{ ...tabular, padding: '2px 8px', borderRadius: 99, background: PISTA, color: GRIS, fontSize: 10.5 }}>
                     {formatLitros(f.litros)}
@@ -398,11 +552,13 @@ export default function PedidosClient(props: Props) {
                 </div>
               )}
 
+              {/* Registrar pago primero: en movil es la unica razon por la
+                  que alguien abre esta pantalla de pie en una entrega. */}
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <a href={`/admin/pedidos/${f.id}/edit`} style={{ ...btn('#fff', GRIS, BORDE), padding: '6px 11px', fontSize: 12, textDecoration: 'none' }}>Ver</a>
                 {canEdit && f.saldo > 0 && f.status !== 'cancelado' && (
                   <button type="button" onClick={() => setPagoDe(f)} style={{ ...btn('#fff', ACENTO, ACENTO), padding: '6px 11px', fontSize: 12 }}>Registrar pago</button>
                 )}
+                <a href={`/admin/pedidos/${f.id}/edit`} style={{ ...btn('#fff', GRIS, BORDE), padding: '6px 11px', fontSize: 12, textDecoration: 'none' }}>Ver</a>
                 {canEdit && f.status !== 'cancelado' && (
                   <button type="button" onClick={() => setStatusPedido(f)} style={{ ...btn('#fff', GRIS, BORDE), padding: '6px 11px', fontSize: 12 }}>Status</button>
                 )}
