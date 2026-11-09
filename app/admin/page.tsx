@@ -88,7 +88,7 @@ export default async function AdminDashboard() {
   // cambio trae exactamente los perfiles que se van a pintar y ninguno mas.
   const clienteIds = [...new Set((saldos || []).map(f => f.cliente_id).filter(Boolean) as string[])]
   const { data: clientes } = clienteIds.length
-    ? await supabase.from('profiles').select('id, full_name, email, razon_social').in('id', clienteIds)
+    ? await supabase.from('profiles').select('id, full_name, email, razon_social, marca_negocio').in('id', clienteIds)
     : { data: [] }
 
   return (
