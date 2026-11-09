@@ -5,6 +5,19 @@ import { camposCliente, nombreCompletoDe, validarCliente } from '../../../../../
 import { logAction } from '../../../../../src/lib/audit'
 
 /**
+ * Un throw inesperado tiene que salir como JSON.
+ *
+ * Sin esto, Next responde la pagina de error en HTML, el cliente no encuentra
+ * `json.error` y en pantalla queda un mensaje genérico mientras el error real
+ * vive solo en los logs. El stack se sigue imprimiendo completo.
+ */
+function fallaInesperada(e: unknown, donde: string) {
+  console.error(`[${donde}]`, e)
+  const detalle = e instanceof Error ? e.message : String(e)
+  return NextResponse.json({ error: `Error inesperado del servidor: ${detalle}` }, { status: 500 })
+}
+
+/**
  * Da de alta un cliente.
  *
  * Las columnas que se escriben salen de `camposCliente`, el mismo mapeo que
@@ -13,7 +26,7 @@ import { logAction } from '../../../../../src/lib/audit'
  * silencio: la direccion estructurada, el nivel de precio y las notas de un
  * cliente nuevo no llegaban a la base.
  */
-export async function POST(request: Request) {
+async function manejar(request: Request) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -99,4 +112,12 @@ export async function POST(request: Request) {
   })
 
   return NextResponse.json({ ok: true, id: newUser.user.id })
+}
+
+export async function POST(request: Request) {
+  try {
+    return await manejar(request)
+  } catch (e) {
+    return fallaInesperada(e, 'clientes/crear')
+  }
 }

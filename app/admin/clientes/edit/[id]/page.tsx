@@ -7,6 +7,7 @@ import ClienteProForm, {
   type ClienteProData,
 } from '../../../../../src/components/ClienteProForm'
 import { isVendedor } from '../../../../../src/lib/roles'
+import { mensajeDeError } from '../../../../../src/lib/respuesta'
 import Encabezado from '../../Encabezado'
 
 /**
@@ -103,10 +104,11 @@ export default function EditarClientePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpoCliente(d)),
     })
-    const json = await res.json().catch(() => ({}))
     setGuardando(false)
 
-    if (!res.ok) return { error: json.error || 'No se pudo guardar.' }
+    if (!res.ok) {
+      return { error: await mensajeDeError(res, 'No se pudo guardar el cliente') }
+    }
 
     router.push(irAPedido ? `/admin/pedidos/nuevo?cliente=${id}` : '/admin/clientes')
     router.refresh()

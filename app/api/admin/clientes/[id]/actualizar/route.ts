@@ -5,6 +5,19 @@ import { camposCliente, validarCliente } from '../../../../../../src/lib/cliente
 import { logAction } from '../../../../../../src/lib/audit'
 
 /**
+ * Un throw inesperado tiene que salir como JSON.
+ *
+ * Sin esto, Next responde la pagina de error en HTML, el cliente no encuentra
+ * `json.error` y en pantalla queda un mensaje genérico mientras el error real
+ * vive solo en los logs. El stack se sigue imprimiendo completo.
+ */
+function fallaInesperada(e: unknown, donde: string) {
+  console.error(`[${donde}]`, e)
+  const detalle = e instanceof Error ? e.message : String(e)
+  return NextResponse.json({ error: `Error inesperado del servidor: ${detalle}` }, { status: 500 })
+}
+
+/**
  * Edita un cliente.
  *
  * Las columnas salen de `camposCliente`, el mismo mapeo que usa la ruta de
@@ -14,7 +27,7 @@ import { logAction } from '../../../../../../src/lib/audit'
  * no los edita. Eso tambien es lo que impide que se pase un cliente a su
  * propia cartera cambiandole el `vendedor_id`.
  */
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+async function manejar(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -83,4 +96,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   })
 
   return NextResponse.json({ ok: true })
+}
+
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    return await manejar(request, ctx)
+  } catch (e) {
+    return fallaInesperada(e, 'clientes/actualizar')
+  }
 }

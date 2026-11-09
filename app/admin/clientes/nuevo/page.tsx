@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '../../../../src/lib/supabase'
 import ClienteProForm, { cuerpoCliente, type ClienteProData } from '../../../../src/components/ClienteProForm'
 import { isVendedor } from '../../../../src/lib/roles'
+import { mensajeDeError } from '../../../../src/lib/respuesta'
 import Encabezado from '../Encabezado'
 
 /**
@@ -56,10 +57,15 @@ export default function NuevoClientePage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(cuerpoCliente(d)),
     })
-    const json = await res.json().catch(() => ({}))
-    setGuardando(false)
+    if (!res.ok) {
+      setGuardando(false)
+      // El mensaje del servidor tal cual, con el status: un 500 no devuelve
+      // JSON y el texto genérico escondia el error real.
+      return { error: await mensajeDeError(res, 'No se pudo crear el cliente') }
+    }
 
-    if (!res.ok) return { error: json.error || 'No se pudo crear el cliente.' }
+    const json = await res.json().catch(() => ({} as { id?: string }))
+    setGuardando(false)
 
     // El POS ya acepta `?cliente=`, asi que no hace falta tocarlo.
     router.push(irAPedido && json.id ? `/admin/pedidos/nuevo?cliente=${json.id}` : '/admin/clientes')

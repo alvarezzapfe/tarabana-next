@@ -505,7 +505,7 @@ export default function ClienteProForm(props: Props) {
                       <input
                         value={d.cp_fiscal}
                         onChange={e => set('cp_fiscal', e.target.value.replace(/\D/g, '').slice(0, 5))}
-                        placeholder="00000"
+                        placeholder="ej. 03100"
                         inputMode="numeric"
                         style={entrada}
                       />
@@ -569,7 +569,7 @@ export default function ClienteProForm(props: Props) {
                     <input
                       value={d.dias_credito}
                       onChange={e => set('dias_credito', e.target.value.replace(/\D/g, '').slice(0, 3))}
-                      placeholder="30"
+                      placeholder="ej. 30"
                       inputMode="numeric"
                       style={entrada}
                     />
@@ -578,7 +578,7 @@ export default function ClienteProForm(props: Props) {
                     <input
                       value={d.limite_credito}
                       onChange={e => set('limite_credito', e.target.value.replace(/[^\d]/g, '').slice(0, 9))}
-                      placeholder="50000"
+                      placeholder="ej. 50000"
                       inputMode="numeric"
                       style={entrada}
                     />
@@ -604,7 +604,7 @@ export default function ClienteProForm(props: Props) {
             )}
 
             {error && (
-              <p style={{ margin: 0, padding: '10px 13px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontSize: 12.5 }}>
+              <p style={{ margin: 0, padding: '10px 13px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
                 {error}
               </p>
             )}
