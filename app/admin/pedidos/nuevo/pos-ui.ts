@@ -115,6 +115,75 @@ export const disponibleEn = (
 export const detalleStock = (d: Disponibilidad): string =>
   `físico ${d.fisico} · comprometido ${d.comprometido}`
 
+/**
+ * Todo lo que una celda tiene que mostrar, decidido en un solo lugar.
+ *
+ * Existe porque el POS pinta la misma celda de DOS maneras —la matriz en
+ * escritorio y una tarjeta en movil— y cada una resolvia por su cuenta que
+ * mostrar. La de movil hacia
+ *
+ *   precio > 0 ? `${moneda(precio)} · ${stock} disp.` : 'sin precio'
+ *
+ * o sea que cuando el cliente no tenia precio para esa presentacion el
+ * DISPONIBLE desaparecia. Y como que presentaciones tienen precio depende del
+ * nivel del cliente, cambiar de cliente cambiaba en que celdas habia numero:
+ * medido contra produccion, 15 celdas perdian el disponible al pasar de un
+ * cliente publico a El Caracol Tap (distribuidor).
+ *
+ * La regla es: el disponible depende SOLO del inventario y del comprometido
+ * global, asi que sale igual para todos los clientes y se muestra siempre. El
+ * nivel del cliente decide el precio y si se puede capturar, nada mas.
+ *
+ * `enCarrito` NO se resta del disponible: se reporta aparte. Restarlo haria
+ * que el mismo inventario se viera distinto segun lo que uno lleve capturado,
+ * que es la otra forma del mismo error.
+ */
+export type VistaCelda = {
+  /** Los tres numeros del inventario. Independientes del cliente. */
+  stock: Disponibilidad
+  /** "físico X · comprometido Y". Independiente del cliente. */
+  detalle: string
+  /** Unidades de esta celda ya capturadas. Independiente del cliente. */
+  enCarrito: number
+  /** Precio del nivel del cliente. 0 si no hay. */
+  precio: number
+  /** Por que no se puede capturar en este nivel, o null. */
+  motivo: string | null
+  /** Se capturo mas de lo disponible. */
+  excede: boolean
+}
+
+export function vistaCelda(
+  producto: Producto,
+  presentacion: string,
+  sufijo: 'publico' | 'taproom',
+  comprometido: Map<string, number>,
+  enCarrito = 0
+): VistaCelda {
+  const stock = celdaStock(producto, presentacion, comprometido)
+  return {
+    stock,
+    detalle: detalleStock(stock),
+    enCarrito,
+    precio: precioDe(producto, presentacion, sufijo),
+    motivo: motivoBloqueo(producto, presentacion, sufijo, comprometido),
+    excede: enCarrito > stock.disponible,
+  }
+}
+
+/**
+ * Si la celda merece un renglon en la vista de movil.
+ *
+ * Mira los DOS niveles de precio, igual que `presentacionesVisibles`: si
+ * dependiera del nivel del cliente, los renglones aparecerian y desaparecerian
+ * al cambiar de cliente. Una presentacion sin precio en ningun nivel y sin
+ * stock no tiene nada que decir.
+ */
+export function celdaVale(producto: Producto, presentacion: string, comprometido: Map<string, number>): boolean {
+  if (celdaStock(producto, presentacion, comprometido).fisico > 0) return true
+  return precioDe(producto, presentacion, 'publico') > 0 || precioDe(producto, presentacion, 'taproom') > 0
+}
+
 /** Precio de un producto en una presentacion, para el nivel del cliente. */
 export function precioDe(producto: Producto, presentacion: string, sufijo: 'publico' | 'taproom'): number {
   return precioUnitario(producto, presentacion, sufijo)
