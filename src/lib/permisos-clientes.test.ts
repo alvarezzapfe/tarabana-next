@@ -30,6 +30,28 @@ test('contabilidad ve la pestana de Clientes, y SOLO esa', () => {
   assert.deepEqual(tabsParaRol('clientes', 'contabilidad').map(t => t.key), ['clientes'])
 })
 
+test('contabilidad NO entra a Puntos de venta', () => {
+  // Decidido explicitamente: contabilidad ve y exporta clientes, y nada mas
+  // de esta seccion.
+  assert.ok(
+    !tabsParaRol('clientes', 'contabilidad').some(t => t.key === 'puntos-venta'),
+    'contabilidad alcanzo la pestana de Puntos de venta'
+  )
+})
+
+test('el alta de un punto de venta solo se ofrece a quien puede guardarla', () => {
+  // El boton "+ Nuevo punto de venta" vive en la page, no en el nav, asi que
+  // su candado se revisa en el codigo. Sin el, ventas y produccion veian un
+  // boton que lleva a un formulario que la ruta POST les rechaza con 403 —
+  // y la imagen se sube ANTES del POST, asi que ademas dejaban un archivo
+  // huerfano en storage.
+  const page = readFileSync(join(process.cwd(), 'app/admin/clientes/page.tsx'), 'utf8')
+  assert.ok(/canManageAsAdmin\(role\)/.test(page), 'la page no filtra el boton por canManageAsAdmin')
+
+  const ruta = readFileSync(join(process.cwd(), 'app/api/admin/puntos-venta/route.ts'), 'utf8')
+  assert.ok(/canManageAsAdmin\(/.test(ruta), 'la ruta de puntos de venta no autoriza con canManageAsAdmin')
+})
+
 test('los demas roles de oficina conservan las dos pestanas', () => {
   for (const rol of ['super_admin', 'admin', 'ventas', 'produccion'] as const) {
     assert.deepEqual(tabsParaRol('clientes', rol).map(t => t.key), ['clientes', 'puntos-venta'], rol)

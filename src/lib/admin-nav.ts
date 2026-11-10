@@ -108,10 +108,13 @@ export const NAV: NavItemDef[] = [
     tabs: [
       { key: 'clientes', label: 'Clientes', visible: canVerClientes },
       // `canWrite` y no `isStaff`: contabilidad entro a esta seccion para ver
-      // y exportar CLIENTES, y esa es la decision que se tomo. Puntos de
-      // venta queda como estaba — era inalcanzable para contabilidad porque
-      // el item padre lo era, y abrirselo de pasada seria un cambio de
-      // alcance que nadie pidio.
+      // y exportar CLIENTES, y Puntos de venta queda SIN acceso para ella.
+      // Decision del dueno del proyecto, no un efecto colateral: hasta que
+      // el item padre se abrio a contabilidad, esta pestana era inalcanzable
+      // para ese rol aunque declarara isStaff, y se decidio dejarla asi.
+      //
+      // Escribir aqui pide `canManageAsAdmin` (ver app/api/admin/puntos-venta),
+      // asi que ventas y produccion la ven en solo lectura.
       { key: 'puntos-venta', label: 'Puntos de venta', legacyHref: '/admin/puntos-venta', visible: canWrite },
     ],
   },
