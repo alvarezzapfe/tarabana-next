@@ -134,10 +134,14 @@ export function precioMostrado(
  * `* 24`. Asi que un precio por lata de 37.45 se cobra como **37** por lata
  * suelta y como **899** por caja de 24.
  *
- * Aqui NO se corrige: cambiar ese redondeo movería lo que cobran los pedidos,
- * que es una decision de negocio y no de esta pantalla. Lo que se hace es
- * AVISAR, porque una lista de precios que muestra 37.45 junto a "lata" estaria
- * diciendo un precio que el sistema no cobra.
+ * Esta pantalla ya no puede CREAR ese caso: `leerPrecio` solo acepta pesos
+ * enteros, justamente para que la lata y la caja cobren consistente sin tocar
+ * el redondeo de `precioUnitario`. El aviso sigue aqui porque la ficha del
+ * producto (`/admin/inventario/edit/[id]`) usa `parseFloat` y todavia puede
+ * guardar centavos: si alguien los metio por ahi, la lista tiene que decir lo
+ * que de verdad se cobra en vez de mostrar 37.45 junto a "lata".
+ *
+ * Verificado el 2026-11-10: hoy ningun precio de produccion trae decimales.
  *
  * Devuelve el precio que de verdad se cobra, o null si no hay diferencia.
  */
@@ -179,10 +183,21 @@ export type ValorCelda = { valor: number } | { error: string }
  * Interpreta lo que se escribio en una celda.
  *
  * Acepta separador de miles y el signo de pesos porque la gente pega precios
- * de otra hoja; lo que NO acepta es cero ni negativo. Un precio en cero no es
- * "gratis": en todo el sistema significa "sin precio configurado"
- * (`precioUnitario` devuelve 0 y `calcularPedido` rechaza la venta), asi que
- * guardar un 0 seria una forma silenciosa de dejar la celda vacia.
+ * de otra hoja. Lo que NO acepta:
+ *
+ *   - Cero ni negativo. Un precio en cero no es "gratis": en todo el sistema
+ *     significa "sin precio configurado" (`precioUnitario` devuelve 0 y
+ *     `calcularPedido` rechaza la venta), asi que guardar un 0 seria una forma
+ *     silenciosa de dejar la celda vacia.
+ *
+ *   - CENTAVOS. `precioUnitario` redondea el precio de la lata suelta pero no
+ *     el de la caja, asi que 37.45 se cobraria 37 por lata y 899 por caja de
+ *     24 — dos precios que no corresponden al mismo valor por lata. Con pesos
+ *     enteros los dos salen consistentes sin tener que tocar el redondeo de
+ *     `precioUnitario`, que es lo que cobran todos los pedidos.
+ *
+ * Un texto con decimales cuyo VALOR es entero si pasa ("2700.00"), porque es
+ * lo que sale al pegar de una hoja de calculo y no tiene nada de ambiguo.
  */
 export function leerPrecio(texto: string): ValorCelda {
   const limpio = texto.replace(/[$\s,]/g, '')
@@ -191,11 +206,10 @@ export function leerPrecio(texto: string): ValorCelda {
   const n = Number(limpio)
   if (!Number.isFinite(n)) return { error: 'no es un número' }
   if (n <= 0) return { error: 'tiene que ser mayor que 0' }
+  if (!Number.isInteger(n)) return { error: 'solo pesos enteros, sin centavos' }
   if (n > PRECIO_MAX) return { error: `no puede pasar de ${PRECIO_MAX.toLocaleString('es-MX')}` }
 
-  // Dos decimales: la columna es numeric y los centavos son lo mas fino que
-  // tiene sentido en un precio.
-  return { valor: Math.round(n * 100) / 100 }
+  return { valor: n }
 }
 
 // ── Sugerencia de mayorista ─────────────────────────────────
@@ -208,11 +222,16 @@ export const DESCUENTO_DEFAULT = 15
  * Es una SUGERENCIA: se escribe en la celda y se puede corregir antes de
  * guardar. Devuelve null si no hay publico del que partir, en vez de un cero
  * que se veria como un precio capturado.
+ *
+ * Redondea a PESOS ENTEROS porque es lo unico que `leerPrecio` acepta: una
+ * sugerencia con centavos llenaria la hoja de celdas que la validacion va a
+ * rechazar al guardar. El descuento si puede traer decimales (12.5%), lo que
+ * se redondea es el resultado.
  */
 export function mayoristaSugerido(publico: number | null, descuentoPct: number): number | null {
   if (publico === null || !Number.isFinite(publico) || publico <= 0) return null
   if (!Number.isFinite(descuentoPct) || descuentoPct < 0 || descuentoPct >= 100) return null
-  return Math.round(publico * (1 - descuentoPct / 100) * 100) / 100
+  return Math.round(publico * (1 - descuentoPct / 100))
 }
 
 // ── Lote por guardar ────────────────────────────────────────

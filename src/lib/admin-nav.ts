@@ -139,16 +139,14 @@ export const NAV: NavItemDef[] = [
     // Las dos vistas son RUTAS y no `?tab=`, asi que cada pestana trae su
     // href y cada pagina pinta la cabecera con su propia `activa`.
     //
-    // OJO con los predicados: existencias es `canManageInventory` (super
-    // admin, admin, produccion) y la lista de precios es `canWrite`, que
-    // ademas incluye a VENTAS. Hoy el item padre es canManageInventory, asi
-    // que a ventas el sidebar no le muestra Inventario y solo llegaria a
-    // Precios por URL —la ruta y la pagina si lo dejan entrar—. Abrir el
-    // padre a canWrite le mostraria tambien la pestana de existencias, que su
-    // rol no puede abrir, asi que esa decision se deja al dueno del proyecto.
+    // Los precios son de super admin, igual que en la ficha del producto:
+    // mover un precio cambia lo que se le cobra a todos los clientes. El
+    // predicado queda DENTRO del del item padre (isSuperAdmin esta en
+    // canManageInventory), asi que nadie ve una pestana de una seccion a la
+    // que no puede entrar.
     tabs: [
       { key: 'existencias', label: 'Existencias', href: '/admin/inventario', visible: canManageInventory },
-      { key: 'precios', label: 'Precios', href: '/admin/inventario/precios', visible: canWrite },
+      { key: 'precios', label: 'Precios', href: '/admin/inventario/precios', visible: isSuperAdmin },
     ],
   },
   {

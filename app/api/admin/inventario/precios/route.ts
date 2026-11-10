@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
-import { canWrite } from '../../../../../src/lib/roles'
+import { isSuperAdmin } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
 import { PRECIO_MAX, esColumnaPrecio } from '../../../../../src/lib/precios'
 
@@ -16,6 +16,13 @@ import { PRECIO_MAX, esColumnaPrecio } from '../../../../../src/lib/precios'
  * (`precioUnitario` devuelve 0 y `calcularPedido` rechaza la venta), asi que
  * guardarlo seria vaciar la celda en silencio; para eso tendria que existir una
  * operacion de borrado explicita, que esta pantalla no tiene.
+ *
+ * Solo PESOS ENTEROS. `precioUnitario` redondea la lata suelta pero no la
+ * caja, asi que un precio con centavos se cobraria inconsistente entre las dos
+ * presentaciones; con enteros cuadran sin tener que tocar ese redondeo.
+ *
+ * Permiso `isSuperAdmin`, el mismo que los precios de la ficha del producto:
+ * mover un precio cambia lo que se le cobra a todos los clientes.
  *
  * Cada producto se audita con su antes/despues. Va el diff y no el body, para
  * que en Actividad se lea que precio cambio y de cuanto a cuanto, que es la
@@ -33,7 +40,7 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!canWrite(profile?.role)) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
+  if (!isSuperAdmin(profile?.role)) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   let body: { cambios?: unknown }
   try {
@@ -83,11 +90,16 @@ export async function POST(request: Request) {
       if (valor <= 0) {
         return NextResponse.json({ error: `El precio de ${columna} tiene que ser mayor que 0.` }, { status: 400 })
       }
+      if (!Number.isInteger(valor)) {
+        return NextResponse.json(
+          { error: `El precio de ${columna} tiene centavos; solo se aceptan pesos enteros.` },
+          { status: 400 }
+        )
+      }
       if (valor > PRECIO_MAX) {
         return NextResponse.json({ error: `El precio de ${columna} se pasa del tope.` }, { status: 400 })
       }
-      // Centavos: la columna es numeric y mas decimales no significan nada.
-      limpio[columna] = Math.round(valor * 100) / 100
+      limpio[columna] = valor
     }
 
     if (Object.keys(limpio).length === 0) {

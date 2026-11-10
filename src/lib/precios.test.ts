@@ -163,12 +163,25 @@ test('faltantesDe cuenta solo celdas editables vacias', () => {
 
 // ── Lectura de una celda ────────────────────────────────────
 
-test('leerPrecio acepta lo que la gente pega y rechaza lo que no es precio', () => {
+test('leerPrecio acepta lo que la gente pega', () => {
   assert.deepEqual(leerPrecio('2700'), { valor: 2700 })
   assert.deepEqual(leerPrecio('$2,700'), { valor: 2700 }, 'pegar de otra hoja debe funcionar')
-  assert.deepEqual(leerPrecio(' 37.45 '), { valor: 37.45 })
-  // Mas de dos decimales se redondea a centavos.
-  assert.deepEqual(leerPrecio('37.456'), { valor: 37.46 })
+  assert.deepEqual(leerPrecio(' 2700 '), { valor: 2700 })
+  // Decimales cuyo VALOR es entero si pasan: es lo que sale al pegar de una
+  // hoja de calculo y no tiene nada de ambiguo.
+  assert.deepEqual(leerPrecio('2700.00'), { valor: 2700 })
+})
+
+test('leerPrecio rechaza los centavos, con el motivo', () => {
+  // `precioUnitario` redondea la lata suelta pero no la caja, asi que 37.45
+  // se cobraria 37 por lata y 899 por caja de 24: dos precios que no
+  // corresponden al mismo valor por lata. Con enteros cuadran sin tocar ese
+  // redondeo, que es lo que cobran todos los pedidos.
+  for (const centavos of ['37.45', '37.456', '0.5', '2700.01']) {
+    const r = leerPrecio(centavos)
+    assert.ok('error' in r, `${centavos} paso`)
+    if ('error' in r) assert.match(r.error, /pesos enteros/)
+  }
 })
 
 test('leerPrecio rechaza el cero, que en este sistema significa "sin precio"', () => {
@@ -197,8 +210,22 @@ test('mayoristaSugerido aplica el descuento sobre el publico', () => {
   assert.equal(mayoristaSugerido(2700, 15), 2295)
   assert.equal(mayoristaSugerido(60, 15), 51)
   assert.equal(mayoristaSugerido(100, 0), 100, 'sin descuento es el mismo precio')
-  // Centavos: 37.45 - 15% = 31.8325 -> 31.83
-  assert.equal(mayoristaSugerido(37.45, 15), 31.83)
+})
+
+test('la sugerencia siempre es un precio que leerPrecio aceptaria', () => {
+  // Si sugiriera centavos, la hoja se llenaria de celdas que la validacion
+  // rechaza justo al picar Guardar.
+  for (const publico of [2497, 1185, 37, 999, 1, 2700]) {
+    for (const pct of [15, 12.5, 7, 33.3]) {
+      const sugerido = mayoristaSugerido(publico, pct)
+      assert.ok(sugerido !== null, `${publico} / ${pct}%`)
+      assert.ok(Number.isInteger(sugerido), `${publico} - ${pct}% dio ${sugerido}`)
+      const leido = leerPrecio(String(sugerido))
+      assert.ok('valor' in leido, `${sugerido} no pasaria la validacion: ${JSON.stringify(leido)}`)
+    }
+  }
+  // 2497 - 15% = 2122.45 -> 2122
+  assert.equal(mayoristaSugerido(2497, 15), 2122)
 })
 
 test('mayoristaSugerido no inventa un precio cuando no hay de donde', () => {

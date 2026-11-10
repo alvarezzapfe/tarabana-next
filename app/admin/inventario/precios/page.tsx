@@ -1,5 +1,5 @@
 import { createServiceClient } from '../../../../src/lib/supabase-server'
-import { canWrite } from '../../../../src/lib/roles'
+import { isSuperAdmin } from '../../../../src/lib/roles'
 import { contextoAdmin } from '../../../../src/lib/admin-contexto'
 import { tabsParaRol } from '../../../../src/lib/admin-nav'
 import Tabs from '../../Tabs'
@@ -10,11 +10,9 @@ import PreciosClient from './PreciosClient'
 /**
  * Lista de precios, editable como una hoja de calculo.
  *
- * Permiso `canWrite`, que es el mismo guard de la ruta que guarda. OJO: es mas
- * ancho que el de la ficha del producto (`/admin/inventario/edit/[id]`), donde
- * los precios son solo de super admin. Fue decision explicita del dueno del
- * proyecto al pedir esta pantalla; el efecto es que ventas y produccion ahora
- * pueden mover precios desde aqui.
+ * Permiso `isSuperAdmin`, el mismo que los precios de la ficha del producto
+ * (`/admin/inventario/edit/[id]`) y el mismo guard de la ruta que guarda:
+ * mover un precio cambia lo que se le cobra a todos los clientes.
  *
  * El stock que se muestra de referencia es el DISPONIBLE (fisico menos lo
  * comprometido en pedidos abiertos), igual que el POS: poner un precio mirando
@@ -25,7 +23,7 @@ export const metadata = { title: 'Lista de precios — Tarabaña' }
 export default async function PreciosPage() {
   const { supabase, role, acento } = await contextoAdmin()
 
-  if (!canWrite(role)) {
+  if (!isSuperAdmin(role)) {
     return <p style={{ color: '#6b7280', fontSize: 14 }}>Sin acceso a esta sección.</p>
   }
 

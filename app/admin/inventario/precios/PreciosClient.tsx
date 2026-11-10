@@ -25,6 +25,11 @@ import { ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA, tabul
  * que dice cuantas celdas cambiaron. Las sugerencias de "mayorista = publico
  * menos X%" se escriben en la celda como texto editable, asi que se pueden
  * corregir una por una antes de guardar.
+ *
+ * Solo PESOS ENTEROS: `precioUnitario` redondea la lata suelta pero no la
+ * caja, asi que un precio con centavos se cobraria inconsistente entre las dos
+ * presentaciones. La celda lo rechaza con ese motivo en vez de redondear por su
+ * cuenta.
  */
 
 type Props = {
@@ -242,7 +247,7 @@ export default function PreciosClient({ productos, comprometido, acento }: Props
           ref={el => { refs.current.set(refKey(i, nivel), el) }}
           className="pre-celda"
           type="text"
-          inputMode="decimal"
+          inputMode="numeric"
           value={texto}
           placeholder="—"
           aria-label={`${p.nombre} · ${fila.label} · ${nivel === 'publico' ? 'Público' : 'Mayorista'}`}
@@ -349,7 +354,9 @@ export default function PreciosClient({ productos, comprometido, acento }: Props
         </label>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginLeft: 'auto', flexWrap: 'wrap' }}>
-          <span style={{ color: GRIS, fontSize: 12.5 }}>Mayorista = Público −</span>
+          <span style={{ color: GRIS, fontSize: 12.5 }} title="La sugerencia se redondea a pesos enteros">
+            Mayorista = Público −
+          </span>
           <input
             value={descuento}
             onChange={e => setDescuento(e.target.value.replace(/[^\d.]/g, ''))}
@@ -498,9 +505,9 @@ export default function PreciosClient({ productos, comprometido, acento }: Props
       <p style={{ margin: '12px 0 0', color: GRIS_SUAVE, fontSize: 11, lineHeight: 1.6 }}>
         Caja 12 y Caja 24 no se capturan: su precio sale del de la lata (×12 y ×24), que es como lo calcula
         el pedido. Un precio en cero no se guarda — en este sistema significa «sin precio» y bloquea la
-        venta. El disponible es el stock menos lo comprometido en pedidos abiertos. Si el precio por lata
-        lleva centavos, el pedido los redondea al vender una lata suelta pero no al vender la caja; la celda
-        lo avisa.
+        venta. Los precios van en pesos enteros: el pedido redondea la lata suelta pero no la caja, así que
+        con centavos las dos presentaciones cobrarían distinto. El disponible es el stock menos lo
+        comprometido en pedidos abiertos.
       </p>
     </div>
   )
