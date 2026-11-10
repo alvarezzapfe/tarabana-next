@@ -380,15 +380,29 @@ export type DatosCliente = {
   full_name: string | null
   email: string | null
   razon_social: string | null
+  /**
+   * El nombre comercial: como se conoce el NEGOCIO.
+   *
+   * Opcional en el tipo porque hay consultas que no lo traen (los perfiles de
+   * staff, por ejemplo, no tienen uno) y porque asi los call sites viejos
+   * siguen compilando. Cuando viene, manda.
+   */
+  marca_negocio?: string | null
 }
 
 const MINUSCULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en', 'el', 'a'])
 
 /**
- * Nombre en formato Titulo, solo si viene TODO EN MAYUSCULAS.
+ * El nombre con el que se muestra un cliente, en formato Titulo si hace falta.
  *
- * Los nombres que ya traen minusculas se dejan como estan: reescribirlos
- * seria adivinar donde van las mayusculas de un nombre propio.
+ * Precedencia: nombre comercial, razon social, nombre, correo. El comercial va
+ * primero porque el cliente es el NEGOCIO — una persona fisica puede facturar
+ * por un bar con su propia marca, y en la tabla se busca el bar, no a la
+ * persona.
+ *
+ * El formato Titulo se aplica solo si viene TODO EN MAYUSCULAS. Los nombres
+ * que ya traen minusculas se dejan como estan: reescribirlos seria adivinar
+ * donde van las mayusculas de un nombre propio.
  *
  * Respeta las siglas y las formas legales: un token con puntos ('S.A.P.I.')
  * o de la lista de sufijos se queda en mayusculas, para que
@@ -398,7 +412,7 @@ const MINUSCULAS = new Set(['de', 'del', 'la', 'las', 'los', 'y', 'e', 'en', 'el
 const SIGLAS = new Set(['SA', 'SAPI', 'CV', 'SC', 'SAS', 'RL', 'SRL', 'SOFOM', 'ENR', 'MI'])
 
 export function nombreLegible(c: DatosCliente): string {
-  const crudo = (c.razon_social || c.full_name || c.email || '').trim()
+  const crudo = (c.marca_negocio || c.razon_social || c.full_name || c.email || '').trim()
   if (!crudo) return 'Cliente sin nombre'
   // Si trae alguna minuscula, no se toca.
   if (/[a-záéíóúñü]/.test(crudo)) return crudo
@@ -413,6 +427,25 @@ export function nombreLegible(c: DatosCliente): string {
       return palabra.charAt(0).toUpperCase() + palabra.slice(1)
     })
     .join(' ')
+}
+
+/**
+ * El par que se pinta en dos renglones: el nombre arriba, el dato fiscal en
+ * gris abajo.
+ *
+ * `secundario` solo sale cuando aporta algo distinto: si el negocio se llama
+ * igual que la razon social, repetirlo en gris es ruido. Compara normalizado
+ * para que "BAR LA ESQUINA" y "Bar La Esquina" cuenten como lo mismo.
+ */
+export function nombreCliente(c: DatosCliente): { principal: string; secundario: string | null } {
+  const principal = nombreLegible(c)
+  const clave = principal.trim().toLowerCase()
+
+  for (const crudo of [c.razon_social, c.email]) {
+    const v = (crudo || '').trim()
+    if (v && v.toLowerCase() !== clave) return { principal, secundario: v }
+  }
+  return { principal, secundario: null }
 }
 
 /** Top clientes por facturacion neta, con su saldo y su peso en el total. */

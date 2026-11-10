@@ -108,7 +108,7 @@ export default function NuevoPedidoPage() {
     const cargar = async () => {
       const [{ data: perfiles }, { data: prods }, { data: vend }, config] = await Promise.all([
         supabase.from('profiles')
-          .select('id, full_name, email, razon_social, nivel_precio')
+          .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
           .eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
         supabase.from('vendedores').select('id, nombre').eq('activo', true).order('nombre'),

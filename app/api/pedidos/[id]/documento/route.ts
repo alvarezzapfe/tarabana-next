@@ -4,6 +4,7 @@ import { canWrite, isVendedor } from '../../../../../src/lib/roles'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel, ImageRun } from 'docx'
 import { readFileSync } from 'fs'
 import { join } from 'path'
+import { nombreLegible } from '../../../../../src/lib/metricas'
 
 const fmt = (n: number) => `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2 })}`
 const fmtDate = (d: string) => new Date(d).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })
@@ -29,7 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // Load pedido with all related data
   const { data: pedido } = await service.from('pedidos')
-    .select('*, profiles!pedidos_cliente_id_fkey(full_name, email, phone, rfc, razon_social, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo))')
+    .select('*, profiles!pedidos_cliente_id_fkey(full_name, email, phone, rfc, razon_social, marca_negocio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo))')
     .eq('id', id).single()
 
   if (!pedido) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
@@ -98,10 +99,22 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // Client info
   children.push(new Paragraph({ children: [new TextRun({ text: 'DATOS DEL CLIENTE', bold: true, size: 18, color: '666666' })], spacing: { after: 100 } }))
 
-  const infoRows: [string, string][] = [
-    ['Nombre', cliente?.full_name || cliente?.razon_social || '--'],
-  ]
-  if (cliente?.razon_social && cliente?.full_name !== cliente?.razon_social) infoRows.push(['Razon social', cliente.razon_social])
+  // El nombre comercial primero, igual que en el resto del panel: la orden la
+  // recibe el negocio. Esta linea tenia la precedencia al reves que
+  // `nombreLegible` y la orden salia con un nombre distinto al de la tabla.
+  const nombreDelCliente = nombreLegible({
+    id: '',
+    full_name: cliente?.full_name ?? null,
+    email: cliente?.email ?? null,
+    razon_social: cliente?.razon_social ?? null,
+    marca_negocio: cliente?.marca_negocio ?? null,
+  })
+
+  const infoRows: [string, string][] = [['Nombre', nombreDelCliente]]
+  // La razon social solo si dice algo distinto del nombre de arriba.
+  if (cliente?.razon_social && cliente.razon_social.trim().toLowerCase() !== nombreDelCliente.trim().toLowerCase()) {
+    infoRows.push(['Razon social', cliente.razon_social])
+  }
   if (cliente?.rfc) infoRows.push(['RFC', cliente.rfc])
   if (cliente?.email) infoRows.push(['Correo', cliente.email])
   if (cliente?.phone) infoRows.push(['Telefono', cliente.phone])

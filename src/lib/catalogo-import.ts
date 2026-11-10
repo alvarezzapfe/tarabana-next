@@ -52,10 +52,10 @@ export async function cargarCatalogoImport(opciones: {
 
   const consultaClientes = esVendedor
     ? service.from('profiles')
-        .select('id, full_name, email, razon_social, nivel_precio')
+        .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
         .eq('vendedor_id', vendedorId!)
     : service.from('profiles')
-        .select('id, full_name, email, razon_social, nivel_precio')
+        .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
         .eq('role', 'comprador')
 
   const [{ data: productos }, { data: perfiles }] = await Promise.all([consultaProductos, consultaClientes])
@@ -63,7 +63,7 @@ export async function cargarCatalogoImport(opciones: {
   const clientes: ClienteCatalogo[] = (perfiles || []).map(p => ({
     id: p.id,
     email: p.email,
-    // El mismo nombre que ve en el resto del panel: razon social primero.
+    // El mismo nombre que ve en el resto del panel: nombre comercial primero.
     nombre: nombreLegible(p),
     nivel_precio: p.nivel_precio,
   }))

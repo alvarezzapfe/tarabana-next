@@ -1,9 +1,33 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { canWrite } from '../../../../../../src/lib/roles'
+import { camposCliente, validarCliente } from '../../../../../../src/lib/cliente-campos'
 import { logAction } from '../../../../../../src/lib/audit'
 
-export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+/**
+ * Un throw inesperado tiene que salir como JSON.
+ *
+ * Sin esto, Next responde la pagina de error en HTML, el cliente no encuentra
+ * `json.error` y en pantalla queda un mensaje genérico mientras el error real
+ * vive solo en los logs. El stack se sigue imprimiendo completo.
+ */
+function fallaInesperada(e: unknown, donde: string) {
+  console.error(`[${donde}]`, e)
+  const detalle = e instanceof Error ? e.message : String(e)
+  return NextResponse.json({ error: `Error inesperado del servidor: ${detalle}` }, { status: 500 })
+}
+
+/**
+ * Edita un cliente.
+ *
+ * Las columnas salen de `camposCliente`, el mismo mapeo que usa la ruta de
+ * crear, para que las dos escriban lo mismo.
+ *
+ * `canWrite` y no `canWrite || isVendedor`: un vendedor levanta clientes pero
+ * no los edita. Eso tambien es lo que impide que se pase un cliente a su
+ * propia cartera cambiandole el `vendedor_id`.
+ */
+async function manejar(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -13,72 +37,71 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   if (!canWrite(actor?.role)) return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
   const body = await request.json()
+
+  const fallo = validarCliente(body, { alCrear: false })
+  if (fallo) return NextResponse.json({ error: fallo.error }, { status: fallo.status })
+
   const service = createServiceClient()
 
-  // Get current profile for audit diff and email comparison
-  const { data: prev } = await service.from('profiles').select('email, full_name').eq('id', id).single()
+  const { data: prev } = await service
+    .from('profiles')
+    .select('email, full_name, marca_negocio, giro, nivel_precio, vendedor_id')
+    .eq('id', id)
+    .single()
   if (!prev) return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 })
 
-  // Handle email change
-  const newEmail = body.email?.trim()?.toLowerCase()
-  const emailChanged = newEmail && newEmail !== prev.email?.toLowerCase()
+  // ── Correo ────────────────────────────────────────────────
+  //
+  // Vive en auth.users y en profiles, asi que se cambia en los dos o en
+  // ninguno. El formato ya lo valido `validarCliente`.
+  const nuevoEmail = typeof body.email === 'string' ? body.email.trim().toLowerCase() : ''
+  const cambioEmail = !!nuevoEmail && nuevoEmail !== prev.email?.toLowerCase()
 
-  if (emailChanged) {
-    // Validate format
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      return NextResponse.json({ error: 'Formato de correo invalido' }, { status: 400 })
-    }
-    // Check for duplicates
-    const { data: existing } = await service.from('profiles').select('id').eq('email', newEmail).neq('id', id).single()
-    if (existing) {
+  if (cambioEmail) {
+    const { data: existente } = await service
+      .from('profiles').select('id').eq('email', nuevoEmail).neq('id', id).maybeSingle()
+    if (existente) {
       return NextResponse.json({ error: 'Ya existe un usuario con ese correo.' }, { status: 409 })
     }
-    // Update auth.users
-    const { error: authError } = await service.auth.admin.updateUserById(id, { email: newEmail, email_confirm: true })
+    const { error: authError } = await service.auth.admin.updateUserById(id, {
+      email: nuevoEmail,
+      email_confirm: true,
+    })
     if (authError) {
       return NextResponse.json({ error: `Error al actualizar correo: ${authError.message}` }, { status: 400 })
     }
   }
 
-  // Build profile update
-  const profileUpdate: Record<string, any> = {
-    full_name: body.full_name || prev.full_name,
-    tipo_persona_registro: body.tipo_persona_registro || null,
-    nombre_pila: body.nombre_pila || null,
-    apellido_paterno: body.apellido_paterno || null,
-    apellido_materno: body.apellido_materno || null,
-    razon_social: body.razon_social || null,
-    marca_negocio: body.marca_negocio || null,
-    contacto_nombre: body.contacto_nombre || null,
-    phone: body.phone || null,
-    tipo_consumidor: body.tipo_consumidor || null,
-    // Address
-    calle: body.calle || null, num_ext: body.num_ext || null, num_int: body.num_int || null,
-    colonia: body.colonia || null, municipio: body.municipio || null, estado: body.estado || null,
-    cp: body.cp || null, referencias: body.referencias || null,
-    direccion_entrega: body.direccion_entrega || null, ciudad: body.ciudad || null,
-    // Fiscal
-    requiere_factura: body.requiere_factura ?? false,
-    rfc: body.requiere_factura ? body.rfc || null : null,
-    regimen_fiscal: body.requiere_factura ? body.regimen_fiscal || null : null,
-    uso_cfdi: body.requiere_factura ? body.uso_cfdi || null : null,
-    cp_fiscal: body.requiere_factura ? body.cp_fiscal || null : null,
-  }
-  if (emailChanged) profileUpdate.email = newEmail
+  const campos = camposCliente(body, { comercial: true })
+  if (cambioEmail) campos.email = nuevoEmail
 
-  const { error } = await service.from('profiles').update(profileUpdate).eq('id', id)
+  const { error } = await service.from('profiles').update(campos).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
 
-  // Audit
-  const changes: Record<string, any> = {}
-  if (emailChanged) changes.email = { from: prev.email, to: newEmail }
-  if (body.full_name && body.full_name !== prev.full_name) changes.full_name = { from: prev.full_name, to: body.full_name }
+  // ── Auditoria ─────────────────────────────────────────────
+  //
+  // Lo que cambio, no el cuerpo completo: un diff se lee, un volcado no.
+  const cambios: Record<string, { from: unknown; to: unknown }> = {}
+  if (cambioEmail) cambios.email = { from: prev.email, to: nuevoEmail }
+  for (const campo of ['full_name', 'marca_negocio', 'giro', 'nivel_precio', 'vendedor_id'] as const) {
+    const antes = prev[campo] ?? null
+    const despues = campos[campo] ?? null
+    if (campo in campos && antes !== despues) cambios[campo] = { from: antes, to: despues }
+  }
 
   logAction({
     actorId: user.id, actorEmail: user.email!, actorRole: actor!.role,
-    accion: emailChanged ? 'cliente.email' : 'cliente.editar',
-    entidad: 'profiles', entidadId: id, detalle: changes, request,
+    accion: cambioEmail ? 'cliente.email' : 'cliente.editar',
+    entidad: 'profiles', entidadId: id, detalle: cambios, request,
   })
 
   return NextResponse.json({ ok: true })
+}
+
+export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    return await manejar(request, ctx)
+  } catch (e) {
+    return fallaInesperada(e, 'clientes/actualizar')
+  }
 }

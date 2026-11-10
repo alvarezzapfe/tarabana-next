@@ -2,8 +2,19 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { createClient } from '../../../src/lib/supabase'
-import { TIPOS_CLIENTE, NIVELES_PRECIO, tipoLabel, nivelLabel, tipoIcon } from '../../../src/lib/clientes'
+import { TIPOS_CLIENTE, NIVELES_PRECIO, giroLabel, tipoLabel, nivelLabel, tipoIcon } from '../../../src/lib/clientes'
 import { canWrite, isVendedor } from '../../../src/lib/roles'
+import { nombreCliente } from '../../../src/lib/metricas'
+
+/**
+ * El giro, con `tipo_consumidor` como respaldo.
+ *
+ * Asi la columna dice algo tanto antes de aplicar la migracion de `giro`
+ * como para los clientes que se dieron de alta desde el portal, que declaran
+ * `tipo_consumidor` y no tienen giro.
+ */
+const giroODe = (c: { giro: string | null; tipo_consumidor: string | null }) =>
+  c.giro ? giroLabel(c.giro) : tipoLabel(c.tipo_consumidor)
 
 const statusConfig: Record<string, { label: string; color: string; bg: string }> = {
   pendiente:  { label: 'Pendiente',  color: '#f59e0b', bg: '#fef3c7' },
@@ -22,6 +33,9 @@ const nivelBadgeStyle: Record<string, { bg: string; color: string }> = {
 interface Cliente {
   id: string
   full_name: string | null
+  /** El nombre comercial: el principal de la ficha. */
+  marca_negocio: string | null
+  giro: string | null
   email: string
   phone: string | null
   tipo_consumidor: string | null
@@ -147,7 +161,11 @@ export default function ClientesClient() {
     let result = clientes
     if (search) {
       const q = search.toLowerCase()
+      // Se busca por lo que se VE y por lo que se factura: antes solo cubria
+      // full_name, asi que teclear el nombre del bar no encontraba nada.
       result = result.filter(c =>
+        (c.marca_negocio || '').toLowerCase().includes(q) ||
+        (c.razon_social || '').toLowerCase().includes(q) ||
         (c.full_name || '').toLowerCase().includes(q) ||
         (c.email || '').toLowerCase().includes(q) ||
         (c.rfc || '').toLowerCase().includes(q)
@@ -306,16 +324,20 @@ export default function ClientesClient() {
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                         color: '#E8531D', fontSize: 13, fontWeight: 700, flexShrink: 0,
                       }}>
-                        {(c.full_name || c.email || '?')[0].toUpperCase()}
+                        {nombreCliente(c).principal[0].toUpperCase()}
                       </div>
-                      <div>
-                        <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13, fontWeight: 600 }}>{c.full_name || '--'}</p>
-                        <p style={{ color: '#9ca3af', margin: '1px 0 0', fontSize: 11 }}>{c.email}</p>
+                      <div style={{ minWidth: 0 }}>
+                        <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {nombreCliente(c).principal}
+                        </p>
+                        <p style={{ color: '#9ca3af', margin: '1px 0 0', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {nombreCliente(c).secundario || c.email}
+                        </p>
                       </div>
                     </div>
                   </td>
                   <td style={{ padding: '12px 14px' }}>
-                    <span style={{ color: '#6b7280', fontSize: 13 }}>{tipoLabel(c.tipo_consumidor)}</span>
+                    <span style={{ color: '#6b7280', fontSize: 13 }}>{giroODe(c)}</span>
                   </td>
                   <td style={{ padding: '12px 14px' }}>
                     <span style={{
@@ -414,12 +436,17 @@ export default function ClientesClient() {
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
                 color: '#E8531D', fontSize: 20, fontWeight: 700, flexShrink: 0,
               }}>
-                {(selectedCliente.full_name || selectedCliente.email || '?')[0].toUpperCase()}
+                {nombreCliente(selectedCliente).principal[0].toUpperCase()}
               </div>
-              <div>
-                <h2 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0 }}>
-                  {selectedCliente.full_name || '--'}
+              <div style={{ minWidth: 0 }}>
+                <h2 style={{ color: '#1a1a1a', fontSize: 18, fontWeight: 700, margin: 0, wordBreak: 'break-word' }}>
+                  {nombreCliente(selectedCliente).principal}
                 </h2>
+                {nombreCliente(selectedCliente).secundario && (
+                  <p style={{ color: '#9ca3af', fontSize: 12, margin: '2px 0 0', wordBreak: 'break-word' }}>
+                    {nombreCliente(selectedCliente).secundario}
+                  </p>
+                )}
                 <p style={{ color: '#6b7280', fontSize: 13, margin: '2px 0 0' }}>{selectedCliente.email}</p>
               </div>
             </div>
@@ -428,7 +455,7 @@ export default function ClientesClient() {
             <div style={{ marginBottom: 24 }}>
               <SectionTitle>Contacto</SectionTitle>
               <InfoRow label="Telefono" value={selectedCliente.phone} />
-              <InfoRow label="Tipo" value={tipoLabel(selectedCliente.tipo_consumidor)} />
+              <InfoRow label="Giro" value={giroODe(selectedCliente)} />
             </div>
 
             {/* Address */}

@@ -13,6 +13,7 @@ import {
   antiguedadCartera,
   clientesActivosDe,
   nombreLegible,
+  nombreCliente,
   requierenAtencion,
   serieFacturadoVsCobrado,
   topClientes,
@@ -181,6 +182,58 @@ test('nombreLegible: razon_social gana a full_name y a email', () => {
   assert.equal(
     nombreLegible({ id: 'c', razon_social: null, full_name: null, email: 'x@y.mx' }),
     'x@y.mx'
+  )
+})
+
+test('nombreLegible: el nombre comercial le gana a la razon social', () => {
+  // El cliente es el NEGOCIO: una persona fisica puede facturar por un bar
+  // con su propia marca, y en la tabla se busca el bar.
+  assert.equal(
+    nombreLegible({
+      id: 'c', marca_negocio: 'Bar La Esquina',
+      razon_social: 'JUAN PEREZ LOPEZ', full_name: 'Juan Perez', email: 'x@y.mx',
+    }),
+    'Bar La Esquina'
+  )
+  // Sin nombre comercial, la precedencia de siempre.
+  assert.equal(
+    nombreLegible({
+      id: 'c', marca_negocio: null,
+      razon_social: 'ARTIS CERVISIA', full_name: 'DRUNKENDOG', email: 'x@y.mx',
+    }),
+    'Artis Cervisia'
+  )
+})
+
+test('nombreCliente: el secundario solo sale si dice algo distinto', () => {
+  // Negocio con razon social propia: las dos lineas aportan.
+  assert.deepEqual(
+    nombreCliente({
+      id: 'c', marca_negocio: 'Bar La Esquina',
+      razon_social: 'JUAN PEREZ LOPEZ', full_name: null, email: 'x@y.mx',
+    }),
+    { principal: 'Bar La Esquina', secundario: 'JUAN PEREZ LOPEZ' }
+  )
+
+  // Se llaman igual salvo las mayusculas: repetirlo en gris seria ruido.
+  assert.deepEqual(
+    nombreCliente({
+      id: 'c', marca_negocio: 'Artis Cervisia',
+      razon_social: 'ARTIS CERVISIA', full_name: null, email: null,
+    }),
+    { principal: 'Artis Cervisia', secundario: null }
+  )
+
+  // Sin razon social, el correo hace de segunda linea.
+  assert.deepEqual(
+    nombreCliente({ id: 'c', marca_negocio: 'Bar La Esquina', razon_social: null, full_name: null, email: 'x@y.mx' }),
+    { principal: 'Bar La Esquina', secundario: 'x@y.mx' }
+  )
+
+  // Cuando el nombre ES el correo, no se repite abajo.
+  assert.deepEqual(
+    nombreCliente({ id: 'c', marca_negocio: null, razon_social: null, full_name: null, email: 'x@y.mx' }),
+    { principal: 'x@y.mx', secundario: null }
   )
 })
 

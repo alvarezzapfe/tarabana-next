@@ -20,7 +20,7 @@ export default async function TodosSection() {
       // `select('*')` ya trae las columnas nuevas de la migracion de fechas
       // (fecha_pedido, orden_compra, folio_factura, fecha_entrega_real).
       // `vendedores(nombre)` es nuevo: la tabla tiene columna de vendedor.
-      .select('*, profiles!pedidos_cliente_id_fkey(id, full_name, email, razon_social, phone, tipo_consumidor, nivel_precio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), vendedores(id, nombre), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
+      .select('*, profiles!pedidos_cliente_id_fkey(id, full_name, email, razon_social, marca_negocio, phone, tipo_consumidor, nivel_precio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), vendedores(id, nombre), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
       // Por fecha del PEDIDO, no por fecha de captura.
       .order('fecha_pedido', { ascending: false })
       .order('created_at', { ascending: false }),
