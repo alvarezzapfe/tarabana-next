@@ -5,6 +5,7 @@ import { createClient } from '../../../src/lib/supabase'
 import { TIPOS_CLIENTE, NIVELES_PRECIO, giroLabel, tipoLabel, nivelLabel, tipoIcon } from '../../../src/lib/clientes'
 import { canWrite, isVendedor } from '../../../src/lib/roles'
 import { nombreCliente } from '../../../src/lib/metricas'
+import { filtrarClientes } from '../../../src/lib/clientes-export'
 
 /**
  * El giro, con `tipo_consumidor` como respaldo.
@@ -95,6 +96,10 @@ export default function ClientesClient() {
   const [invitingId, setInvitingId] = useState<string | null>(null)
   const [inviteResult, setInviteResult] = useState<string | null>(null)
 
+  // Export
+  const [exportando, setExportando] = useState(false)
+  const [errorExport, setErrorExport] = useState('')
+
   useEffect(() => {
     const load = async () => {
       const supabase = createClient()
@@ -157,28 +162,49 @@ export default function ClientesClient() {
   }
 
   // Filtered data
-  const filtered = useMemo(() => {
-    let result = clientes
-    if (search) {
-      const q = search.toLowerCase()
-      // Se busca por lo que se VE y por lo que se factura: antes solo cubria
-      // full_name, asi que teclear el nombre del bar no encontraba nada.
-      result = result.filter(c =>
-        (c.marca_negocio || '').toLowerCase().includes(q) ||
-        (c.razon_social || '').toLowerCase().includes(q) ||
-        (c.full_name || '').toLowerCase().includes(q) ||
-        (c.email || '').toLowerCase().includes(q) ||
-        (c.rfc || '').toLowerCase().includes(q)
-      )
+  //
+  // El filtro vive en `clientes-export.ts` y no aqui: es el mismo que aplica
+  // la ruta del export, para que "Exportar Excel" no pueda dejar de coincidir
+  // con lo que se esta viendo.
+  const filtros = useMemo(
+    () => ({ q: search, tipo: filterTipo, nivel: filterNivel }),
+    [search, filterTipo, filterNivel]
+  )
+  const filtered = useMemo(() => filtrarClientes(clientes, filtros), [clientes, filtros])
+
+  /** Pide el .xlsx al servidor con los filtros activos. */
+  const exportar = async () => {
+    setExportando(true); setErrorExport('')
+    try {
+      const res = await fetch('/api/admin/clientes/exportar', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filtros }),
+      })
+      if (!res.ok) {
+        const d = await res.json().catch(() => ({}))
+        setErrorExport(d.error || 'No se pudo generar el export.')
+        return
+      }
+      // El nombre lo decide el servidor (fecha de Mexico); se lee del header
+      // para no recalcularlo aqui con la zona del navegador.
+      const header = res.headers.get('Content-Disposition') || ''
+      const nombre = /filename="([^"]+)"/.exec(header)?.[1] || 'clientes-tarabana.xlsx'
+
+      const url = URL.createObjectURL(await res.blob())
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nombre
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+    } catch {
+      setErrorExport('Se cayo la conexion al generar el export.')
+    } finally {
+      setExportando(false)
     }
-    if (filterTipo) {
-      result = result.filter(c => c.tipo_consumidor === filterTipo)
-    }
-    if (filterNivel) {
-      result = result.filter(c => (c.nivel_precio || 'publico') === filterNivel)
-    }
-    return result
-  }, [clientes, search, filterTipo, filterNivel])
+  }
 
   // Summary counts
   const total = clientes.length
@@ -208,9 +234,32 @@ export default function ClientesClient() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 28 }}>
         <div>
           <p style={{ color: '#6b7280', fontSize: 13 }}>{total} registrados</p>
+          {errorExport && (
+            <p style={{ color: '#ef4444', fontSize: 12.5, margin: '6px 0 0' }}>{errorExport}</p>
+          )}
         </div>
-        {canCreate && (
-          <div style={{ display: 'flex', gap: 10 }}>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={exportando || filtered.length === 0}
+            title={
+              filtered.length === clientes.length
+                ? 'Exporta los clientes a Excel'
+                : `Exporta los ${filtered.length} clientes del filtro activo`
+            }
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+              background: '#fff', border: '1px solid #d1d5db', color: '#6b7280',
+              borderRadius: 8, fontSize: 13.5, fontWeight: 500, fontFamily: 'inherit',
+              cursor: exportando || filtered.length === 0 ? 'default' : 'pointer',
+              opacity: exportando || filtered.length === 0 ? 0.6 : 1,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M7 10l5 5 5-5 M12 15V3"/></svg>
+            {exportando ? 'Generando...' : 'Exportar Excel'}
+          </button>
+          {canCreate && (<>
             <a href="/admin/pedidos/nuevo" style={{
               display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
               background: '#f3f4f6', border: '1px solid #d1d5db', color: '#6b7280',
@@ -226,8 +275,8 @@ export default function ClientesClient() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M12 5v14M5 12h14"/></svg>
               Nuevo cliente
             </a>
-          </div>
-        )}
+          </>)}
+        </div>
       </div>
 
       {/* Summary cards */}
