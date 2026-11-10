@@ -49,6 +49,11 @@ export type NavTabDef = {
   label: string
   /** Ruta vieja que ahora redirige a esta pestana (se conecta en 1.C). */
   legacyHref?: string
+  /**
+   * Ruta propia, cuando la pestana es una PAGINA y no un `?tab=` de la
+   * seccion. Lo usa Inventario, cuyas dos vistas son rutas distintas.
+   */
+  href?: string
   visible: RolePredicate
 }
 
@@ -131,6 +136,18 @@ export const NAV: NavItemDef[] = [
     href: '/admin/inventario',
     icon: 'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z M7 7h.01',
     visible: canManageInventory,
+    // Las dos vistas son RUTAS y no `?tab=`, asi que cada pestana trae su
+    // href y cada pagina pinta la cabecera con su propia `activa`.
+    //
+    // Los precios son de super admin, igual que en la ficha del producto:
+    // mover un precio cambia lo que se le cobra a todos los clientes. El
+    // predicado queda DENTRO del del item padre (isSuperAdmin esta en
+    // canManageInventory), asi que nadie ve una pestana de una seccion a la
+    // que no puede entrar.
+    tabs: [
+      { key: 'existencias', label: 'Existencias', href: '/admin/inventario', visible: canManageInventory },
+      { key: 'precios', label: 'Precios', href: '/admin/inventario/precios', visible: isSuperAdmin },
+    ],
   },
   {
     key: 'comercial',
@@ -186,7 +203,12 @@ export const NAV: NavItemDef[] = [
 type TabPlano = Omit<NavTabDef, 'visible'>
 
 function serializarTab(tab: NavTabDef): TabPlano {
-  return { key: tab.key, label: tab.label, ...(tab.legacyHref ? { legacyHref: tab.legacyHref } : {}) }
+  return {
+    key: tab.key,
+    label: tab.label,
+    ...(tab.legacyHref ? { legacyHref: tab.legacyHref } : {}),
+    ...(tab.href ? { href: tab.href } : {}),
+  }
 }
 
 function serializarItem(item: NavItemDef, role?: string | null): NavItem {
