@@ -21,7 +21,7 @@ import {
 import { formatLitros } from '../../src/lib/unidades'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA,
-  enteros, litrosCorto, moneda, monedaCorta, pctCorto, rangoLegible, tabular,
+  enteros, escalaEje, litrosCorto, moneda, monedaCorta, pctCorto, rangoLegible, tabular,
 } from './dash-ui'
 
 /**
@@ -44,6 +44,7 @@ import {
  */
 
 const ALTO_PLOT = 230
+/** Lineas guia que se piden; la escala puede devolver una mas. */
 const LINEAS = 4
 /** Cuantas etiquetas de eje X caben sin traslaparse. */
 const MAX_ETIQUETAS = 13
@@ -171,11 +172,11 @@ export default function GraficaPeriodo({ datos, rango }: Props) {
     )
   }
 
-  // Techo redondeado hacia arriba para que las lineas guia caigan en numeros
-  // legibles en vez de en el maximo exacto de los datos.
-  const paso = Math.pow(10, Math.floor(Math.log10(max / LINEAS)))
-  const techo = Math.ceil(max / (paso * LINEAS)) * paso * LINEAS || max
-  const guias = Array.from({ length: LINEAS + 1 }, (_, i) => (techo / LINEAS) * i)
+  // Las marcas del eje caen en numeros redondos. `Pedidos` pide paso entero:
+  // con un maximo de 2 pedidos, un paso de 0.5 pintaba "0 1 1 2 2". El numero
+  // de lineas lo decide la escala, no al reves (ver escalaEje).
+  const { techo, paso, lineas } = escalaEje(max, LINEAS, metrica === 'pedidos')
+  const guias = Array.from({ length: lineas + 1 }, (_, i) => paso * i)
 
   const n = serie.length
   const pasoEtiqueta = Math.ceil(n / MAX_ETIQUETAS)
@@ -288,7 +289,7 @@ export default function GraficaPeriodo({ datos, rango }: Props) {
                   position: 'absolute',
                   left: 0,
                   right: 0,
-                  bottom: `${(i / LINEAS) * 100}%`,
+                  bottom: `${(i / lineas) * 100}%`,
                   borderTop: `1px solid ${i === 0 ? BORDE : PISTA}`,
                 }}
               />

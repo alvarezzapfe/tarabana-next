@@ -1,5 +1,12 @@
-import { etiquetaFecha } from '../../src/lib/fechas'
-import type { Rango } from '../../src/lib/metricas'
+import { etiquetaFecha } from '../../src/lib/fechas.ts'
+import type { Rango } from '../../src/lib/metricas.ts'
+
+/**
+ * Los imports llevan extension .ts a proposito —misma razon que en
+ * pos-ui.ts—: asi este modulo se puede cargar con `node --test`, que no usa
+ * bundler y exige el especificador completo. Turbopack y tsc lo resuelven
+ * igual.
+ */
 
 /**
  * Tokens del Inicio. Un solo lugar para que los seis paneles se vean como
@@ -56,10 +63,6 @@ export function monedaCorta(n: number): string {
 
 export const pctCorto = (n: number) => `${n.toFixed(n < 10 ? 1 : 0)}%`
 
-/** Un rango en una linea: "1 dic 2025 – 5 nov 2026". */
-export const rangoLegible = (r: Rango): string =>
-  r.desde === r.hasta ? etiquetaFecha(r.desde) : `${etiquetaFecha(r.desde)} – ${etiquetaFecha(r.hasta)}`
-
 /** Conteos: miles con separador y sin decimales. */
 export const enteros = (n: number) => Math.round(n).toLocaleString('es-MX')
 
@@ -69,9 +72,75 @@ export function litrosCorto(n: number): string {
   return `${Math.round(n)} L`
 }
 
+/** Un rango en una linea: "1 dic 2025 – 5 nov 2026". */
+export const rangoLegible = (r: Rango): string =>
+  r.desde === r.hasta ? etiquetaFecha(r.desde) : `${etiquetaFecha(r.desde)} – ${etiquetaFecha(r.hasta)}`
+
 /** Fondo de la fila "Al dia de hoy": separa lo que NO se mueve con el periodo. */
 export const FONDO_HOY = '#f9fafb'
 export const VERDE = '#059669'
+
+/** Los cortes que la gente usa al leer una grafica, por decada. */
+const FAMILIA_PASO = [1, 2, 2.5, 5]
+
+export type EscalaEje = {
+  /** Valor de la linea mas alta. Siempre >= max. */
+  techo: number
+  /** Distancia entre lineas. */
+  paso: number
+  /** Cuantos intervalos hay, o sea `techo / paso`. Marcas = lineas + 1. */
+  lineas: number
+}
+
+/**
+ * La escala de un eje: techo, paso y cuantas lineas, en numeros que se leen.
+ *
+ * Tres problemas que resuelve.
+ *
+ * Uno: redondear al maximo exacto de los datos deja marcas como $873 y $1,747.
+ *
+ * Dos: dividir un techo chico entre un numero fijo de lineas deja marcas
+ * REPETIDAS cuando el eje cuenta cosas enteras — con un maximo de 2 clientes,
+ * las marcas salian 0, 1, 1, 2, 2.
+ *
+ * Tres, y es el que obliga a devolver `lineas`: fijar el numero de lineas y
+ * redondear el paso hacia arriba desperdicia la mitad de la grafica. Con un
+ * maximo de 44,334 y cuatro lineas, el unico paso redondo que cabe es 20,000,
+ * o sea un techo de 80,000 y la barra mas alta a poco mas de la mitad del
+ * alto. Aqui el paso manda y el numero de lineas se acomoda (se permite una
+ * mas que `maxLineas`), asi que ese caso da paso 10,000 y techo 50,000.
+ */
+export function escalaEje(max: number, maxLineas: number, entero = false): EscalaEje {
+  // Una linea extra de margen: es la que permite elegir un paso mas fino.
+  const tope = Math.max(2, maxLineas + 1)
+
+  // Sin datos la grafica igual pinta sus guias; un techo de 0 daria
+  // divisiones entre cero mas adelante.
+  if (!(max > 0) || !Number.isFinite(max)) {
+    const paso = entero ? 1 : 1 / maxLineas
+    return { techo: paso * maxLineas, paso, lineas: maxLineas }
+  }
+
+  // Se arranca una decada por debajo del paso ideal y se sube hasta que el
+  // numero de lineas quepa en el tope.
+  let magnitud = Math.pow(10, Math.floor(Math.log10(max / tope)) - 1)
+  for (let intento = 0; intento < 40; intento++) {
+    for (const f of FAMILIA_PASO) {
+      const paso = f * magnitud
+      // Un eje de conteos no admite pasos fraccionarios.
+      if (entero && !Number.isInteger(paso)) continue
+      // El epsilon evita que un maximo que ya es multiplo exacto del paso
+      // sume una linea entera por un error de punto flotante.
+      const lineas = Math.ceil(max / paso - 1e-9)
+      if (lineas >= 1 && lineas <= tope) return { techo: paso * lineas, paso, lineas }
+    }
+    magnitud *= 10
+  }
+
+  // Inalcanzable con numeros finitos, pero una escala sin salida no puede
+  // devolver un techo de cero.
+  return { techo: max, paso: max / maxLineas, lineas: maxLineas }
+}
 
 /**
  * El CSS responsive del Inicio.

@@ -21,7 +21,7 @@ import {
   diasEntre, esFechaDB, etiquetaDiaCorto, etiquetaFecha, etiquetaMesCorto, etiquetaMesLargo,
   fechaMx, finMes, inicioMes, inicioSemana, periodoDeFechaDB, periodoMx, sumarDias, sumarMeses,
 } from './fechas.ts'
-import { litrosDeItem, type ItemVendido } from './unidades.ts'
+import { esUnidadVenta, litrosDeItem, type ItemVendido } from './unidades.ts'
 
 /**
  * Ventana de inactividad de un cliente.
@@ -63,6 +63,15 @@ export type FilaSaldo = {
   fecha_pedido: string
   /** AUDITORIA: cuando se capturo. No se usa para agrupar. */
   created_at: string
+  /**
+   * Fecha de vencimiento del pedido, 'YYYY-MM-DD'. Es `date` en produccion,
+   * aunque el archivo de migracion la declare timestamptz.
+   *
+   * Opcional porque hay consultas que no la piden; `dias_vencido` ya viene
+   * calculada por la vista y es la que decide el atraso. Esta columna es para
+   * MOSTRARLA en el reporte de cobranza, no para recalcular nada.
+   */
+  fecha_vencimiento?: string | null
 }
 
 /** El saldo puede venir negativo si hubo sobrepago; no resta de lo por cobrar. */
@@ -564,6 +573,25 @@ export function resolverPeriodo(
 }
 
 /**
+ * La query del periodo: el inverso de `resolverPeriodo`.
+ *
+ * Existe para que el selector del Inicio, el link al reporte y la ruta del
+ * export escriban la MISMA URL. Cuando cada uno la armaba por su cuenta, basto
+ * con que uno omitiera el default para que el link al reporte abriera un
+ * periodo distinto al que se estaba viendo.
+ *
+ * El periodo default no se escribe: asi /admin a secas sigue siendo la
+ * direccion limpia del tablero.
+ */
+export function queryPeriodo(clave: ClavePeriodo, rango: Rango): string {
+  if (clave === 'personalizado') {
+    return new URLSearchParams({ desde: rango.desde, hasta: rango.hasta }).toString()
+  }
+  if (clave === PERIODO_DEFAULT) return ''
+  return new URLSearchParams({ periodo: clave }).toString()
+}
+
+/**
  * El periodo anterior de la MISMA DURACION, pegado al que se mira.
  *
  * Se corre por dias y no por meses a proposito: "la misma duracion" es lo que
@@ -732,12 +760,23 @@ export const cobradoEnRango = (pagos: PagoFila[], r: Rango): number =>
 // ── Litros vendidos ─────────────────────────────────────────
 
 /** Supabase tipa un to-one anidado como arreglo segun la version. */
-export type ProductoRef = { nombre?: string | null } | { nombre?: string | null }[] | null
+export type DatosProducto = { id?: string | null; nombre?: string | null; estilo?: string | null }
+export type ProductoRef = DatosProducto | DatosProducto[] | null
+
+/** El desglose de latas por estilo de una caja mixta, en `metadata.estilos`. */
+export type MixEstilo = { producto_id?: string | null; nombre?: string | null; latas?: number | null }
 
 export type PartidaPedido = {
   cantidad: number | null
   unidad: string | null
   productos?: ProductoRef
+  /**
+   * Precio de UNA unidad de la presentacion. Bruto: el descuento y el envio
+   * viven a nivel de pedido, no de partida (ver `partidasValuadas`).
+   */
+  precio_unitario?: number | null
+  /** `{ tipo: 'mix24', estilos: [...] }` en las cajas mixtas. */
+  metadata?: { estilos?: MixEstilo[] | null } | null
 }
 
 /** Un pedido con sus partidas. `fecha_pedido` es la que lo ubica en el periodo. */
@@ -747,10 +786,10 @@ export type PedidoConItems = {
   pedido_items?: PartidaPedido[] | null
 }
 
-const nombreProducto = (ref: ProductoRef): string => {
-  const p = Array.isArray(ref) ? ref[0] : ref
-  return p?.nombre || 'Sin producto'
-}
+const unProducto = (ref: ProductoRef): DatosProducto | null =>
+  (Array.isArray(ref) ? ref[0] : ref) ?? null
+
+const nombreProducto = (ref: ProductoRef): string => unProducto(ref)?.nombre || 'Sin producto'
 
 /** Las partidas de los pedidos del rango, listas para `topProductosEnLitros`. */
 export function itemsVendidosEn(pedidos: PedidoConItems[], r: Rango): ItemVendido[] {
@@ -928,3 +967,597 @@ export const METRICAS: { clave: Metrica; label: string }[] = [
 ]
 
 export const valorDe = (p: PuntoSerie, m: Metrica): number => p[m]
+
+// ── Reporte: el importe neto de cada partida ────────────────
+
+/**
+ * Las partidas del periodo, con su importe NETO.
+ *
+ * El problema: el importe de una partida es `cantidad * precio_unitario`, que
+ * es BRUTO — el descuento y el envio viven a nivel de PEDIDO, no de partida.
+ * Si el reporte sumara eso, la seccion de presentaciones no cuadraria con el
+ * Facturado del resumen, y quien compare las dos secciones encontraria una
+ * diferencia sin explicacion.
+ *
+ * La solucion: repartir el neto del pedido (`pagado + saldo`) entre sus
+ * partidas en proporcion a su bruto. Verificado contra produccion el
+ * 2026-11-09: `suma(cantidad * precio_unitario)` coincide con `pedidos.total`
+ * en 15/15 pedidos, asi que el bruto de las partidas es una base de reparto
+ * exacta y no una aproximacion.
+ *
+ * Un pedido con bruto 0 no se puede repartir: sus partidas quedan en cero y su
+ * neto se devuelve aparte en `sinReparto`, para que el reporte pueda decir que
+ * hay dinero que no se pudo clasificar en vez de esconderlo.
+ */
+export type PartidaValuada = {
+  pedido_id: string
+  /** Del renglon de `pedidos_saldo`, que es donde `cliente_id` siempre viene. */
+  cliente_id: string | null
+  fecha_pedido: string
+  unidad: string | null
+  cantidad: number
+  /** null si la unidad es desconocida: no se asume volumen. */
+  litros: number | null
+  /** Importe neto ya repartido. */
+  importe: number
+  producto: string
+  producto_id: string | null
+  estilo: string | null
+  /** Desglose de latas por estilo si la partida es una caja mixta. */
+  mix: MixEstilo[] | null
+}
+
+export function partidasValuadas(
+  datos: DatosPeriodo,
+  r: Rango
+): { partidas: PartidaValuada[]; sinReparto: number } {
+  const netoPorPedido = new Map(datos.saldos.map(f => [f.id, netoDe(f)]))
+  const clientePorPedido = new Map(datos.saldos.map(f => [f.id, f.cliente_id]))
+
+  const partidas: PartidaValuada[] = []
+  let sinReparto = 0
+
+  for (const ped of datos.pedidos) {
+    if (!enRango(ped.fecha_pedido, r)) continue
+
+    const items = ped.pedido_items || []
+    const bruto = items.reduce((s, it) => s + (it.cantidad || 0) * (it.precio_unitario || 0), 0)
+    const neto = netoPorPedido.get(ped.id) ?? 0
+    if (bruto <= 0 && neto !== 0) sinReparto += neto
+
+    for (const it of items) {
+      const prod = unProducto(it.productos ?? null)
+      const brutoItem = (it.cantidad || 0) * (it.precio_unitario || 0)
+      const mix = it.metadata?.estilos
+      partidas.push({
+        pedido_id: ped.id,
+        cliente_id: clientePorPedido.get(ped.id) ?? null,
+        fecha_pedido: ped.fecha_pedido,
+        unidad: it.unidad,
+        cantidad: it.cantidad || 0,
+        litros: litrosDeItem(it.unidad, it.cantidad),
+        importe: bruto > 0 ? neto * (brutoItem / bruto) : 0,
+        producto: prod?.nombre || 'Sin producto',
+        producto_id: prod?.id ?? null,
+        estilo: prod?.estilo ?? null,
+        mix: mix && mix.length ? mix : null,
+      })
+    }
+  }
+
+  return { partidas, sinReparto }
+}
+
+// ── Reporte: ventas por presentacion ────────────────────────
+
+/**
+ * Las presentaciones del reporte, en el orden en que se leen.
+ *
+ * `mix24` sale como su propio renglon y no sumada a `caja24`: es el mismo
+ * volumen, pero en produccion son 8 de 29 partidas y meterlas en caja 24
+ * esconderia a que se le vende de verdad. Los barriles de 10 L estan en la
+ * lista aunque hoy no se vendan; `ventasPorPresentacion` decide cuales pinta.
+ */
+export const PRESENTACIONES: { unidad: string; label: string; siempre: boolean }[] = [
+  { unidad: 'lata', label: 'Lata', siempre: true },
+  { unidad: 'caja12', label: 'Caja 12', siempre: true },
+  { unidad: 'caja24', label: 'Caja 24', siempre: true },
+  { unidad: 'mix24', label: 'Caja 24 mixta', siempre: false },
+  { unidad: 'barril_pet', label: 'Barril PET 20 L', siempre: true },
+  { unidad: 'barril_acero', label: 'Barril acero 20 L', siempre: true },
+  { unidad: 'barril10_pet', label: 'Barril PET 10 L', siempre: false },
+  { unidad: 'barril10_acero', label: 'Barril acero 10 L', siempre: false },
+]
+
+/** Clave del renglon que agrupa las partidas sin presentacion registrada. */
+export const SIN_PRESENTACION = 'sin_presentacion'
+
+export type FilaPresentacion = {
+  unidad: string
+  label: string
+  unidades: number
+  litros: number
+  importe: number
+  /** % del importe total del periodo. */
+  pct: number
+}
+
+/**
+ * Unidades, litros, importe y peso de cada presentacion.
+ *
+ * Las presentaciones de siempre salen aunque esten en cero: un cero dice
+ * "este mes no se vendio ni un barril", que es informacion. Las opcionales
+ * solo si hubo, para no llenar la tabla de renglones vacios.
+ *
+ * Las partidas sin presentacion registrada van a su propio renglon al final:
+ * tienen importe pero no litros, y mezclarlas con las demas haria que la
+ * columna de litros no cuadre con el total sin que se vea por que.
+ */
+export function ventasPorPresentacion(partidas: PartidaValuada[]): FilaPresentacion[] {
+  const acum = new Map<string, { unidades: number; litros: number; importe: number }>()
+  for (const p of partidas) {
+    const clave = esUnidadVenta(p.unidad) ? p.unidad : SIN_PRESENTACION
+    const a = acum.get(clave) || { unidades: 0, litros: 0, importe: 0 }
+    a.unidades += p.cantidad
+    a.litros += p.litros || 0
+    a.importe += p.importe
+    acum.set(clave, a)
+  }
+
+  const total = [...acum.values()].reduce((s, a) => s + a.importe, 0)
+  const fila = (unidad: string, label: string) => {
+    const a = acum.get(unidad) || { unidades: 0, litros: 0, importe: 0 }
+    return { unidad, label, ...a, pct: total > 0 ? (a.importe / total) * 100 : 0 }
+  }
+
+  const filas = PRESENTACIONES
+    .filter(p => p.siempre || acum.has(p.unidad))
+    .map(p => fila(p.unidad, p.label))
+
+  if (acum.has(SIN_PRESENTACION)) filas.push(fila(SIN_PRESENTACION, 'Sin presentación'))
+  return filas
+}
+
+// ── Reporte: ventas por estilo ──────────────────────────────
+
+export type FilaEstilo = {
+  estilo: string
+  litros: number
+  importe: number
+  /** % del importe total del periodo. */
+  pct: number
+}
+
+export const SIN_ESTILO = 'Sin estilo'
+
+/**
+ * Litros e importe por estilo de cerveza.
+ *
+ * Las cajas MIXTAS se desglosan por su `metadata.estilos`, repartiendo litros
+ * e importe en proporcion a las latas de cada estilo. Sin eso, una caja mixta
+ * entera se le atribuiria al producto de la partida (que es solo el primero de
+ * la mezcla) y el reporte diria que se vendio cuatro veces mas de ese estilo
+ * del que salio de la bodega. En produccion son 8 de 29 partidas, asi que no
+ * es un caso de borde.
+ *
+ * El estilo de cada componente se resuelve por `producto_id` contra el
+ * catalogo, no por el `nombre` que trae la metadata: ese nombre es el del
+ * PRODUCTO ("Chula Vista"), no el del estilo, y meterlo en esta columna
+ * mezclaria dos vocabularios en la misma tabla.
+ */
+export function ventasPorEstilo(
+  partidas: PartidaValuada[],
+  estiloDeProducto: Map<string, string | null>
+): FilaEstilo[] {
+  const acum = new Map<string, { litros: number; importe: number }>()
+  const sumar = (estilo: string, litros: number, importe: number) => {
+    const a = acum.get(estilo) || { litros: 0, importe: 0 }
+    a.litros += litros
+    a.importe += importe
+    acum.set(estilo, a)
+  }
+
+  for (const p of partidas) {
+    const totalLatas = (p.mix || []).reduce((s, e) => s + (e.latas || 0), 0)
+
+    // Una mezcla sin latas por estilo no se puede repartir; cae al estilo del
+    // producto de la partida, que es lo unico que se sabe de ella.
+    if (p.mix && totalLatas > 0) {
+      for (const e of p.mix) {
+        const parte = (e.latas || 0) / totalLatas
+        const estilo = (e.producto_id && estiloDeProducto.get(e.producto_id)) || SIN_ESTILO
+        sumar(estilo, (p.litros || 0) * parte, p.importe * parte)
+      }
+      continue
+    }
+
+    sumar(p.estilo || SIN_ESTILO, p.litros || 0, p.importe)
+  }
+
+  const total = [...acum.values()].reduce((s, a) => s + a.importe, 0)
+  return [...acum.entries()]
+    .map(([estilo, a]) => ({ estilo, ...a, pct: total > 0 ? (a.importe / total) * 100 : 0 }))
+    .sort((a, b) => b.litros - a.litros || b.importe - a.importe)
+}
+
+// ── Reporte: ventas por cliente ─────────────────────────────
+
+export type ClaveCobranza = 'pagado' | 'corriente' | 'parcial' | 'vencido'
+
+export type EstadoCobranza = {
+  clave: ClaveCobranza
+  /** Dias del atraso mas viejo. 0 si no hay nada vencido. */
+  dias: number
+}
+
+/**
+ * En que esta la cobranza de un conjunto de pedidos.
+ *
+ * El atraso se mide con `dias_vencido`, NO con `estado_cobro`: la vista viva
+ * evalua la rama 'parcial' antes que 'vencido' (ver docs/SCHEMA_NOTES.md), asi
+ * que un pedido atrasado con un abono sale 'parcial' y no se contaria como
+ * vencido. Es el mismo criterio que `vencidoDe`, para que las dos secciones
+ * del reporte no se contradigan.
+ *
+ * El orden importa: vencido gana a parcial. Quien lee la tabla quiere ver
+ * primero que hay un atraso, y que ademas haya un abono no lo arregla.
+ */
+export function estadoCobranzaDe(filas: FilaSaldo[]): EstadoCobranza {
+  const conSaldo = filas.filter(f => saldoPositivo(f) > 0)
+  if (conSaldo.length === 0) return { clave: 'pagado', dias: 0 }
+
+  const dias = Math.max(0, ...conSaldo.map(f => f.dias_vencido || 0))
+  if (dias > 0) return { clave: 'vencido', dias }
+  if (cobradoDe(filas) > 0) return { clave: 'parcial', dias: 0 }
+  return { clave: 'corriente', dias: 0 }
+}
+
+export type FilaVentasCliente = {
+  cliente_id: string | null
+  nombre: string
+  pedidos: number
+  litros: number
+  facturado: number
+  /** Lo cobrado DE ESOS PEDIDOS (cohorte), no los pagos del periodo. */
+  cobrado: number
+  saldo: number
+  estado: EstadoCobranza
+}
+
+/**
+ * Ventas del periodo por cliente, de mas a menos facturado.
+ *
+ * `cobrado` es la cohorte del pedido y no los pagos con fecha en el periodo:
+ * la pregunta de esta tabla es "de lo que le vendi a este cliente, cuanto ya
+ * me pago", y para eso un pago de ayer sobre un pedido de hace tres meses no
+ * cuenta como venta de ayer. El KPI de Cobrado del resumen si va por fecha de
+ * pago, y por eso los dos numeros no tienen que coincidir.
+ */
+export function ventasPorCliente(
+  datos: DatosPeriodo,
+  clientes: DatosCliente[],
+  r: Rango
+): FilaVentasCliente[] {
+  const datosCliente = new Map(clientes.map(c => [c.id, c]))
+  const filas = filasEnRango(datos.saldos, r)
+
+  const porCliente = new Map<string, FilaSaldo[]>()
+  for (const f of filas) {
+    const k = f.cliente_id || ''
+    const lista = porCliente.get(k)
+    if (lista) lista.push(f)
+    else porCliente.set(k, [f])
+  }
+
+  const litros = new Map<string, number>()
+  for (const p of partidasValuadas(datos, r).partidas) {
+    const k = p.cliente_id || ''
+    litros.set(k, (litros.get(k) || 0) + (p.litros || 0))
+  }
+
+  return [...porCliente.entries()]
+    .map(([k, suyos]) => ({
+      cliente_id: k || null,
+      nombre: k
+        ? nombreLegible(datosCliente.get(k) || { id: k, full_name: null, email: null, razon_social: null })
+        : 'Sin cliente',
+      pedidos: suyos.length,
+      litros: litros.get(k) || 0,
+      facturado: netoTotal(suyos),
+      cobrado: cobradoDe(suyos),
+      saldo: porCobrarDe(suyos),
+      estado: estadoCobranzaDe(suyos),
+    }))
+    .sort((a, b) => b.facturado - a.facturado)
+}
+
+export type TotalesCliente = {
+  pedidos: number
+  litros: number
+  facturado: number
+  cobrado: number
+  saldo: number
+}
+
+/** El renglon de totales. Se suma de la tabla para que cuadre con lo impreso. */
+export function totalesDeClientes(filas: FilaVentasCliente[]): TotalesCliente {
+  return filas.reduce(
+    (t, f) => ({
+      pedidos: t.pedidos + f.pedidos,
+      litros: t.litros + f.litros,
+      facturado: t.facturado + f.facturado,
+      cobrado: t.cobrado + f.cobrado,
+      saldo: t.saldo + f.saldo,
+    }),
+    { pedidos: 0, litros: 0, facturado: 0, cobrado: 0, saldo: 0 }
+  )
+}
+
+// ── Reporte: pedidos con saldo ──────────────────────────────
+
+export type FilaCobranza = {
+  id: string
+  cliente_id: string | null
+  nombre: string
+  fecha_pedido: string
+  fecha_vencimiento: string | null
+  /** Dias de atraso. 0 si todavia no vence. */
+  dias: number
+  saldo: number
+}
+
+/**
+ * Los pedidos que siguen debiendo, al dia de hoy.
+ *
+ * Sin filtro de periodo a proposito: una deuda no pertenece al mes en que se
+ * facturo, es la que existe en este momento. Filtrarla por el selector daria
+ * un "por cobrar de marzo" que no significa nada.
+ */
+export function pedidosConSaldo(saldos: FilaSaldo[], clientes: DatosCliente[]): FilaCobranza[] {
+  const datosCliente = new Map(clientes.map(c => [c.id, c]))
+
+  return saldos
+    .filter(f => saldoPositivo(f) > 0)
+    .map(f => ({
+      id: f.id,
+      cliente_id: f.cliente_id,
+      nombre: f.cliente_id
+        ? nombreLegible(
+            datosCliente.get(f.cliente_id) || { id: f.cliente_id, full_name: null, email: null, razon_social: null }
+          )
+        : 'Sin cliente',
+      fecha_pedido: f.fecha_pedido,
+      fecha_vencimiento: f.fecha_vencimiento ?? null,
+      dias: Math.max(0, f.dias_vencido || 0),
+      saldo: saldoPositivo(f),
+    }))
+    .sort((a, b) => b.dias - a.dias || b.saldo - a.saldo)
+}
+
+// ── Reporte: crecimiento ────────────────────────────────────
+
+/** La tendencia nunca baja de 12 meses, aunque el periodo sea de una semana. */
+export const MESES_TENDENCIA_MIN = 12
+
+/**
+ * Cuantos meses de tendencia: 12, o 24 si el periodo elegido ya pasa de 12.
+ *
+ * Un periodo de 24 meses con una tendencia de 12 dejaria fuera la mitad de lo
+ * que el resto del reporte esta sumando.
+ */
+export function mesesDeTendencia(r: Rango): 12 | 24 {
+  return contarBuckets(r, 'mes') > MESES_TENDENCIA_MIN ? 24 : 12
+}
+
+/** Rango de la tendencia mensual: los ultimos `meses` meses hasta hoy. */
+export function rangoTendencia(meses: number, ahora: Date = new Date()): Rango {
+  const hoy = fechaMx(ahora)
+  return { desde: sumarMeses(inicioMes(hoy), -(meses - 1)), hasta: hoy }
+}
+
+/**
+ * Primera fecha de pedido de cada cliente, sobre TODO el historial.
+ *
+ * Es lo que distingue a un cliente nuevo de uno recurrente, y por eso se
+ * calcula sobre todas las filas y no sobre las del periodo: si se mirara solo
+ * la ventana, cada cliente seria "nuevo" el primer mes en que aparece dentro
+ * de ella, y un cliente de hace tres anios saldria como nuevo.
+ */
+export function primerPedidoPorCliente(filas: FilaSaldo[]): Map<string, string> {
+  const primero = new Map<string, string>()
+  for (const f of filas) {
+    if (!f.cliente_id) continue
+    const actual = primero.get(f.cliente_id)
+    if (!actual || f.fecha_pedido < actual) primero.set(f.cliente_id, f.fecha_pedido)
+  }
+  return primero
+}
+
+export type PuntoCrecimiento = PuntoSerie & {
+  /** Facturado del mismo bucket un anio antes. */
+  anoAnterior: number
+  /** Contra el anio anterior. */
+  varAnual: Variacion | null
+  /** Contra el bucket inmediato anterior. null en el primero: no hay base. */
+  varMes: Variacion | null
+  clientesNuevos: number
+  clientesRecurrentes: number
+}
+
+/**
+ * La serie de crecimiento: la de siempre, mas las dos comparaciones y el corte
+ * de clientes nuevos contra recurrentes.
+ */
+export function serieCrecimiento(datos: DatosPeriodo, buckets: Bucket[]): PuntoCrecimiento[] {
+  const base = serieDePeriodo(datos, buckets)
+  const previa = serieDePeriodo(datos, buckets.map(bucketAnoAnterior))
+  const primero = primerPedidoPorCliente(datos.saldos)
+
+  const nuevos = buckets.map(() => new Set<string>())
+  const recurrentes = buckets.map(() => new Set<string>())
+  for (const f of datos.saldos) {
+    if (!f.cliente_id) continue
+    const i = buckets.findIndex(b => enRango(f.fecha_pedido, b))
+    if (i < 0) continue
+    const debut = primero.get(f.cliente_id)
+    if (debut && enRango(debut, buckets[i])) nuevos[i].add(f.cliente_id)
+    else recurrentes[i].add(f.cliente_id)
+  }
+
+  return base.map((p, i) => ({
+    ...p,
+    anoAnterior: previa[i].facturado,
+    varAnual: variacion(p.facturado, previa[i].facturado),
+    varMes: i === 0 ? null : variacion(p.facturado, base[i - 1].facturado),
+    clientesNuevos: nuevos[i].size,
+    clientesRecurrentes: recurrentes[i].size,
+  }))
+}
+
+export type MezclaBucket = {
+  clave: string
+  etiqueta: string
+  litros: number
+  /** Litros por unidad de venta. Las desconocidas no entran: no tienen litros. */
+  porUnidad: Record<string, number>
+}
+
+/** Mezcla de presentaciones por bucket, en litros. El % lo saca quien pinta. */
+export function mezclaPorBucket(datos: DatosPeriodo, buckets: Bucket[]): MezclaBucket[] {
+  const salida: MezclaBucket[] = buckets.map(b => ({
+    clave: b.clave,
+    etiqueta: b.etiqueta,
+    litros: 0,
+    porUnidad: {},
+  }))
+
+  for (const ped of datos.pedidos) {
+    const i = buckets.findIndex(b => enRango(ped.fecha_pedido, b))
+    if (i < 0) continue
+    for (const it of ped.pedido_items || []) {
+      const litros = litrosDeItem(it.unidad, it.cantidad)
+      if (litros === null) continue
+      const u = it.unidad as string
+      salida[i].porUnidad[u] = (salida[i].porUnidad[u] || 0) + litros
+      salida[i].litros += litros
+    }
+  }
+
+  return salida
+}
+
+export const DIAS_ANO = 365
+
+/**
+ * Ritmo anualizado: a lo que va el periodo si el paso se mantiene un anio.
+ *
+ * Es una extrapolacion lineal y nada mas: no sabe de temporadas ni de que el
+ * periodo pueda llevar tres dias. Se rotula como ritmo y no como pronostico.
+ */
+export function ritmoAnualizado(facturado: number, r: Rango): number {
+  const dias = diasDeRango(r)
+  return dias > 0 ? (facturado / dias) * DIAS_ANO : 0
+}
+
+// ── Reporte: hallazgos ──────────────────────────────────────
+
+export type Hallazgo = {
+  clave: string
+  texto: string
+  tono: 'neutral' | 'bueno' | 'malo'
+}
+
+/**
+ * Pesos redondeados.
+ *
+ * Repetido de `dash-ui.moneda` a proposito: los hallazgos son frases armadas, y
+ * la pagina y el Excel tienen que decir exactamente la misma. Que esta
+ * libreria importara un modulo de la UI para formatear seria peor que esta
+ * linea.
+ */
+const pesos = (n: number) => `$${Math.round(n).toLocaleString('es-MX')}`
+
+/**
+ * Tres o cuatro cosas que el reporte dice en palabras.
+ *
+ * Reglas fijas, no un ranking: se buscan las cuatro preguntas que alguien hace
+ * al recibir el reporte (vamos mejor o peor, quien me debe, que se vende, que
+ * tan mal esta la cobranza). Un hallazgo sin dato no se inventa: se omite.
+ *
+ * `productos` puede venir recortado; lo unico que se le pide es que el primero
+ * sea el mas vendido.
+ */
+export function hallazgos(entrada: {
+  resumen: ResumenPeriodo
+  previo: ResumenPeriodo
+  cobranza: FilaCobranza[]
+  productos: { nombre: string; litros: number }[]
+  porCobrar: number
+  vencido: number
+}): Hallazgo[] {
+  const { resumen, previo, cobranza, productos, porCobrar, vencido } = entrada
+  const salida: Hallazgo[] = []
+
+  // 1. Como vamos contra el periodo anterior.
+  const v = variacion(resumen.facturado, previo.facturado)
+  if (v) {
+    salida.push({
+      clave: 'facturado',
+      texto: `Lo facturado ${v.dir === 'up' ? 'subió' : 'bajó'} ${v.pct}% contra el periodo anterior: ${pesos(resumen.facturado)} frente a ${pesos(previo.facturado)}.`,
+      tono: v.dir === 'up' ? 'bueno' : 'malo',
+    })
+  } else if (resumen.facturado > 0) {
+    salida.push({
+      clave: 'facturado',
+      texto: `Se facturaron ${pesos(resumen.facturado)}. El periodo anterior no tuvo ventas, así que no hay base para comparar.`,
+      tono: 'neutral',
+    })
+  }
+
+  // 2. Quien concentra la deuda. Se agrupa por cliente: un cliente con cinco
+  //    pedidos chicos puede deber mas que otro con uno grande.
+  const porDeudor = new Map<string, { nombre: string; saldo: number }>()
+  for (const c of cobranza) {
+    const k = c.cliente_id || c.nombre
+    const a = porDeudor.get(k) || { nombre: c.nombre, saldo: 0 }
+    a.saldo += c.saldo
+    porDeudor.set(k, a)
+  }
+  const peor = [...porDeudor.values()].sort((a, b) => b.saldo - a.saldo)[0]
+  if (peor && porCobrar > 0) {
+    salida.push({
+      clave: 'deudor',
+      texto: `${peor.nombre} concentra ${pesos(peor.saldo)} de saldo, el ${Math.round((peor.saldo / porCobrar) * 100)}% de todo lo que está por cobrar.`,
+      tono: 'neutral',
+    })
+  }
+
+  // 3. Que se vende. En litros, que es lo comparable entre presentaciones.
+  //
+  // El denominador es el volumen del PERIODO y no la suma de `productos`: esa
+  // lista puede llegar recortada a los primeros N, y entonces el porcentaje
+  // seria "del top N", que no es lo que la frase dice.
+  const top = productos[0]
+  if (top && top.litros > 0) {
+    const pct = resumen.litros > 0 ? Math.round((top.litros / resumen.litros) * 100) : 0
+    salida.push({
+      clave: 'producto',
+      texto: `${top.nombre} fue lo más vendido con ${top.litros.toLocaleString('es-MX', { maximumFractionDigits: 1 })} L, el ${pct}% del volumen del periodo.`,
+      tono: 'neutral',
+    })
+  }
+
+  // 4. Que tan mal esta la cartera. Al dia de hoy, no del periodo.
+  if (porCobrar > 0) {
+    const pct = Math.round((vencido / porCobrar) * 100)
+    salida.push({
+      clave: 'vencido',
+      texto: vencido > 0
+        ? `${pesos(vencido)} ya pasaron su fecha de vencimiento: el ${pct}% de la cartera.`
+        : 'Nada de la cartera está vencido: todo el saldo abierto está dentro de su plazo.',
+      tono: pct >= 50 ? 'malo' : pct > 0 ? 'neutral' : 'bueno',
+    })
+  }
+
+  return salida
+}

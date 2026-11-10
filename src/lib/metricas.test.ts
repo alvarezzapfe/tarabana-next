@@ -32,11 +32,32 @@ import {
   rangoAnterior,
   rangoDePeriodo,
   requierenAtencion,
+  PERIODOS,
+  queryPeriodo,
   resolverPeriodo,
   resumenDePeriodo,
   serieDePeriodo,
   topClientes,
   vencidoDe,
+  DIAS_ANO,
+  MESES_TENDENCIA_MIN,
+  SIN_ESTILO,
+  SIN_PRESENTACION,
+  estadoCobranzaDe,
+  hallazgos,
+  mesesDeTendencia,
+  mezclaPorBucket,
+  partidasValuadas,
+  pedidosConSaldo,
+  primerPedidoPorCliente,
+  rangoTendencia,
+  ritmoAnualizado,
+  serieCrecimiento,
+  totalesDeClientes,
+  ventasPorCliente,
+  ventasPorEstilo,
+  ventasPorPresentacion,
+  type FilaCobranza,
   type DatosPeriodo,
   type FilaSaldo,
   type PagoFila,
@@ -833,4 +854,558 @@ test('filasEnRango: los bordes son inclusivos y recortan los tops', () => {
   assert.deepEqual(top.map(c => c.id), ['borde', 'dentro'])
   // El pct se recalcula sobre el total DEL PERIODO, no sobre el historico.
   assert.equal(top[0].pct, (200 / 300) * 100)
+})
+
+// ── Reporte: el importe neto por partida ────────────────────
+//
+// Lo que se prueba aqui es el reparto: el importe de una partida es bruto y el
+// del pedido es neto, y si el reparto se equivoca la seccion de presentaciones
+// deja de cuadrar con el Facturado del resumen.
+
+/** Un pedido con partidas valuadas. `precio_unitario` es el bruto del renglon. */
+const ped = (
+  id: string,
+  fecha_pedido: string,
+  items: { unidad: string | null; cantidad: number; precio: number; nombre?: string; estilo?: string | null; producto_id?: string; mix?: { producto_id: string; latas: number }[] }[]
+): PedidoConItems => ({
+  id,
+  fecha_pedido,
+  pedido_items: items.map(it => ({
+    unidad: it.unidad,
+    cantidad: it.cantidad,
+    precio_unitario: it.precio,
+    productos: { id: it.producto_id ?? 'prod-' + (it.nombre || 'x'), nombre: it.nombre || 'Magma', estilo: it.estilo ?? 'Double IPA' },
+    ...(it.mix ? { metadata: { estilos: it.mix } } : {}),
+  })),
+})
+
+test('partidasValuadas reparte el neto del pedido entre sus partidas', () => {
+  // Bruto 1,000 (600 + 400) y neto 900: hubo 100 de descuento. Si el reporte
+  // sumara el bruto, diria 1,000 facturados donde el resumen dice 900.
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 500, saldo: 400 })],
+    pedidos: [ped('p1', '2026-11-02', [
+      { unidad: 'caja24', cantidad: 3, precio: 200 },
+      { unidad: 'lata', cantidad: 8, precio: 50 },
+    ])],
+  })
+
+  const { partidas, sinReparto } = partidasValuadas(d, rangoDePeriodo('mes', AHORA))
+  assert.equal(partidas.length, 2)
+  assert.equal(partidas[0].importe, 540)
+  assert.equal(partidas[1].importe, 360)
+  assert.equal(partidas.reduce((s, p) => s + p.importe, 0), 900, 'el reparto no suma el neto del pedido')
+  assert.equal(sinReparto, 0)
+})
+
+test('partidasValuadas: el cliente sale de pedidos_saldo, no del pedido', () => {
+  // `cliente_id` siempre viene en la vista; la consulta de partidas no tiene
+  // por que traerlo otra vez.
+  const d = datos({
+    saldos: [fila({ id: 'p1', cliente_id: 'c-9', fecha_pedido: '2026-11-02', pagado: 0, saldo: 100 })],
+    pedidos: [ped('p1', '2026-11-02', [{ unidad: 'lata', cantidad: 1, precio: 100 }])],
+  })
+  assert.equal(partidasValuadas(d, rangoDePeriodo('mes', AHORA)).partidas[0].cliente_id, 'c-9')
+})
+
+test('partidasValuadas: un pedido con bruto cero no se reparte, se reporta', () => {
+  // Un regalo o una captura a medias: no hay proporcion con la que repartir, y
+  // inventar una meteria dinero en una presentacion que no lo gano.
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 700 })],
+    pedidos: [ped('p1', '2026-11-02', [{ unidad: 'caja24', cantidad: 2, precio: 0 }])],
+  })
+  const { partidas, sinReparto } = partidasValuadas(d, rangoDePeriodo('mes', AHORA))
+  assert.equal(partidas[0].importe, 0)
+  assert.equal(sinReparto, 700, 'el neto sin clasificar tiene que decirse')
+})
+
+test('partidasValuadas: solo las partidas de los pedidos del periodo', () => {
+  const d = datos({
+    saldos: [
+      fila({ id: 'dentro', fecha_pedido: '2026-11-02', pagado: 0, saldo: 100 }),
+      fila({ id: 'fuera', fecha_pedido: '2026-10-02', pagado: 0, saldo: 100 }),
+    ],
+    pedidos: [
+      ped('dentro', '2026-11-02', [{ unidad: 'lata', cantidad: 1, precio: 100 }]),
+      ped('fuera', '2026-10-02', [{ unidad: 'lata', cantidad: 1, precio: 100 }]),
+    ],
+  })
+  const { partidas } = partidasValuadas(d, rangoDePeriodo('mes', AHORA))
+  assert.deepEqual(partidas.map(p => p.pedido_id), ['dentro'])
+})
+
+// ── Reporte: por presentacion ───────────────────────────────
+
+const partidasDe = (d: DatosPeriodo) => partidasValuadas(d, rangoDePeriodo('mes', AHORA)).partidas
+
+test('ventasPorPresentacion: las de siempre salen aunque esten en cero', () => {
+  // Un cero dice "este mes no se vendio ni un barril", que es informacion.
+  const filas = ventasPorPresentacion(partidasDe(datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 1_000 })],
+    pedidos: [ped('p1', '2026-11-02', [{ unidad: 'caja24', cantidad: 5, precio: 200 }])],
+  })))
+
+  assert.deepEqual(filas.map(f => f.unidad), ['lata', 'caja12', 'caja24', 'barril_pet', 'barril_acero'])
+  const caja = filas.find(f => f.unidad === 'caja24')!
+  assert.equal(caja.unidades, 5)
+  assert.equal(caja.litros.toFixed(2), '42.60')
+  assert.equal(caja.importe, 1_000)
+  assert.equal(caja.pct, 100)
+  assert.equal(filas.find(f => f.unidad === 'barril_pet')!.importe, 0)
+})
+
+test('ventasPorPresentacion: mix24 y los de 10 L solo si hubo', () => {
+  const filas = ventasPorPresentacion(partidasDe(datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 300 })],
+    pedidos: [ped('p1', '2026-11-02', [
+      { unidad: 'mix24', cantidad: 1, precio: 200 },
+      { unidad: 'barril10_pet', cantidad: 1, precio: 100 },
+    ])],
+  })))
+  const claves = filas.map(f => f.unidad)
+  assert.ok(claves.includes('mix24'), 'la caja mixta no puede desaparecer dentro de caja 24')
+  assert.ok(claves.includes('barril10_pet'))
+  assert.ok(!claves.includes('barril10_acero'), 'un 10 L que no se vendio no lleva renglon')
+})
+
+test('ventasPorPresentacion: las partidas sin presentacion van a su renglon', () => {
+  // Tienen importe pero no litros. Mezclarlas haria que la columna de litros
+  // no cuadre con el total sin que se vea por que.
+  const filas = ventasPorPresentacion(partidasDe(datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 500 })],
+    pedidos: [ped('p1', '2026-11-02', [
+      { unidad: 'caja24', cantidad: 1, precio: 250 },
+      { unidad: null, cantidad: 1, precio: 250 },
+    ])],
+  })))
+
+  const sin = filas.find(f => f.unidad === SIN_PRESENTACION)!
+  assert.equal(sin.importe, 250)
+  assert.equal(sin.litros, 0, 'no se le puede asignar volumen')
+  assert.equal(filas.at(-1)!.unidad, SIN_PRESENTACION, 'va al final')
+  assert.equal(Math.round(filas.reduce((s, f) => s + f.pct, 0)), 100)
+})
+
+// ── Reporte: por estilo ─────────────────────────────────────
+
+const ESTILOS = new Map<string, string | null>([
+  ['pa', 'West Coast IPA'],
+  ['pb', 'Red IPA'],
+  ['pc', 'Czech Pale Lager'],
+])
+
+test('ventasPorEstilo desglosa la caja mixta por sus latas', () => {
+  // El caso de produccion: 8 de 29 partidas son mix24 con metadata.estilos.
+  // Sin desglose, la caja entera se le atribuye al producto de la partida
+  // (solo el primero de la mezcla) y el reporte diria que de ese estilo salio
+  // el doble de lo que salio de la bodega.
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 400 })],
+    pedidos: [ped('p1', '2026-11-02', [{
+      unidad: 'mix24', cantidad: 1, precio: 400, producto_id: 'pa', estilo: 'West Coast IPA',
+      mix: [{ producto_id: 'pa', latas: 12 }, { producto_id: 'pb', latas: 12 }],
+    }])],
+  })
+
+  const filas = ventasPorEstilo(partidasDe(d), ESTILOS)
+  assert.equal(filas.length, 2)
+  // 24 latas = 8.52 L, mitad y mitad.
+  for (const f of filas) {
+    assert.equal(f.litros.toFixed(2), '4.26')
+    assert.equal(f.importe, 200)
+  }
+  assert.deepEqual(filas.map(f => f.estilo).sort(), ['Red IPA', 'West Coast IPA'])
+})
+
+test('ventasPorEstilo: el reparto de la mezcla sigue las latas, no el conteo', () => {
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 1_200 })],
+    pedidos: [ped('p1', '2026-11-02', [{
+      unidad: 'mix24', cantidad: 1, precio: 1_200, producto_id: 'pa',
+      mix: [{ producto_id: 'pa', latas: 18 }, { producto_id: 'pb', latas: 6 }],
+    }])],
+  })
+  const filas = ventasPorEstilo(partidasDe(d), ESTILOS)
+  assert.equal(filas.find(f => f.estilo === 'West Coast IPA')!.importe, 900)
+  assert.equal(filas.find(f => f.estilo === 'Red IPA')!.importe, 300)
+})
+
+test('ventasPorEstilo: el estilo del componente sale del catalogo, no del nombre', () => {
+  // metadata.estilos[].nombre es el nombre del PRODUCTO ("Chula Vista"), no el
+  // del estilo: meterlo en esta columna mezclaria dos vocabularios.
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 100 })],
+    pedidos: [ped('p1', '2026-11-02', [{
+      unidad: 'mix24', cantidad: 1, precio: 100, producto_id: 'pa',
+      mix: [{ producto_id: 'desconocido', latas: 24 }],
+    }])],
+  })
+  const filas = ventasPorEstilo(partidasDe(d), ESTILOS)
+  assert.deepEqual(filas.map(f => f.estilo), [SIN_ESTILO])
+})
+
+test('ventasPorEstilo: una mezcla sin latas cae al estilo del producto', () => {
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 100 })],
+    pedidos: [ped('p1', '2026-11-02', [{
+      unidad: 'mix24', cantidad: 1, precio: 100, estilo: 'Porter',
+      mix: [{ producto_id: 'pa', latas: 0 }],
+    }])],
+  })
+  assert.deepEqual(ventasPorEstilo(partidasDe(d), ESTILOS).map(f => f.estilo), ['Porter'])
+})
+
+test('ventasPorEstilo ordena por litros y reparte el 100%', () => {
+  const d = datos({
+    saldos: [fila({ id: 'p1', fecha_pedido: '2026-11-02', pagado: 0, saldo: 300 })],
+    pedidos: [ped('p1', '2026-11-02', [
+      { unidad: 'lata', cantidad: 1, precio: 100, estilo: 'Porter' },
+      { unidad: 'barril_pet', cantidad: 1, precio: 200, estilo: 'Stout' },
+    ])],
+  })
+  const filas = ventasPorEstilo(partidasDe(d), ESTILOS)
+  assert.deepEqual(filas.map(f => f.estilo), ['Stout', 'Porter'])
+  assert.equal(Math.round(filas.reduce((s, f) => s + f.pct, 0)), 100)
+})
+
+// ── Reporte: estado de cobranza ─────────────────────────────
+
+test('estadoCobranzaDe: vencido le gana a parcial', () => {
+  // El caso real de produccion: atrasado, con abono, y la vista lo marca
+  // 'parcial' porque evalua esa rama antes que 'vencido'. Para quien cobra, lo
+  // primero es que hay 92 dias de atraso.
+  const e = estadoCobranzaDe([fila({ saldo: 100, pagado: 1_400, dias_vencido: 92, estado_cobro: 'parcial' })])
+  assert.deepEqual(e, { clave: 'vencido', dias: 92 })
+})
+
+test('estadoCobranzaDe: pagado, al corriente y parcial', () => {
+  assert.deepEqual(
+    estadoCobranzaDe([fila({ saldo: 0, pagado: 1_000, estado_cobro: 'pagado' })]),
+    { clave: 'pagado', dias: 0 }
+  )
+  assert.deepEqual(
+    estadoCobranzaDe([fila({ saldo: 1_000, pagado: 0, dias_vencido: 0 })]),
+    { clave: 'corriente', dias: 0 }
+  )
+  assert.deepEqual(
+    estadoCobranzaDe([fila({ saldo: 600, pagado: 400, dias_vencido: 0 })]),
+    { clave: 'parcial', dias: 0 }
+  )
+})
+
+test('estadoCobranzaDe: un sobrepago no deja al cliente "debiendo"', () => {
+  assert.equal(estadoCobranzaDe([fila({ saldo: -200, pagado: 1_200, dias_vencido: 40 })]).clave, 'pagado')
+})
+
+test('estadoCobranzaDe: con varios pedidos manda el atraso mas viejo', () => {
+  const e = estadoCobranzaDe([
+    fila({ saldo: 100, dias_vencido: 12 }),
+    fila({ saldo: 100, dias_vencido: 95 }),
+    fila({ saldo: 0, pagado: 500, dias_vencido: 200, estado_cobro: 'pagado' }),
+  ])
+  assert.deepEqual(e, { clave: 'vencido', dias: 95 })
+})
+
+// ── Reporte: ventas por cliente ─────────────────────────────
+
+test('ventasPorCliente: pedidos, litros, cohorte y estado por cliente', () => {
+  const d = datos({
+    saldos: [
+      fila({ id: 'p1', cliente_id: 'c1', fecha_pedido: '2026-11-02', pagado: 500, saldo: 500 }),
+      fila({ id: 'p2', cliente_id: 'c1', fecha_pedido: '2026-11-03', pagado: 0, saldo: 2_000, dias_vencido: 7 }),
+      fila({ id: 'p3', cliente_id: 'c2', fecha_pedido: '2026-11-04', pagado: 400, saldo: 0, estado_cobro: 'pagado' }),
+    ],
+    pedidos: [
+      ped('p1', '2026-11-02', [{ unidad: 'barril_pet', cantidad: 1, precio: 1_000 }]),
+      ped('p2', '2026-11-03', [{ unidad: 'barril_pet', cantidad: 2, precio: 1_000 }]),
+      ped('p3', '2026-11-04', [{ unidad: 'lata', cantidad: 1, precio: 400 }]),
+    ],
+    // Los pagos del periodo no entran en esta tabla: aqui va la cohorte.
+    pagos: [pago('2026-11-02', 9_999)],
+  })
+
+  const filas = ventasPorCliente(d, [], rangoDePeriodo('mes', AHORA))
+  assert.deepEqual(filas.map(f => f.cliente_id), ['c1', 'c2'], 'no ordeno por facturado')
+
+  const c1 = filas[0]
+  assert.equal(c1.pedidos, 2)
+  assert.equal(c1.facturado, 3_000)
+  assert.equal(c1.cobrado, 500, 'tomo los pagos del periodo en vez de la cohorte')
+  assert.equal(c1.saldo, 2_500)
+  assert.equal(c1.litros, 60)
+  assert.deepEqual(c1.estado, { clave: 'vencido', dias: 7 })
+
+  assert.equal(filas[1].estado.clave, 'pagado')
+  assert.equal(filas[1].litros.toFixed(3), '0.355')
+})
+
+test('ventasPorCliente: un pedido sin cliente tiene su propio renglon', () => {
+  const d = datos({ saldos: [fila({ cliente_id: null, fecha_pedido: '2026-11-02' })] })
+  const filas = ventasPorCliente(d, [], rangoDePeriodo('mes', AHORA))
+  assert.deepEqual(filas.map(f => f.nombre), ['Sin cliente'])
+})
+
+test('totalesDeClientes suma exactamente lo que se imprime', () => {
+  const d = datos({
+    saldos: [
+      fila({ id: 'p1', cliente_id: 'c1', fecha_pedido: '2026-11-02', pagado: 500, saldo: 500 }),
+      fila({ id: 'p2', cliente_id: 'c2', fecha_pedido: '2026-11-03', pagado: 0, saldo: 250 }),
+    ],
+    pedidos: [ped('p1', '2026-11-02', [{ unidad: 'barril_pet', cantidad: 1, precio: 1_000 }])],
+  })
+  const filas = ventasPorCliente(d, [], rangoDePeriodo('mes', AHORA))
+  const t = totalesDeClientes(filas)
+  assert.deepEqual(t, { pedidos: 2, litros: 20, facturado: 1_250, cobrado: 500, saldo: 750 })
+  // Y cuadra con el resumen del mismo periodo.
+  assert.equal(t.facturado, resumenDePeriodo(d, rangoDePeriodo('mes', AHORA)).facturado)
+})
+
+// ── Reporte: pedidos con saldo ──────────────────────────────
+
+test('pedidosConSaldo: solo los que deben, lo mas atrasado primero', () => {
+  const filas = pedidosConSaldo(
+    [
+      fila({ id: 'viejo', saldo: 100, dias_vencido: 90, fecha_vencimiento: '2026-08-07' }),
+      fila({ id: 'nuevo', saldo: 500, dias_vencido: 0, fecha_vencimiento: '2026-12-01' }),
+      fila({ id: 'medio', saldo: 300, dias_vencido: 30, fecha_vencimiento: '2026-10-10' }),
+      fila({ id: 'pagado', saldo: 0, pagado: 900, estado_cobro: 'pagado', dias_vencido: 200 }),
+      fila({ id: 'sobrepago', saldo: -50, pagado: 1_000, dias_vencido: 10 }),
+    ],
+    []
+  )
+  assert.deepEqual(filas.map(f => f.id), ['viejo', 'medio', 'nuevo'])
+  assert.equal(filas[0].fecha_vencimiento, '2026-08-07')
+  assert.equal(filas[0].dias, 90)
+})
+
+test('pedidosConSaldo: a igual atraso, primero el monto mas grande', () => {
+  const filas = pedidosConSaldo(
+    [fila({ id: 'chico', saldo: 100, dias_vencido: 10 }), fila({ id: 'grande', saldo: 900, dias_vencido: 10 })],
+    []
+  )
+  assert.deepEqual(filas.map(f => f.id), ['grande', 'chico'])
+})
+
+test('pedidosConSaldo: sin fecha_vencimiento en la consulta, la columna va vacia', () => {
+  // La vista si la expone, pero el tipo la trae opcional: una consulta que no
+  // la pida no debe reventar la tabla.
+  assert.equal(pedidosConSaldo([fila({ saldo: 100 })], []) [0].fecha_vencimiento, null)
+})
+
+// ── Reporte: crecimiento ────────────────────────────────────
+
+test('mesesDeTendencia: 12 por default, 24 cuando el periodo ya pasa de 12', () => {
+  assert.equal(MESES_TENDENCIA_MIN, 12)
+  assert.equal(mesesDeTendencia(rangoDePeriodo('mes', AHORA)), 12)
+  assert.equal(mesesDeTendencia(rangoDePeriodo('ytd', AHORA)), 12)
+  assert.equal(mesesDeTendencia(rangoDePeriodo('12m', AHORA)), 12)
+  // Un periodo de 24 meses con tendencia de 12 dejaria fuera la mitad de lo
+  // que el resto del reporte esta sumando.
+  assert.equal(mesesDeTendencia(rangoDePeriodo('24m', AHORA)), 24)
+})
+
+test('rangoTendencia da meses completos hasta hoy', () => {
+  assert.deepEqual(rangoTendencia(12, AHORA), rango('2025-12-01', '2026-11-05'))
+  assert.deepEqual(rangoTendencia(24, AHORA), rango('2024-12-01', '2026-11-05'))
+  assert.equal(contarBuckets(rangoTendencia(24, AHORA), 'mes'), 24)
+})
+
+test('primerPedidoPorCliente toma la fecha mas vieja de todo el historial', () => {
+  const m = primerPedidoPorCliente([
+    fila({ cliente_id: 'c1', fecha_pedido: '2026-06-10' }),
+    fila({ cliente_id: 'c1', fecha_pedido: '2024-02-01' }),
+    fila({ cliente_id: 'c2', fecha_pedido: '2026-11-01' }),
+    fila({ cliente_id: null, fecha_pedido: '2020-01-01' }),
+  ])
+  assert.equal(m.get('c1'), '2024-02-01')
+  assert.equal(m.get('c2'), '2026-11-01')
+  assert.equal(m.size, 2, 'un pedido sin cliente no es un cliente')
+})
+
+test('serieCrecimiento: nuevo es quien estrena en el bucket, no quien aparece', () => {
+  // Un cliente de hace tres anios que vuelve a comprar es RECURRENTE, aunque
+  // sea la primera vez que aparece dentro de la ventana que se mira.
+  const buckets = bucketsDe(rangoTendencia(12, AHORA), 'mes')
+  const d = datos({
+    saldos: [
+      fila({ cliente_id: 'viejo', fecha_pedido: '2023-05-01', pagado: 0, saldo: 100 }),
+      fila({ cliente_id: 'viejo', fecha_pedido: '2026-06-10', pagado: 0, saldo: 100 }),
+      fila({ cliente_id: 'estreno', fecha_pedido: '2026-06-20', pagado: 0, saldo: 100 }),
+    ],
+  })
+
+  const serie = serieCrecimiento(d, buckets)
+  const junio = serie.find(p => p.desde === '2026-06-01')!
+  assert.equal(junio.clientesNuevos, 1, 'solo "estreno" es nuevo')
+  assert.equal(junio.clientesRecurrentes, 1)
+  assert.equal(junio.clientesNuevos + junio.clientesRecurrentes, junio.clientes)
+})
+
+test('serieCrecimiento: la variacion mes contra mes y la anual', () => {
+  const buckets = bucketsDe(rangoTendencia(12, AHORA), 'mes')
+  const d = datos({
+    saldos: [
+      fila({ fecha_pedido: '2026-06-10', pagado: 0, saldo: 100 }),
+      fila({ fecha_pedido: '2026-07-10', pagado: 0, saldo: 150 }),
+      // El mismo mes, un anio antes.
+      fila({ fecha_pedido: '2025-07-10', pagado: 0, saldo: 300 }),
+    ],
+  })
+  const serie = serieCrecimiento(d, buckets)
+  const julio = serie.find(p => p.desde === '2026-07-01')!
+
+  assert.deepEqual(julio.varMes, { pct: 50, dir: 'up' }, '150 contra 100')
+  assert.equal(julio.anoAnterior, 300)
+  assert.deepEqual(julio.varAnual, { pct: 50, dir: 'down' }, '150 contra 300')
+  // El primer bucket no tiene mes previo dentro de la serie: sin base, null.
+  assert.equal(serie[0].varMes, null)
+})
+
+test('mezclaPorBucket: litros por presentacion y mes, sin las unidades raras', () => {
+  const buckets = bucketsDe(rango('2026-10-01', '2026-11-30'), 'mes')
+  const d = datos({
+    pedidos: [
+      ped('p1', '2026-10-05', [{ unidad: 'barril_pet', cantidad: 1, precio: 1 }]),
+      ped('p2', '2026-11-05', [
+        { unidad: 'caja24', cantidad: 1, precio: 1 },
+        { unidad: null, cantidad: 99, precio: 1 },
+      ]),
+    ],
+  })
+
+  const mezcla = mezclaPorBucket(d, buckets)
+  assert.equal(mezcla[0].litros, 20)
+  assert.deepEqual(mezcla[0].porUnidad, { barril_pet: 20 })
+  assert.equal(mezcla[1].litros.toFixed(2), '8.52')
+  assert.deepEqual(Object.keys(mezcla[1].porUnidad), ['caja24'], 'una unidad sin litros no entra en la mezcla')
+})
+
+test('ritmoAnualizado extrapola el paso del periodo', () => {
+  assert.equal(DIAS_ANO, 365)
+  // 10,000 en 10 dias = 1,000 al dia = 365,000 al anio.
+  assert.equal(ritmoAnualizado(10_000, rango('2026-11-01', '2026-11-10')), 365_000)
+  // Un anio completo se anualiza casi a si mismo.
+  assert.equal(Math.round(ritmoAnualizado(365_000, rango('2026-01-01', '2026-12-31'))), 365_000)
+})
+
+// ── Reporte: hallazgos ──────────────────────────────────────
+
+const cobro = (over: Partial<FilaCobranza> = {}): FilaCobranza => ({
+  id: 'p1', cliente_id: 'c1', nombre: 'Bar La Esquina',
+  fecha_pedido: '2026-09-01', fecha_vencimiento: '2026-10-01', dias: 30, saldo: 1_000,
+  ...over,
+})
+
+const entradaHallazgos = (over: Partial<Parameters<typeof hallazgos>[0]> = {}) => ({
+  resumen: resumenDePeriodo(datos(), rangoDePeriodo('mes', AHORA)),
+  previo: resumenDePeriodo(datos(), rangoDePeriodo('mes_anterior', AHORA)),
+  cobranza: [] as FilaCobranza[],
+  productos: [] as { nombre: string; litros: number }[],
+  porCobrar: 0,
+  vencido: 0,
+  ...over,
+})
+
+test('hallazgos: la variacion de facturado se dice con su direccion', () => {
+  const h = hallazgos(entradaHallazgos({
+    resumen: { facturado: 1_500, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_500, clientes: 1 },
+    previo: { facturado: 1_000, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_000, clientes: 1 },
+  }))
+  const f = h.find(x => x.clave === 'facturado')!
+  assert.match(f.texto, /subió 50%/)
+  assert.match(f.texto, /\$1,500 frente a \$1,000/)
+  assert.equal(f.tono, 'bueno')
+})
+
+test('hallazgos: sin periodo anterior lo dice, no inventa un porcentaje', () => {
+  const h = hallazgos(entradaHallazgos({
+    resumen: { facturado: 1_500, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_500, clientes: 1 },
+    previo: { facturado: 0, cobrado: 0, pctCobrado: null, pedidos: 0, litros: 0, ticket: null, clientes: 0 },
+  }))
+  const f = h.find(x => x.clave === 'facturado')!
+  assert.match(f.texto, /no tuvo ventas/)
+  assert.equal(f.tono, 'neutral')
+})
+
+test('hallazgos: el deudor se agrupa por cliente, no por pedido', () => {
+  // Un cliente con tres pedidos chicos puede deber mas que otro con uno grande.
+  const h = hallazgos(entradaHallazgos({
+    cobranza: [
+      cobro({ id: 'a', cliente_id: 'c1', nombre: 'Tres Chicos', saldo: 400 }),
+      cobro({ id: 'b', cliente_id: 'c1', nombre: 'Tres Chicos', saldo: 400 }),
+      cobro({ id: 'c', cliente_id: 'c1', nombre: 'Tres Chicos', saldo: 400 }),
+      cobro({ id: 'd', cliente_id: 'c2', nombre: 'Uno Grande', saldo: 1_000 }),
+    ],
+    porCobrar: 2_200,
+  }))
+  const d = h.find(x => x.clave === 'deudor')!
+  assert.match(d.texto, /Tres Chicos concentra \$1,200/)
+  assert.match(d.texto, /el 55%/)
+})
+
+test('hallazgos: el producto mas vendido va en litros y con su peso', () => {
+  // El peso se mide contra el volumen del PERIODO, no contra la suma de la
+  // lista: esa llega recortada a los primeros N y el porcentaje saldria
+  // inflado justo cuando hay muchos productos.
+  const h = hallazgos(entradaHallazgos({
+    resumen: { facturado: 0, cobrado: 0, pctCobrado: null, pedidos: 2, litros: 200, ticket: null, clientes: 1 },
+    productos: [{ nombre: 'Oleaje', litros: 75 }, { nombre: 'Caliza', litros: 25 }],
+  }))
+  const p = h.find(x => x.clave === 'producto')!
+  assert.match(p.texto, /Oleaje fue lo más vendido con 75 L, el 38% del volumen/)
+})
+
+test('hallazgos: el % vencido cambia de tono segun que tan mal este', () => {
+  const malo = hallazgos(entradaHallazgos({ porCobrar: 1_000, vencido: 800 })).find(x => x.clave === 'vencido')!
+  assert.match(malo.texto, /\$800 ya pasaron su fecha de vencimiento: el 80%/)
+  assert.equal(malo.tono, 'malo')
+
+  const bien = hallazgos(entradaHallazgos({ porCobrar: 1_000, vencido: 0 })).find(x => x.clave === 'vencido')!
+  assert.match(bien.texto, /Nada de la cartera está vencido/)
+  assert.equal(bien.tono, 'bueno')
+})
+
+test('hallazgos: sin datos no inventa ninguno, y nunca pasa de cuatro', () => {
+  assert.deepEqual(hallazgos(entradaHallazgos()), [])
+
+  const todos = hallazgos(entradaHallazgos({
+    resumen: { facturado: 1_500, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 75, ticket: 1_500, clientes: 1 },
+    previo: { facturado: 1_000, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_000, clientes: 1 },
+    cobranza: [cobro()],
+    productos: [{ nombre: 'Oleaje', litros: 75 }],
+    porCobrar: 1_000,
+    vencido: 300,
+  }))
+  assert.equal(todos.length, 4)
+  assert.deepEqual(todos.map(h => h.clave), ['facturado', 'deudor', 'producto', 'vencido'])
+})
+
+// ── queryPeriodo: ida y vuelta con resolverPeriodo ──────────
+
+test('queryPeriodo y resolverPeriodo son inversos', () => {
+  // Si se separan, el link al reporte abre un periodo distinto al que se esta
+  // viendo en el Inicio.
+  for (const { clave } of PERIODOS) {
+    const rango = clave === 'personalizado'
+      ? { desde: '2026-03-01', hasta: '2026-03-31' }
+      : rangoDePeriodo(clave, AHORA)
+    const q = queryPeriodo(clave, rango)
+    const params = Object.fromEntries(new URLSearchParams(q))
+    const vuelta = resolverPeriodo(params, AHORA)
+
+    // 'personalizado' sin fechas no es un periodo: cae al default, y por eso
+    // el ida y vuelta se mide con un rango explicito.
+    assert.deepEqual(vuelta.rango, rango, `se perdio el rango de ${clave}`)
+    assert.equal(vuelta.clave, clave, `se perdio la clave de ${clave}`)
+  }
+})
+
+test('queryPeriodo no escribe el periodo default', () => {
+  assert.equal(queryPeriodo('12m', rangoDePeriodo('12m', AHORA)), '')
+  assert.equal(queryPeriodo('mes', rangoDePeriodo('mes', AHORA)), 'periodo=mes')
+  assert.equal(
+    queryPeriodo('personalizado', { desde: '2026-03-01', hasta: '2026-03-31' }),
+    'desde=2026-03-01&hasta=2026-03-31'
+  )
 })

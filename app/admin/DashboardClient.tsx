@@ -1,6 +1,7 @@
 'use client'
 import { useCallback, useMemo } from 'react'
 import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import KpiCard from './KpiCard'
 import GraficaPeriodo from './GraficaPeriodo'
 import SelectorPeriodo from './SelectorPeriodo'
@@ -9,7 +10,6 @@ import RequiereAtencion from './RequiereAtencion'
 import { formatLitros, litrosTotales, topProductosEnLitros, type FilaStock } from '../../src/lib/unidades'
 import {
   DIAS_ATENCION,
-  PERIODO_DEFAULT,
   antiguedadCartera,
   bucketsDe,
   filasEnRango,
@@ -17,7 +17,9 @@ import {
   itemsVendidosEn,
   nombreLegible,
   porCobrarDe,
+  queryPeriodo,
   rangoAnterior,
+  rangoDePeriodo,
   requierenAtencion,
   resolverPeriodo,
   resumenDePeriodo,
@@ -66,11 +68,13 @@ type Props = {
   clientes: DatosCliente[]
   pedidosItems: PedidoConItems[]
   pagos: PagoFila[]
+  /** Si el rol puede abrir el reporte imprimible (el permiso de Finanzas). */
+  puedeReporte: boolean
   /** La fecha viene del servidor: llamarla en render seria impuro. */
   ahoraISO: string
 }
 
-export default function DashboardClient({ saldos, productos, clientes, pedidosItems, pagos, ahoraISO }: Props) {
+export default function DashboardClient({ saldos, productos, clientes, pedidosItems, pagos, puedeReporte, ahoraISO }: Props) {
   const ahora = useMemo(() => new Date(ahoraISO), [ahoraISO])
   const searchParams = useSearchParams()
 
@@ -109,21 +113,22 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
   const aplicarPeriodo = useCallback(
     (nueva: ClavePeriodo, nuevoRango?: Rango) => {
       const q = new URLSearchParams(searchParams.toString())
-      if (nueva === 'personalizado' && nuevoRango) {
-        q.delete('periodo')
-        q.set('desde', nuevoRango.desde)
-        q.set('hasta', nuevoRango.hasta)
-      } else {
-        q.delete('desde')
-        q.delete('hasta')
-        if (nueva === PERIODO_DEFAULT) q.delete('periodo')
-        else q.set('periodo', nueva)
-      }
+      // Los tres parametros del periodo se borran y se vuelven a escribir con
+      // `queryPeriodo`, que es el inverso exacto de `resolverPeriodo`. Asi la
+      // URL del selector y la del link al reporte se arman con la misma regla
+      // y no pueden decir periodos distintos.
+      for (const k of ['periodo', 'desde', 'hasta']) q.delete(k)
+      const propios = new URLSearchParams(queryPeriodo(nueva, nuevoRango ?? rangoDePeriodo(nueva, ahora)))
+      for (const [k, v] of propios) q.set(k, v)
+
       const texto = q.toString()
       window.history.replaceState(null, '', texto ? `?${texto}` : window.location.pathname)
     },
-    [searchParams]
+    [searchParams, ahora]
   )
+
+  /** El periodo que se esta viendo, para que el reporte abra con el mismo. */
+  const queryActual = useMemo(() => queryPeriodo(clave, rango), [clave, rango])
 
   const datos = useMemo<DatosPeriodo>(
     () => ({ saldos, pagos, pedidos: pedidosItems }),
@@ -266,7 +271,18 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
             Vista general de la operación · {rangoLegible(rango)}, por fecha del pedido
           </p>
         </div>
-        <SelectorPeriodo clave={clave} rango={rango} onElegir={aplicarPeriodo} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 9, flexShrink: 0 }}>
+          {puedeReporte && (
+            <Link
+              href={`/admin/reporte${queryActual ? `?${queryActual}` : ''}`}
+              className="dash-btn"
+              style={{ textDecoration: 'none', padding: '7px 12px', minHeight: 38 }}
+            >
+              Imprimir reporte
+            </Link>
+          )}
+          <SelectorPeriodo clave={clave} rango={rango} onElegir={aplicarPeriodo} />
+        </div>
       </div>
 
       <div className="dash-kpis">

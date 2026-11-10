@@ -175,3 +175,20 @@ export function etiquetaMesLargo(fecha: string): string {
     month: 'long', year: 'numeric', timeZone: 'UTC',
   })
 }
+
+/**
+ * Fecha y hora de un instante, en la zona del negocio: "9 nov 2026, 14:35 h".
+ *
+ * Para el pie de un reporte impreso: sin la hora, dos copias del mismo PDF
+ * sacadas con horas de diferencia no se distinguen, y los saldos "al dia de
+ * hoy" cambian entre una y otra.
+ */
+export function fechaHoraMx(momento: Date = new Date()): string {
+  const fecha = momento.toLocaleDateString('es-MX', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: ZONA_MX,
+  })
+  const hora = momento.toLocaleTimeString('es-MX', {
+    hour: '2-digit', minute: '2-digit', hour12: false, timeZone: ZONA_MX,
+  })
+  return `${fecha}, ${hora} h`
+}

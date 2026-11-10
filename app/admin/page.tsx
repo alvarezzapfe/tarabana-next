@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from '../../src/lib/supabase-server'
-import { isVendedor } from '../../src/lib/roles'
+import { isStaffSinVentas, isVendedor } from '../../src/lib/roles'
 import { cargarDatosComision } from '../../src/lib/comisiones-datos'
 import { comisionesPorVendedor, periodoDeFecha } from '../../src/lib/comisiones'
 import DashboardClient from './DashboardClient'
@@ -122,6 +122,10 @@ export default async function AdminDashboard() {
       clientes={clientes || []}
       pedidosItems={pedidosItems || []}
       pagos={pagos}
+      // El reporte imprimible vive detras del mismo permiso que Finanzas, asi
+      // que ventas ve el tablero pero no el boton. El guard de verdad esta en
+      // /admin/reporte y en su ruta de export; esto solo decide si se pinta.
+      puedeReporte={isStaffSinVentas(yo?.role)}
       ahoraISO={new Date().toISOString()}
     />
   )
