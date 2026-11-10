@@ -283,6 +283,21 @@ export default function ClientesClient() {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M17 8l-5-5-5 5 M12 3v12"/></svg>
               Cargar Excel
             </button>
+            {/* Visible aqui ademas de dentro del modal: quien ya sabe el
+                flujo baja la plantilla sin abrir nada. Es un GET a una ruta
+                con el mismo guard que la carga, asi que va junto a ella. */}
+            <a
+              href="/api/admin/clientes/plantilla"
+              title="Baja la plantilla .xlsx para capturar clientes nuevos"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+                background: '#fff', border: '1px solid #d1d5db', color: '#6b7280',
+                borderRadius: 8, textDecoration: 'none', fontSize: 13.5, fontWeight: 500,
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z M14 2v6h6 M16 13H8 M16 17H8"/></svg>
+              Descargar plantilla
+            </a>
             <a href="/admin/pedidos/nuevo" style={{
               display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
               background: '#f3f4f6', border: '1px solid #d1d5db', color: '#6b7280',
@@ -460,7 +475,7 @@ export default function ClientesClient() {
               )
             }) : (
               <tr>
-                <td colSpan={canCreate ? 6 : 5} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
+                <td colSpan={canCreate ? 7 : 6} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
                   {clientes.length === 0 ? 'No hay clientes aun -- agrega el primero' : 'Sin resultados para estos filtros'}
                 </td>
               </tr>
