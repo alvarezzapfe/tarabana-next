@@ -1,3 +1,5 @@
+import Sparkline from './Sparkline'
+import { ACENTO, BORDE, GRIS, GRIS_SUAVE, ROJO, VERDE } from './dash-ui'
 import type { Variacion } from '../../src/lib/metricas'
 
 /**
@@ -27,29 +29,53 @@ type Props = {
   /** Valor ya formateado. */
   valor: string
   /**
-   * Variacion contra el mes anterior. `null` o ausente no pinta nada: no se
-   * muestra un guion ni un 0%, porque no hay dato que mostrar.
+   * Variacion contra el periodo de comparacion. `null` o ausente no pinta
+   * nada, salvo con `mostrarSinBase`.
    */
   variacion?: Variacion | null
-  /** Base de la comparacion, p.ej. "vs mes anterior". Solo si hay variacion. */
+  /** Base de la comparacion, p.ej. "vs periodo anterior". */
   nota?: string
+  /**
+   * Unidad de la variacion. '%' por default.
+   *
+   * Existe por el KPI de "% cobrado": la variacion RELATIVA de un porcentaje
+   * es una trampa de lectura — de 40% a 50% es "+25%", y quien lo lee entiende
+   * 65%. Ese KPI pasa la diferencia en puntos y 'pp' como sufijo.
+   */
+  sufijoVariacion?: string
+  /**
+   * Con una comparacion declarada pero sin base (el periodo anterior fue
+   * cero), muestra "—" en vez de callarse.
+   *
+   * Es opt-in para que las pantallas que solo comparan cuando hay con que
+   * (el Inicio del vendedor) no se llenen de guiones.
+   */
+  mostrarSinBase?: boolean
   senal?: Senal
   tono?: Tono
   /** true si un aumento es malo (por cobrar, vencido). */
   subirEsMalo?: boolean
   /** Leyenda siempre visible bajo el numero, independiente de la variacion. */
   detalle?: string
+  /** Un valor por bucket del periodo. `null` donde no hay dato. */
+  sparkline?: (number | null)[]
+  /** Fondo distinto, para separar visualmente una fila de tarjetas. */
+  fondo?: string
 }
 
-export default function KpiCard({ label, valor, variacion, nota, senal = 'neutral', tono, subirEsMalo = false, detalle }: Props) {
+export default function KpiCard({
+  label, valor, variacion, nota, sufijoVariacion = '%', mostrarSinBase = false,
+  senal = 'neutral', tono, subirEsMalo = false, detalle, sparkline, fondo,
+}: Props) {
   const esBueno = variacion ? (variacion.dir === 'up') !== subirEsMalo : false
-  const colorValor = tono === 'rojo' ? '#dc2626' : senal === 'alerta' ? '#b45309' : '#1a1a1a'
+  const colorValor = tono === 'rojo' ? ROJO : senal === 'alerta' ? '#b45309' : '#1a1a1a'
+  const sinBase = !variacion && mostrarSinBase
 
   return (
     <div
       style={{
-        background: '#fff',
-        border: '1px solid #e5e7eb',
+        background: fondo || '#fff',
+        border: `1px solid ${BORDE}`,
         borderRadius: 12,
         padding: '18px 20px',
         display: 'flex',
@@ -60,7 +86,7 @@ export default function KpiCard({ label, valor, variacion, nota, senal = 'neutra
       <p
         style={{
           margin: 0,
-          color: '#6b7280',
+          color: GRIS,
           fontSize: 11.5,
           fontWeight: 600,
           textTransform: 'uppercase',
@@ -84,16 +110,28 @@ export default function KpiCard({ label, valor, variacion, nota, senal = 'neutra
       </p>
 
       {detalle && (
-        <p style={{ margin: 0, color: '#9ca3af', fontSize: 11.5, lineHeight: 1.4 }}>{detalle}</p>
+        <p style={{ margin: 0, color: GRIS_SUAVE, fontSize: 11.5, lineHeight: 1.4 }}>{detalle}</p>
       )}
 
-      {variacion && (
+      {(variacion || sinBase) && (
         <p style={{ margin: 0, display: 'flex', alignItems: 'baseline', gap: 6, fontSize: 12 }}>
-          <span style={{ color: esBueno ? '#059669' : '#dc2626', fontWeight: 600 }}>
-            {variacion.dir === 'up' ? '↑' : '↓'} {variacion.pct}%
-          </span>
-          {nota && <span style={{ color: '#9ca3af' }}>{nota}</span>}
+          {variacion ? (
+            <span style={{ color: esBueno ? VERDE : ROJO, fontWeight: 600 }}>
+              {variacion.dir === 'up' ? '↑' : '↓'} {variacion.pct}{sufijoVariacion}
+            </span>
+          ) : (
+            // Sin base no hay porcentaje. Un "0%" o un "+100%" aqui serian
+            // numeros inventados.
+            <span style={{ color: GRIS_SUAVE, fontWeight: 600 }} title="sin base de comparación">—</span>
+          )}
+          {nota && <span style={{ color: GRIS_SUAVE }}>{nota}</span>}
         </p>
+      )}
+
+      {sparkline && sparkline.length > 1 && (
+        <div style={{ marginTop: 'auto', paddingTop: 4 }}>
+          <Sparkline puntos={sparkline} color={tono === 'rojo' ? ROJO : senal === 'alerta' ? '#b45309' : ACENTO} />
+        </div>
       )}
     </div>
   )

@@ -1,5 +1,5 @@
 import { createServerSupabaseClient } from '../../src/lib/supabase-server'
-import { isVendedor } from '../../src/lib/roles'
+import { isStaffSinVentas, isVendedor } from '../../src/lib/roles'
 import { cargarDatosComision } from '../../src/lib/comisiones-datos'
 import { comisionesPorVendedor, periodoDeFecha } from '../../src/lib/comisiones'
 import DashboardClient from './DashboardClient'
@@ -51,7 +51,7 @@ export default async function AdminDashboard() {
     )
   }
 
-  const [{ data: saldos }, { data: productos }, { data: pedidosItems }] = await Promise.all([
+  const [{ data: saldos }, { data: productos }, { data: pedidosItems }, { data: pagosRaw }] = await Promise.all([
     // Fuente unica de las metricas: ya excluye cancelados y trae pagado,
     // saldo, estado_cobro y dias_vencido calculados en SQL.
     supabase
@@ -69,11 +69,35 @@ export default async function AdminDashboard() {
     // `unidad` es imprescindible: sin ella no se puede convertir la partida a
     // litros y el top de productos tendria que contar piezas, que mezcla una
     // caja de 24 con un barril de 20 L como si fueran lo mismo.
+    //
+    // `fecha_pedido` tambien: es la que ubica la partida en el periodo. Sin
+    // ella los litros vendidos y el top de productos serian historicos
+    // mientras el resto del tablero se mueve con el selector.
     supabase
       .from('pedidos')
-      .select('id, pedido_items(cantidad, unidad, productos(nombre))')
+      .select('id, fecha_pedido, pedido_items(cantidad, unidad, productos(nombre))')
       .neq('status', 'cancelado'),
+    // Los pagos, para medir Cobrado por FECHA DE PAGO.
+    //
+    // `pedidos_saldo.pagado` no sirve para eso: es la suma de los pagos de un
+    // pedido, sin fecha, asi que un pedido de agosto cobrado en noviembre
+    // contaria como cobro de agosto. La pregunta "cuanto entro este mes" solo
+    // se puede contestar desde `pagos`.
+    //
+    // Se descartan los cancelados (`cancelado_at`, que es como se corrige un
+    // pago: nunca se borran) y, con `pedidos!inner`, los de pedidos
+    // cancelados, para contar lo mismo que la vista. SELECT sobre `pagos` es
+    // is_staff(), y aqui ya estamos en la rama de staff.
+    supabase
+      .from('pagos')
+      .select('monto, fecha_pago, pedidos!inner(status)')
+      .is('cancelado_at', null)
+      .neq('pedidos.status', 'cancelado'),
   ])
+
+  // El embed de `pedidos` existe nada mas para filtrar del lado del servidor;
+  // no tiene por que viajar al navegador.
+  const pagos = (pagosRaw || []).map(p => ({ monto: p.monto, fecha_pago: p.fecha_pago }))
 
   // Los nombres se piden por los cliente_id que REALMENTE aparecen en la
   // vista, no con `role = 'comprador'`.
@@ -97,6 +121,11 @@ export default async function AdminDashboard() {
       productos={productos || []}
       clientes={clientes || []}
       pedidosItems={pedidosItems || []}
+      pagos={pagos}
+      // El reporte imprimible vive detras del mismo permiso que Finanzas, asi
+      // que ventas ve el tablero pero no el boton. El guard de verdad esta en
+      // /admin/reporte y en su ruta de export; esto solo decide si se pinta.
+      puedeReporte={isStaffSinVentas(yo?.role)}
       ahoraISO={new Date().toISOString()}
     />
   )
