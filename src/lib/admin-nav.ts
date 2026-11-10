@@ -49,6 +49,11 @@ export type NavTabDef = {
   label: string
   /** Ruta vieja que ahora redirige a esta pestana (se conecta en 1.C). */
   legacyHref?: string
+  /**
+   * Ruta propia, cuando la pestana es una PAGINA y no un `?tab=` de la
+   * seccion. Lo usa Inventario, cuyas dos vistas son rutas distintas.
+   */
+  href?: string
   visible: RolePredicate
 }
 
@@ -131,6 +136,20 @@ export const NAV: NavItemDef[] = [
     href: '/admin/inventario',
     icon: 'M20.59 13.41l-7.17 7.17a2 2 0 01-2.83 0L2 12V2h10l8.59 8.59a2 2 0 010 2.82z M7 7h.01',
     visible: canManageInventory,
+    // Las dos vistas son RUTAS y no `?tab=`, asi que cada pestana trae su
+    // href y cada pagina pinta la cabecera con su propia `activa`.
+    //
+    // OJO con los predicados: existencias es `canManageInventory` (super
+    // admin, admin, produccion) y la lista de precios es `canWrite`, que
+    // ademas incluye a VENTAS. Hoy el item padre es canManageInventory, asi
+    // que a ventas el sidebar no le muestra Inventario y solo llegaria a
+    // Precios por URL —la ruta y la pagina si lo dejan entrar—. Abrir el
+    // padre a canWrite le mostraria tambien la pestana de existencias, que su
+    // rol no puede abrir, asi que esa decision se deja al dueno del proyecto.
+    tabs: [
+      { key: 'existencias', label: 'Existencias', href: '/admin/inventario', visible: canManageInventory },
+      { key: 'precios', label: 'Precios', href: '/admin/inventario/precios', visible: canWrite },
+    ],
   },
   {
     key: 'comercial',
@@ -186,7 +205,12 @@ export const NAV: NavItemDef[] = [
 type TabPlano = Omit<NavTabDef, 'visible'>
 
 function serializarTab(tab: NavTabDef): TabPlano {
-  return { key: tab.key, label: tab.label, ...(tab.legacyHref ? { legacyHref: tab.legacyHref } : {}) }
+  return {
+    key: tab.key,
+    label: tab.label,
+    ...(tab.legacyHref ? { legacyHref: tab.legacyHref } : {}),
+    ...(tab.href ? { href: tab.href } : {}),
+  }
 }
 
 function serializarItem(item: NavItemDef, role?: string | null): NavItem {

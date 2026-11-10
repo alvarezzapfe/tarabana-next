@@ -3,17 +3,32 @@ import Link from 'next/link'
 /**
  * Cabecera de seccion con pestanas.
  *
- * Server component: las pestanas son links con ?tab=, no necesitan estado.
- * El hover va en un <style> con scope por clase para no mandar JS.
+ * Server component: las pestanas son links, no necesitan estado. El hover va
+ * en un <style> con scope por clase para no mandar JS.
  *
  * La pestana activa la resuelve la pagina host con resolverTab(), que ya
  * valida contra las pestanas que el rol puede ver.
+ *
+ * Dos formas de pestana. La de siempre es `?tab=<key>` sobre la misma pagina,
+ * que es como estan Pedidos, Finanzas y las demas secciones. La otra es una
+ * pestana con `href` propio, para una seccion cuyas vistas son RUTAS distintas
+ * (Inventario / Inventario-Precios): ahi cada pagina pinta la cabecera con su
+ * `activa`, porque no hay un host que resuelva el `?tab=`.
+ *
+ * `titulo` es opcional: una pagina que ya trae su propio encabezado solo
+ * necesita la tira de pestanas, y repetir el titulo encima se veria como un
+ * error.
  */
 
-export type Tab = { key: string; label: string }
+export type Tab = {
+  key: string
+  label: string
+  /** Ruta propia de la pestana. Sin esto, se usa `basePath?tab=<key>`. */
+  href?: string
+}
 
 type Props = {
-  titulo: string
+  titulo?: string
   descripcion?: string
   tabs: Tab[]
   activa: string
@@ -44,10 +59,12 @@ export default function Tabs({ titulo, descripcion, tabs, activa, basePath, acen
         .admin-tab[aria-current="page"] { color: #1a1a1a; background: transparent; }
       `}</style>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, marginBottom: descripcion ? 4 : 18 }}>
-        <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, margin: 0 }}>{titulo}</h1>
-        {acciones && <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>{acciones}</div>}
-      </div>
+      {(titulo || acciones) && (
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, marginBottom: descripcion ? 4 : 18 }}>
+          {titulo && <h1 style={{ color: '#1a1a1a', fontSize: 22, fontWeight: 700, margin: 0 }}>{titulo}</h1>}
+          {acciones && <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>{acciones}</div>}
+        </div>
+      )}
 
       {descripcion && (
         <p style={{ color: '#6b7280', fontSize: 13, margin: '0 0 18px' }}>{descripcion}</p>
@@ -70,7 +87,7 @@ export default function Tabs({ titulo, descripcion, tabs, activa, basePath, acen
                 role="tab"
                 aria-selected={activo}
                 aria-current={activo ? 'page' : undefined}
-                href={`${basePath}?tab=${t.key}`}
+                href={t.href ?? `${basePath}?tab=${t.key}`}
                 style={{
                   position: 'relative',
                   padding: '9px 14px 11px',
