@@ -13,7 +13,18 @@
 import ExcelJS from 'exceljs'
 
 /** Valor que cabe en una celda. */
-export type Celda = string | number | boolean | null
+export type Celda = string | number | boolean | Date | null
+
+/**
+ * Formatos de numero de Excel, por si quien llama quiere que una columna se
+ * vea como dinero o como fecha.
+ *
+ * Son los codigos de Excel tal cual, no un catalogo nuestro: lo que va aqui
+ * es lo que Excel pone en "Formato de celda > Personalizada".
+ */
+export const FMT_PESOS = '"$"#,##0.00'
+export const FMT_FECHA = 'dd/mm/yyyy'
+export const FMT_ENTERO = '#,##0'
 
 export type HojaDatos = {
   nombre: string
@@ -23,6 +34,13 @@ export type HojaDatos = {
   filas: Record<string, Celda>[]
   /** Anchos por columna, en caracteres. */
   anchos?: number[]
+  /**
+   * Formato de numero por encabezado. Lo que no aparece va sin formato.
+   *
+   * Indexado por encabezado y no por posicion para que agregar una columna en
+   * medio no corra los formatos de las demas.
+   */
+  formatos?: Record<string, string>
 }
 
 /** Topes para que un POST armado a mano no tumbe el proceso. */
@@ -68,6 +86,9 @@ export async function construirLibro(hojas: HojaDatos[]): Promise<Uint8Array> {
       header: c,
       key: c,
       width: hoja.anchos?.[i] ?? Math.min(34, Math.max(10, c.length + 4)),
+      // El formato va en el estilo de la COLUMNA y no celda por celda: asi lo
+      // heredan tambien los renglones que alguien agregue despues a mano.
+      ...(hoja.formatos?.[c] ? { style: { numFmt: hoja.formatos[c] } } : {}),
     }))
 
     const encabezado = ws.getRow(1)

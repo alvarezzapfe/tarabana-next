@@ -16,14 +16,28 @@ import {
   canManageAsAdmin,
   canManageInventory,
   isSuperAdmin,
-  isStaff,
   isVendedor,
   canEnterPanel,
   isStaffSinVentas,
-} from './roles'
+} from './roles.ts'
 
 /** canWrite (staff de oficina) o el vendedor, acotado por RLS a lo suyo. */
 const canWriteOVendedor: RolePredicate = role => canWrite(role) || isVendedor(role)
+
+/**
+ * Quien entra a Clientes: todo el staff —contabilidad incluida— y el vendedor.
+ *
+ * Contabilidad entra en SOLO LECTURA: ve la lista y exporta, y nada mas. Eso
+ * no lo impone este predicado, que solo decide si el link se pinta: lo
+ * imponen `canEdit`/`canCreate` en la pantalla y, de verdad, el guard
+ * `canWrite` de las rutas que escriben (crear, actualizar, nivel-precio,
+ * invitar, importar, plantilla), que a contabilidad le responden 403.
+ *
+ * Es `canEnterPanel` y no una lista nueva para que coincida exactamente con
+ * el guard de la ruta del export, que es lo unico que contabilidad puede
+ * hacer aqui.
+ */
+const canVerClientes: RolePredicate = canEnterPanel
 
 /** Staff menos ventas. Ventas no gestiona produccion ni finanzas. */
 const staffSinVentas = isStaffSinVentas
@@ -90,10 +104,18 @@ export const NAV: NavItemDef[] = [
     label: 'Clientes',
     href: '/admin/clientes',
     icon: 'M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2 M9 11a4 4 0 100-8 4 4 0 000 8 M23 21v-2a4 4 0 00-3-3.87 M16 3.13a4 4 0 010 7.75',
-    visible: canWriteOVendedor,
+    visible: canVerClientes,
     tabs: [
-      { key: 'clientes', label: 'Clientes', visible: canWriteOVendedor },
-      { key: 'puntos-venta', label: 'Puntos de venta', legacyHref: '/admin/puntos-venta', visible: isStaff },
+      { key: 'clientes', label: 'Clientes', visible: canVerClientes },
+      // `canWrite` y no `isStaff`: contabilidad entro a esta seccion para ver
+      // y exportar CLIENTES, y Puntos de venta queda SIN acceso para ella.
+      // Decision del dueno del proyecto, no un efecto colateral: hasta que
+      // el item padre se abrio a contabilidad, esta pestana era inalcanzable
+      // para ese rol aunque declarara isStaff, y se decidio dejarla asi.
+      //
+      // Escribir aqui pide `canManageAsAdmin` (ver app/api/admin/puntos-venta),
+      // asi que ventas y produccion la ven en solo lectura.
+      { key: 'puntos-venta', label: 'Puntos de venta', legacyHref: '/admin/puntos-venta', visible: canWrite },
     ],
   },
   {
