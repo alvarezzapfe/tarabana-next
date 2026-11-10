@@ -6,6 +6,7 @@ import { TIPOS_CLIENTE, NIVELES_PRECIO, giroLabel, tipoLabel, nivelLabel, tipoIc
 import { canWrite, isVendedor } from '../../../src/lib/roles'
 import { nombreCliente } from '../../../src/lib/metricas'
 import { filtrarClientes } from '../../../src/lib/clientes-lista'
+import ImportarClientesExcel from './ImportarClientesExcel'
 
 /**
  * El giro, con `tipo_consumidor` como respaldo.
@@ -99,6 +100,13 @@ export default function ClientesClient() {
   // Export
   const [exportando, setExportando] = useState(false)
   const [errorExport, setErrorExport] = useState('')
+  // Carga masiva
+  const [importando, setImportando] = useState(false)
+
+  // `version` es el disparador para volver a cargar: la carga masiva lo
+  // incrementa y el efecto corre otra vez. Asi la lista se refresca sin
+  // sacar el loader del efecto, que es donde la regla de hooks lo quiere.
+  const [version, setVersion] = useState(0)
 
   useEffect(() => {
     const load = async () => {
@@ -124,7 +132,7 @@ export default function ClientesClient() {
       setLoading(false)
     }
     load()
-  }, [])
+  }, [version])
 
   // Open detail panel
   const openPanel = async (id: string) => {
@@ -261,6 +269,20 @@ export default function ClientesClient() {
             {exportando ? 'Generando...' : 'Exportar Excel'}
           </button>
           {canCreate && (<>
+            <button
+              type="button"
+              onClick={() => setImportando(true)}
+              title="Carga masiva de clientes nuevos desde un Excel"
+              style={{
+                display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
+                background: '#fff', border: '1px solid #d1d5db', color: '#6b7280',
+                borderRadius: 8, fontSize: 13.5, fontWeight: 500, fontFamily: 'inherit',
+                cursor: 'pointer',
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4 M17 8l-5-5-5 5 M12 3v12"/></svg>
+              Cargar Excel
+            </button>
             <a href="/admin/pedidos/nuevo" style={{
               display: 'flex', alignItems: 'center', gap: 7, padding: '9px 16px',
               background: '#f3f4f6', border: '1px solid #d1d5db', color: '#6b7280',
@@ -446,6 +468,13 @@ export default function ClientesClient() {
           </tbody>
         </table>
       </div>
+
+      {importando && (
+        <ImportarClientesExcel
+          onClose={() => setImportando(false)}
+          onCreados={() => setVersion(v => v + 1)}
+        />
+      )}
 
       {/* Detail panel overlay */}
       {selectedCliente && (

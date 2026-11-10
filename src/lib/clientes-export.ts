@@ -26,6 +26,7 @@ import { giroLabel, nivelLabel, regimenLabel, tipoLabel, usoCfdiLabel } from './
 import { cobradoDe, nombreLegible, netoTotal, porCobrarDe, type FilaSaldo } from './metricas.ts'
 import { fechaMx } from './fechas.ts'
 import type { ClienteLista } from './clientes-lista.ts'
+import { COLUMNAS_CLIENTES, TITULOS_CLIENTES } from './clientes-columnas.ts'
 
 // Se reexportan para que quien ya arma el libro no tenga que importar de dos
 // lados; el filtro en si vive en `clientes-lista.ts`, sin exceljs detras.
@@ -62,6 +63,15 @@ export type ClienteExport = ClienteLista & {
 }
 
 export const SIN_VENDEDOR = 'Sin vendedor'
+
+/**
+ * El nombre de la hoja de datos, compartido con la plantilla y con el lector.
+ *
+ * No es 'Captura' como en pedidos a proposito: es el nombre que trae el
+ * archivo del export, y lo que hace que ese mismo archivo se pueda volver a
+ * subir con renglones nuevos abajo.
+ */
+export const NOMBRE_HOJA_CLIENTES = 'Clientes'
 
 // ── Lo que aporta cada cliente ──────────────────────────────
 
@@ -153,69 +163,76 @@ const giroDe = (c: ClienteLista): string =>
 // ── Hoja "Clientes" ─────────────────────────────────────────
 
 /**
- * Las columnas, en orden, con su ancho y de donde sale cada celda.
+ * De donde sale cada celda, por encabezado.
  *
- * Una sola lista para las tres cosas: los encabezados, los formatos y los
- * valores. Agregar una columna es agregar un renglon aqui y nada mas.
+ * Los encabezados, su orden, su ancho y su formato NO viven aqui: viven en
+ * `clientes-columnas.ts`, que es la misma declaracion que usan la plantilla y
+ * el importador. Aqui solo esta lo que el export agrega, que es el accesor.
+ *
+ * El test verifica que haya un accesor por columna declarada: agregar una
+ * columna sin su accesor no compila una hoja con la celda vacia en silencio.
  */
-const COLUMNAS: {
-  titulo: string
-  ancho: number
-  formato?: string
-  valor: (c: ClienteExport, m: MetricasCliente, vendedor: string | null) => Celda
-}[] = [
+const VALORES: Record<string, (c: ClienteExport, m: MetricasCliente, vendedor: string | null) => Celda> = {
   // ── Negocio ──
-  { titulo: 'Nombre comercial', ancho: 30, valor: c => nombreLegible(c) },
-  { titulo: 'Razón social',     ancho: 30, valor: c => txt(c.razon_social) },
-  { titulo: 'Giro',             ancho: 18, valor: c => giroDe(c) },
-  { titulo: 'Nivel de precio',  ancho: 15, valor: c => nivelLabel(c.nivel_precio || 'publico') },
-  { titulo: 'Vendedor',         ancho: 20, valor: (_c, _m, vendedor) => vendedor },
+  'Nombre comercial': c => nombreLegible(c),
+  'Razón social':     c => txt(c.razon_social),
+  'Giro':             c => giroDe(c),
+  'Nivel de precio':  c => nivelLabel(c.nivel_precio || 'publico'),
+  'Vendedor':         (_c, _m, vendedor) => vendedor,
 
   // ── Contacto ──
-  { titulo: 'Contacto',   ancho: 22, valor: c => txt(c.contacto_nombre) },
-  { titulo: 'WhatsApp',   ancho: 15, valor: c => txt(c.contacto_whatsapp) },
-  { titulo: 'Email',      ancho: 28, valor: c => txt(c.email) },
-  { titulo: 'Teléfono',   ancho: 15, valor: c => txt(c.phone) },
-  { titulo: 'Instagram',  ancho: 18, valor: c => txt(c.instagram) },
-  { titulo: 'Sitio web',  ancho: 24, valor: c => txt(c.sitio_web) },
+  'Contacto':  c => txt(c.contacto_nombre),
+  'WhatsApp':  c => txt(c.contacto_whatsapp),
+  'Email':     c => txt(c.email),
+  'Teléfono':  c => txt(c.phone),
+  'Instagram': c => txt(c.instagram),
+  'Sitio web': c => txt(c.sitio_web),
 
   // ── Facturacion ──
-  { titulo: 'Requiere factura', ancho: 10, valor: c => (c.requiere_factura ? 'Sí' : 'No') },
-  { titulo: 'RFC',              ancho: 15, valor: c => txt(c.rfc) },
-  { titulo: 'Tipo de persona',  ancho: 14, valor: c => personaLabel(c) },
+  'Requiere factura': c => (c.requiere_factura ? 'Sí' : 'No'),
+  'RFC':              c => txt(c.rfc),
+  'Tipo de persona':  c => personaLabel(c),
   // Los catalogos SAT se exportan como "codigo · descripcion", que es como se
   // ven en la ficha: el codigo solo no le dice nada a quien abre el archivo.
-  { titulo: 'Régimen fiscal',   ancho: 34, valor: c => (txt(c.regimen_fiscal) ? regimenLabel(c.regimen_fiscal) : null) },
-  { titulo: 'CP fiscal',        ancho: 10, valor: c => txt(c.cp_fiscal) },
-  { titulo: 'Uso CFDI',         ancho: 30, valor: c => (txt(c.uso_cfdi) ? usoCfdiLabel(c.uso_cfdi) : null) },
+  // El importador acepta las dos formas, asi que el round-trip funciona.
+  'Régimen fiscal':   c => (txt(c.regimen_fiscal) ? regimenLabel(c.regimen_fiscal) : null),
+  'CP fiscal':        c => txt(c.cp_fiscal),
+  'Uso CFDI':         c => (txt(c.uso_cfdi) ? usoCfdiLabel(c.uso_cfdi) : null),
 
   // ── Entrega ──
-  { titulo: 'Calle',                ancho: 26, valor: c => txt(c.calle) },
-  { titulo: 'Núm. ext.',            ancho: 10, valor: c => txt(c.num_ext) },
-  { titulo: 'Núm. int.',            ancho: 10, valor: c => txt(c.num_int) },
-  { titulo: 'Colonia',              ancho: 22, valor: c => txt(c.colonia) },
-  { titulo: 'Municipio',            ancho: 20, valor: c => txt(c.municipio) },
-  { titulo: 'Estado',               ancho: 18, valor: c => txt(c.estado) },
-  { titulo: 'CP',                   ancho: 10, valor: c => txt(c.cp) },
-  { titulo: 'Referencias',          ancho: 30, valor: c => txt(c.referencias) },
-  { titulo: 'Horario de recepción', ancho: 22, valor: c => txt(c.horario_recepcion) },
+  'Calle':                c => txt(c.calle),
+  'Núm. ext.':            c => txt(c.num_ext),
+  'Núm. int.':            c => txt(c.num_int),
+  'Colonia':              c => txt(c.colonia),
+  'Municipio':            c => txt(c.municipio),
+  'Estado':               c => txt(c.estado),
+  'CP':                   c => txt(c.cp),
+  'Referencias':          c => txt(c.referencias),
+  'Horario de recepción': c => txt(c.horario_recepcion),
 
   // ── Credito ──
-  { titulo: 'Días de crédito',   ancho: 12, formato: FMT_ENTERO, valor: c => num(c.dias_credito) },
-  { titulo: 'Límite de crédito', ancho: 16, formato: FMT_PESOS,  valor: c => num(c.limite_credito) },
+  'Días de crédito':   c => num(c.dias_credito),
+  'Límite de crédito': c => num(c.limite_credito),
 
   // ── Historial ──
   // `created_at` es timestamptz: la fecha se saca en la zona del negocio, que
   // es la que esperaria quien dio de alta al cliente.
-  { titulo: 'Fecha de alta',   ancho: 13, formato: FMT_FECHA,  valor: c => fechaCelda(fechaMx(new Date(c.created_at))) },
-  { titulo: '# pedidos',       ancho: 11, formato: FMT_ENTERO, valor: (_c, m) => m.pedidos },
-  { titulo: 'Total facturado', ancho: 16, formato: FMT_PESOS,  valor: (_c, m) => m.facturado },
-  { titulo: 'Cobrado',         ancho: 14, formato: FMT_PESOS,  valor: (_c, m) => m.cobrado },
-  { titulo: 'Saldo',           ancho: 14, formato: FMT_PESOS,  valor: (_c, m) => m.saldo },
-  { titulo: 'Último pedido',   ancho: 13, formato: FMT_FECHA,  valor: (_c, m) => fechaCelda(m.ultimo) },
+  'Fecha de alta':   c => fechaCelda(fechaMx(new Date(c.created_at))),
+  '# pedidos':       (_c, m) => m.pedidos,
+  'Total facturado': (_c, m) => m.facturado,
+  'Cobrado':         (_c, m) => m.cobrado,
+  'Saldo':           (_c, m) => m.saldo,
+  'Último pedido':   (_c, m) => fechaCelda(m.ultimo),
 
-  { titulo: 'Notas', ancho: 34, valor: c => txt(c.notas) },
-]
+  'Notas': c => txt(c.notas),
+}
+
+/** Los codigos de Excel de los formatos simbolicos de la declaracion. */
+const FORMATO: Record<string, string> = {
+  pesos: FMT_PESOS,
+  fecha: FMT_FECHA,
+  entero: FMT_ENTERO,
+}
 
 // ── Hoja "Resumen" ──────────────────────────────────────────
 
@@ -264,12 +281,12 @@ export function armarHojasClientes({ clientes, saldos, vendedores }: DatosLibroC
     const m = metricas.get(c.id) || VACIO
     const vendedor = nombreVendedor(c)
     const fila: Record<string, Celda> = {}
-    for (const col of COLUMNAS) fila[col.titulo] = col.valor(c, m, vendedor)
+    for (const col of COLUMNAS_CLIENTES) fila[col.titulo] = VALORES[col.titulo](c, m, vendedor)
     return fila
   })
 
   const formatos: Record<string, string> = {}
-  for (const col of COLUMNAS) if (col.formato) formatos[col.titulo] = col.formato
+  for (const col of COLUMNAS_CLIENTES) if (col.formato) formatos[col.titulo] = FORMATO[col.formato]
 
   const resumen: Record<string, Celda>[] = [
     { Agrupación: 'Total', Concepto: 'Clientes exportados', Clientes: clientes.length },
@@ -280,9 +297,9 @@ export function armarHojasClientes({ clientes, saldos, vendedores }: DatosLibroC
 
   return [
     {
-      nombre: 'Clientes',
-      columnas: COLUMNAS.map(c => c.titulo),
-      anchos: COLUMNAS.map(c => c.ancho),
+      nombre: NOMBRE_HOJA_CLIENTES,
+      columnas: TITULOS_CLIENTES,
+      anchos: COLUMNAS_CLIENTES.map(c => c.ancho),
       formatos,
       filas,
     },

@@ -23,6 +23,12 @@
  */
 import ExcelJS from 'exceljs'
 
+// `claveColumna` se mudo a su propio modulo para que la pueda usar la
+// declaracion de columnas de la plantilla de clientes sin arrastrar exceljs.
+// Se reexporta para no mover los call sites que ya la importaban de aqui.
+export { claveColumna } from './clave-columna.ts'
+import { claveColumna } from './clave-columna.ts'
+
 /** 2 MB alcanza de sobra para miles de renglones de captura. */
 export const LIMITE_BYTES = 2 * 1024 * 1024
 export const LIMITE_RENGLONES = 2000
@@ -39,18 +45,16 @@ export type FilaCruda = {
 }
 
 export type LecturaXlsx =
-  | { ok: true; filas: FilaCruda[]; columnasDesconocidas: string[] }
+  | {
+      ok: true
+      filas: FilaCruda[]
+      /** Encabezados que NO estaban en `columnasEsperadas`, tal como venian. */
+      columnasDesconocidas: string[]
+      /** Claves de `columnasEsperadas` que el archivo si traia. */
+      columnasUsadas: string[]
+    }
   | { ok: false; error: string }
 
-/** Normaliza un encabezado: sin acentos, minusculas, con guion bajo. */
-export function claveColumna(texto: string): string {
-  return texto
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .trim()
-    .toLowerCase()
-    .replace(/\s+/g, '_')
-}
 
 /**
  * El valor de una celda como string plano.
@@ -89,10 +93,16 @@ export function textoDeCelda(valor: unknown): string {
  * esten en esa lista se reportan en `columnasDesconocidas` en vez de
  * ignorarse en silencio: si alguien captura "descuento" en una plantilla de
  * no-admin, tiene que enterarse de que no se uso.
+ *
+ * `nombreHoja` es la hoja que se busca primero. Por default "Captura", que es
+ * la de la plantilla de pedidos. La carga de clientes pasa "Clientes" porque
+ * ahi se puede subir el archivo que salio del export, cuya primera hoja se
+ * llama asi: es lo que permite exportar, agregar renglones y volver a subir.
  */
 export async function leerHojaCaptura(
   bytes: Uint8Array,
-  columnasEsperadas: readonly string[]
+  columnasEsperadas: readonly string[],
+  nombreHoja: string = NOMBRE_HOJA_CAPTURA
 ): Promise<LecturaXlsx> {
   if (bytes.length === 0) return { ok: false, error: 'El archivo esta vacio.' }
   if (bytes.length > LIMITE_BYTES) {
@@ -123,8 +133,11 @@ export async function leerHojaCaptura(
   }
 
   const hoja =
-    wb.getWorksheet(NOMBRE_HOJA_CAPTURA) ??
-    wb.worksheets.find(h => claveColumna(h.name) === claveColumna(NOMBRE_HOJA_CAPTURA)) ??
+    wb.getWorksheet(nombreHoja) ??
+    wb.worksheets.find(h => claveColumna(h.name) === claveColumna(nombreHoja)) ??
+    // Ultimo recurso: la primera hoja. Cubre al que renombro la hoja pero
+    // conservo los encabezados; si no los tiene, falla abajo con un mensaje
+    // que dice que descargue la plantilla.
     wb.worksheets[0]
 
   if (!hoja) return { ok: false, error: 'El archivo no tiene ninguna hoja.' }
@@ -181,5 +194,10 @@ export async function leerHojaCaptura(
     return { ok: false, error: 'La hoja de captura no tiene ningun renglon con datos.' }
   }
 
-  return { ok: true, filas, columnasDesconocidas: [...new Set(columnasDesconocidas)] }
+  return {
+    ok: true,
+    filas,
+    columnasDesconocidas: [...new Set(columnasDesconocidas)],
+    columnasUsadas: [...porColumna.values()],
+  }
 }

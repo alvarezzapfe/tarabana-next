@@ -21,6 +21,7 @@ const actionTranslations: Record<string, string> = {
   'pedido.crear': 'Creo pedido',
   'cliente.crear': 'Creo cliente',
   'cliente.exportar': 'Exporto clientes a Excel',
+  'cliente.importar': 'Cargo clientes desde Excel',
   'usuario.invitar': 'Envio invitacion',
   'usuario.toggle': 'Cambio estado de usuario',
   'usuario.reset_mfa': 'Reseteo 2FA de usuario',
