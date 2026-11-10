@@ -10,9 +10,9 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  PRESENTACIONES, celdaStock, claveCelda, detalleStock, disponibleEn, etiquetaDe,
-  litrosDePartida, litrosTotalesDe, motivoBloqueo, precioDe, presentacionesVisibles,
-  productoDeClave, stockDe,
+  PRESENTACIONES, celdaStock, celdaVale, claveCelda, detalleStock, disponibleEn,
+  etiquetaDe, litrosDePartida, litrosTotalesDe, motivoBloqueo, precioDe,
+  presentacionesVisibles, productoDeClave, stockDe, vistaCelda,
   type Partida, type Producto,
 } from './pos-ui.ts'
 import { claveStock } from '../../../../src/lib/stock-disponible.ts'
@@ -243,4 +243,92 @@ test('la visibilidad de una columna NO depende de lo comprometido', () => {
 test('detalleStock dice de donde sale el numero', () => {
   const comprometido = new Map([[claveStock('p-1', 'stock_caja24'), 4]])
   assert.equal(detalleStock(celdaStock(producto(), 'caja24', comprometido)), 'físico 44 · comprometido 4')
+})
+
+// ── El disponible no depende del cliente ────────────────────
+
+/** Como el catalogo real: publico completo, mayorista sin barriles. */
+const CATALOGO = producto({
+  precio_lata_publico: 50, precio_lata_taproom: 45,
+  precio_barril_pet_publico: 1600, precio_barril_pet_taproom: null,
+  precio_barril_acero_publico: 1597, precio_barril_acero_taproom: null,
+  precio_barril10_pet_publico: 900, precio_barril10_pet_taproom: null,
+  precio_barril10_acero_publico: 850, precio_barril10_acero_taproom: null,
+  stock_latas: 130, stock_caja12: 5, stock_caja24: 44,
+  stock_barril_pet: 5, stock_barril_acero: 3,
+  stock_barril10_pet: 2, stock_barril10_acero: 1,
+})
+
+const APARTADO = new Map([
+  [claveStock('p-1', 'stock_latas'), 23],
+  [claveStock('p-1', 'stock_caja24'), 4],
+])
+
+test('mismo inventario y dos niveles de cliente: el disponible es IDENTICO', () => {
+  // Es la propiedad que se rompio. El bug no estaba en el calculo sino en el
+  // display: la tarjeta de movil hacia
+  //   precio > 0 ? `${moneda(precio)} · ${stock} disp.` : 'sin precio'
+  // asi que el disponible desaparecia en las presentaciones que el cliente no
+  // tenia cotizadas. Medido contra produccion: 15 celdas perdian el numero al
+  // pasar de un cliente publico a El Caracol Tap (distribuidor).
+  for (const pres of PRESENTACIONES) {
+    const pub = vistaCelda(CATALOGO, pres.key, 'publico', APARTADO, 3)
+    const may = vistaCelda(CATALOGO, pres.key, 'taproom', APARTADO, 3)
+
+    assert.deepEqual(may.stock, pub.stock, `${pres.key}: el stock cambio con el nivel`)
+    assert.equal(may.detalle, pub.detalle, `${pres.key}: el desglose cambio con el nivel`)
+    assert.equal(may.enCarrito, pub.enCarrito, `${pres.key}: el carrito cambio con el nivel`)
+    assert.equal(may.excede, pub.excede, `${pres.key}: "excede" cambio con el nivel`)
+  }
+})
+
+test('lo unico que cambia con el cliente es el precio y si se puede capturar', () => {
+  // La otra mitad de la propiedad: que el precio SI cambie. Un test que solo
+  // verificara la igualdad pasaria con una pantalla que ignora al cliente.
+  const pub = vistaCelda(CATALOGO, 'barril_pet', 'publico', APARTADO)
+  const may = vistaCelda(CATALOGO, 'barril_pet', 'taproom', APARTADO)
+
+  assert.equal(pub.precio, 1600)
+  assert.equal(may.precio, 0, 'este barril no tiene precio mayorista')
+  assert.equal(pub.motivo, null)
+  assert.match(String(may.motivo), /no tiene precio mayorista/)
+  // Y aun asi el disponible es el mismo y sigue siendo visible.
+  assert.equal(may.stock.disponible, 5)
+  assert.equal(may.detalle, 'físico 5 · comprometido 0')
+})
+
+test('el carrito se reporta aparte y NO se resta del disponible', () => {
+  // Restarlo haria que el mismo inventario se viera distinto segun lo que uno
+  // lleve capturado, que es la otra forma del mismo error.
+  const vacio = vistaCelda(CATALOGO, 'caja24', 'publico', APARTADO, 0)
+  const conCarrito = vistaCelda(CATALOGO, 'caja24', 'publico', APARTADO, 10)
+
+  assert.equal(vacio.stock.disponible, 40, '44 fisicas menos 4 apartadas')
+  assert.equal(conCarrito.stock.disponible, 40, 'el carrito movio el disponible')
+  assert.equal(conCarrito.enCarrito, 10)
+  assert.equal(conCarrito.excede, false, '10 de 40 no excede')
+  assert.equal(vistaCelda(CATALOGO, 'caja24', 'publico', APARTADO, 41).excede, true)
+})
+
+test('que renglones se pintan en movil no depende del cliente', () => {
+  // `celdaVale` no recibe sufijo a proposito: con `precio <= 0` en la
+  // condicion, los renglones aparecian y desaparecian al cambiar de cliente.
+  for (const pres of PRESENTACIONES) {
+    assert.equal(celdaVale(CATALOGO, pres.key, APARTADO), true, `${pres.key} deberia pintarse`)
+  }
+
+  // Sin precio en ningun nivel y sin stock, no hay nada que decir.
+  const nada = producto({
+    precio_barril10_acero_publico: null, precio_barril10_acero_taproom: null,
+    stock_barril10_acero: 0,
+  })
+  assert.equal(celdaVale(nada, 'barril10_acero', LIBRE), false)
+
+  // Con stock pero sin precio en ningun nivel, si se pinta: hay inventario
+  // que alguien tiene que ver.
+  const soloStock = producto({
+    precio_barril10_acero_publico: null, precio_barril10_acero_taproom: null,
+    stock_barril10_acero: 4,
+  })
+  assert.equal(celdaVale(soloStock, 'barril10_acero', LIBRE), true)
 })

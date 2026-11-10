@@ -14,7 +14,7 @@ import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA,
   type Partida, type Producto,
   card, claveCelda, etiquetaDe, moneda, precioDe, presentacionesVisibles,
-  celdaStock, detalleStock, disponibleEn, productoDeClave, tabular,
+  celdaVale, disponibleEn, productoDeClave, tabular, vistaCelda,
 } from './pos-ui'
 import { comprometidoDeJSON } from '../../../../src/lib/stock-disponible'
 
@@ -715,24 +715,37 @@ export default function NuevoPedidoPage() {
                   {presentaciones.map(pres => {
                     const clave = claveCelda(producto.id, pres.key)
                     const cantidad = cantidades[clave] || 0
-                    const precio = precioDe(producto, pres.key, sufijo)
-                    const celda = celdaStock(producto, pres.key, comprometido)
-                    const stock = celda.disponible
-                    // Lo que no tiene ni precio ni disponible no se pinta: en
-                    // movil el espacio es el recurso escaso.
-                    if (precio <= 0 && stock <= 0) return null
-                    const bloqueada = !clienteId || precio <= 0 || stock <= 0
-                    const excede = cantidad > stock
+                    // Que presentaciones se pintan NO depende del cliente: con
+                    // `precio <= 0` en la condicion, los renglones aparecian y
+                    // desaparecian al cambiar de cliente. `celdaVale` mira los
+                    // dos niveles, igual que `presentacionesVisibles`.
+                    if (!celdaVale(producto, pres.key, comprometido)) return null
+
+                    const v = vistaCelda(producto, pres.key, sufijo, comprometido, cantidad)
+                    const { precio, excede } = v
+                    const stock = v.stock.disponible
+                    const bloqueada = !clienteId || !!v.motivo
                     return (
                       <div key={pres.key} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: bloqueada ? 0.45 : 1 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ display: 'block', color: TINTA_MEDIA, fontSize: 12.5 }}>{pres.largo}</span>
+                          {/* El DISPONIBLE va siempre, con o sin precio: es
+                              el mismo inventario para cualquier cliente. Antes
+                              esta linea era
+                              `precio > 0 ? '... N disp.' : 'sin precio'`, asi
+                              que el numero desaparecia en las presentaciones
+                              que el cliente no tiene cotizadas —15 celdas en
+                              produccion al pasar a un cliente mayorista—. */}
                           <span
-                            title={detalleStock(celda)}
+                            title={v.detalle}
                             style={{ ...tabular, display: 'block', color: excede ? '#dc2626' : GRIS_SUAVE, fontSize: 10.5 }}
                           >
-                            {precio > 0 ? `${moneda(precio)} · ${stock} disp.` : 'sin precio'}
-                            {celda.comprometido > 0 && ` (${celda.comprometido} apartadas)`}
+                            {stock} disp.
+                            {v.stock.comprometido > 0 && ` (${v.stock.comprometido} apartadas)`}
+                            {cantidad > 0 && ` · en carrito: ${cantidad}`}
+                          </span>
+                          <span style={{ ...tabular, display: 'block', color: precio > 0 ? GRIS : '#b45309', fontSize: 10.5 }}>
+                            {precio > 0 ? moneda(precio) : 'sin precio para este cliente'}
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

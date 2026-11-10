@@ -3,7 +3,7 @@ import { useCallback, useMemo, useRef } from 'react'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type Presentacion, type Producto,
-  celdaStock, claveCelda, detalleStock, moneda, motivoBloqueo, precioDe, tabular,
+  claveCelda, moneda, tabular, vistaCelda,
 } from './pos-ui'
 
 /**
@@ -21,6 +21,13 @@ import {
  * pedidos abiertos—, no la columna de stock. El fisico solo baja al entregar,
  * asi que la matriz ofrecia producto que ya tenia dueno; el desglose va en el
  * tooltip para que no se pierda de donde sale el numero.
+ *
+ * Que mostrar lo decide `vistaCelda`, compartido con la vista de movil: el
+ * disponible depende solo del inventario y del comprometido global, asi que
+ * sale igual para todos los clientes. Lo que atenua la falta de precio es el
+ * STEPPER, no el dato: antes se le ponia opacity al bloque completo y el
+ * numero quedaba al 40%, ilegible, en las 12 celdas de barril que un cliente
+ * mayorista no tiene cotizadas.
  */
 
 type Props = {
@@ -110,13 +117,11 @@ export default function MatrizProductos({
               {presentaciones.map((pres, col) => {
                 const k = claveCelda(producto.id, pres.key)
                 const cantidad = cantidades[k] || 0
-                const motivo = motivoBloqueo(producto, pres.key, sufijo, comprometido)
-                const precio = precioDe(producto, pres.key, sufijo)
-                const celda = celdaStock(producto, pres.key, comprometido)
-                const stock = celda.disponible
-                const excede = cantidad > stock
+                const v = vistaCelda(producto, pres.key, sufijo, comprometido, cantidad)
+                const { motivo, precio, excede } = v
+                const stock = v.stock.disponible
                 const bloqueada = !habilitada || !!motivo
-                const apartado = celda.comprometido > 0
+                const apartado = v.stock.comprometido > 0
 
                 return (
                   <td
@@ -127,15 +132,20 @@ export default function MatrizProductos({
                     }}
                   >
                     <div
-                      title={
-                        !habilitada ? 'Elige un cliente para capturar.'
-                          : motivo ? motivo
-                          : excede ? `Solo quedan ${stock} disponibles — ${detalleStock(celda)}.`
-                          : `${moneda(precio)} · ${stock} disponibles — ${detalleStock(celda)}`
-                      }
-                      style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3, opacity: bloqueada ? 0.4 : 1 }}
+                      // El desglose va SIEMPRE, incluso cuando hay motivo:
+                      // antes el motivo lo reemplazaba y la celda perdia de
+                      // donde salia su numero justo en las que mas dudas dan.
+                      title={[
+                        !habilitada ? 'Elige un cliente para capturar.' : motivo,
+                        `${stock} disponibles — ${v.detalle}`,
+                        cantidad > 0 ? `${cantidad} en el carrito` : null,
+                        precio > 0 ? moneda(precio) : null,
+                      ].filter(Boolean).join(' · ')}
+                      style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}
                     >
-                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2 }}>
+                      {/* Solo el control se atenua. El dato de abajo no: es
+                          valido para cualquier cliente. */}
+                      <div style={{ display: 'inline-flex', alignItems: 'center', gap: 2, opacity: bloqueada ? 0.4 : 1 }}>
                         <Boton
                           onClick={() => onCantidad(producto.id, pres.key, Math.max(0, cantidad - 1))}
                           disabled={bloqueada || cantidad === 0}
@@ -184,12 +194,20 @@ export default function MatrizProductos({
                       <span style={{ ...tabular, fontSize: 10, color: motivo ? GRIS_SUAVE : GRIS, lineHeight: 1.2 }}>
                         {precio > 0 ? moneda(precio) : 'sin precio'}
                       </span>
-                      {/* El asterisco marca que hay unidades apartadas, o sea
-                          que este numero no es la columna de inventario. */}
+                      {/* El disponible SIEMPRE, con o sin precio: es el mismo
+                          inventario para cualquier cliente. El asterisco marca
+                          que hay unidades apartadas, o sea que este numero no
+                          es la columna de inventario. */}
                       <span style={{ ...tabular, fontSize: 9.5, color: excede || stock < 0 ? ROJO : GRIS_SUAVE, lineHeight: 1 }}>
                         {excede ? `solo ${stock}` : `${stock} disp.`}
-                        {apartado && <span title={detalleStock(celda)}>*</span>}
+                        {apartado && <span title={v.detalle}>*</span>}
                       </span>
+                      {/* En carrito aparte, nunca restado del disponible. */}
+                      {cantidad > 0 && (
+                        <span style={{ ...tabular, fontSize: 9, color: ACENTO, lineHeight: 1 }}>
+                          en carrito: {cantidad}
+                        </span>
+                      )}
                     </div>
                   </td>
                 )
