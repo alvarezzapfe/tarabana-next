@@ -3,9 +3,31 @@ import { useState, useMemo, useRef, useEffect } from 'react'
 import WhatsAppModal from './WhatsAppModal'
 import type { TipoPrecio } from '../../../src/lib/whatsappPrompt'
 import KpiCard from '../KpiCard'
-import { formatLitros, latasEquivalentes, litrosDeProducto } from '../../../src/lib/unidades'
+import { COLUMNAS_STOCK, formatLitros, latasEquivalentes, litrosDeProducto, type ColumnaStock } from '../../../src/lib/unidades'
+import { claveStock, type PartidaSinClasificar } from '../../../src/lib/stock-disponible'
 
-interface Props { productos: any[]; canEdit: boolean; pedidoCounts: Record<string, number> }
+interface Props {
+  productos: any[]
+  canEdit: boolean
+  pedidoCounts: Record<string, number>
+  /** claveStock -> unidades apartadas en pedidos abiertos (ni entregados ni cancelados). */
+  comprometido: Record<string, number>
+  /** Partidas que no se pudieron mapear a una columna de inventario. */
+  sinClasificar: PartidaSinClasificar[]
+}
+
+/**
+ * Lo que las celdas de stock necesitan de un producto. El resto del archivo lo
+ * sigue tratando como `any`; esto se declara para no agregar mas.
+ */
+type ProductoFila = { id: string } & Partial<Record<ColumnaStock, number | null>>
+
+/**
+ * Las celdas de stock muestran el DISPONIBLE —fisico menos lo comprometido—,
+ * con el fisico en gris al lado cuando hay algo apartado y el desglose en el
+ * tooltip. El inventario solo se descuenta al ENTREGAR, asi que la columna
+ * cruda no dice lo que se puede vender hoy: ver src/lib/stock-disponible.ts.
+ */
 
 const stockColor = (n: number) => n === 0 ? '#9ca3af' : n <= 10 ? '#d97706' : '#10b981'
 const NS: React.CSSProperties = { fontVariantNumeric: 'tabular-nums', textAlign: 'right', padding: '10px 10px', fontSize: 13, fontWeight: 600 }
@@ -19,7 +41,7 @@ const STOCK_FIELDS = [
   { key: 'stock_barril10_acero', label: '10L Acero', group: 'barriles' },
 ]
 
-export default function InventarioClient({ productos, canEdit, pedidoCounts }: Props) {
+export default function InventarioClient({ productos, canEdit, pedidoCounts, comprometido, sinClasificar }: Props) {
   const [data, setData] = useState(productos)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -37,6 +59,18 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
   const [filterEstado, setFilterEstado] = useState<'activos' | 'desc' | 'todos'>('activos')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const headerCheckRef = useRef<HTMLInputElement>(null)
+
+  /** Unidades apartadas de una celda. */
+  const apartadoDe = (p: ProductoFila, col: ColumnaStock) => comprometido[claveStock(p.id, col)] || 0
+  /** Lo que se puede vender de una celda. Puede ser negativo si el fisico se bajo a mano. */
+  const dispDe = (p: ProductoFila, col: ColumnaStock) => (Number(p[col] ?? 0) || 0) - apartadoDe(p, col)
+
+  /** Una fila de stock virtual, para reusar los factores de litros. */
+  const filaDe = (valor: (col: ColumnaStock) => number) =>
+    Object.fromEntries(COLUMNAS_STOCK.map(c => [c, valor(c)])) as Record<ColumnaStock, number>
+
+  const litrosApartados = (p: ProductoFila) => litrosDeProducto(filaDe(c => apartadoDe(p, c)))
+  const litrosDisponibles = (p: ProductoFila) => litrosDeProducto(filaDe(c => dispDe(p, c)))
 
   const estilos = useMemo(() => [...new Set(data.map(p => p.estilo).filter(Boolean))].sort(), [data])
 
@@ -232,6 +266,7 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
               <th rowSpan={2} style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', position: 'sticky', left: 36, background: '#f9fafb', zIndex: 3, minWidth: 180 }}>Producto</th>
               <th colSpan={4} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb' }}>Latas</th>
               <th colSpan={2} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb', borderLeft: '1px solid #e5e7eb' }}>Barriles</th>
+              <th colSpan={3} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb', borderLeft: '1px solid #e5e7eb' }}>Litros</th>
               <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'right', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio</th>
               <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Estado</th>
               <th rowSpan={2} style={{ padding: '8px 10px', width: 60 }}></th>
@@ -241,14 +276,23 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
               {['Sueltas', 'Caja 12', 'Caja 24', 'Total'].map(h => <th key={h} style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>{h}</th>)}
               <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500, borderLeft: '1px solid #e5e7eb' }}>20L</th>
               <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>10L</th>
+              {/* Las tres columnas del modelo, en litros: es la unica unidad
+                  comparable entre latas y barriles. */}
+              <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500, borderLeft: '1px solid #e5e7eb' }}>Físico</th>
+              <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>Apartado</th>
+              <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>Disponible</th>
             </tr>
           </thead>
           <tbody>
             {filtered.length ? filtered.map((p: any) => {
-              const sl = p.stock_latas || 0, c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0
+              // Todo lo que se pinta es DISPONIBLE; el fisico va al lado en gris.
+              const sl = dispDe(p, 'stock_latas'), c12 = dispDe(p, 'stock_caja12'), c24 = dispDe(p, 'stock_caja24')
               const tl = sl + c12 * 12 + c24 * 24
-              const bp20 = p.stock_barril_pet || 0, ba20 = p.stock_barril_acero || 0
-              const bp10 = p.stock_barril10_pet || 0, ba10 = p.stock_barril10_acero || 0
+              const bp20 = dispDe(p, 'stock_barril_pet'), ba20 = dispDe(p, 'stock_barril_acero')
+              const bp10 = dispDe(p, 'stock_barril10_pet'), ba10 = dispDe(p, 'stock_barril10_acero')
+              const litrosFis = litrosDeProducto(p)
+              const litrosApa = litrosApartados(p)
+              const litrosDis = litrosDisponibles(p)
               const ps = priceStatus(p)
               const isZeroActive = p.activo && totalStock(p) === 0
               return (
@@ -267,16 +311,27 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
                       </div>
                     </div>
                   </td>
-                  <td style={{ ...NS, color: stockColor(sl) }}>{sl}</td>
-                  <td style={{ ...NS, color: stockColor(c12) }}>{c12}</td>
-                  <td style={{ ...NS, color: stockColor(c24) }}>{c24}</td>
-                  <td style={{ ...NS, color: tl > 0 ? '#1a1a1a' : '#9ca3af', fontWeight: 700 }} title={`${sl} sueltas + ${c12 * 12} en C12 + ${c24 * 24} en C24`}>{tl}</td>
-                  <td style={{ ...NS, borderLeft: '1px solid #f3f4f6' }} title={`PET: ${bp20}, Acero: ${ba20}`}>
+                  <Celda disp={sl} apartado={apartadoDe(p, 'stock_latas')} />
+                  <Celda disp={c12} apartado={apartadoDe(p, 'stock_caja12')} />
+                  <Celda disp={c24} apartado={apartadoDe(p, 'stock_caja24')} />
+                  <td style={{ ...NS, color: tl > 0 ? '#1a1a1a' : '#9ca3af', fontWeight: 700 }} title={`Disponibles: ${sl} sueltas + ${c12 * 12} en C12 + ${c24 * 24} en C24`}>{tl}</td>
+                  <td
+                    style={{ ...NS, borderLeft: '1px solid #f3f4f6' }}
+                    title={`Disponibles — PET: ${bp20}, Acero: ${ba20}. Apartados — PET: ${apartadoDe(p, 'stock_barril_pet')}, Acero: ${apartadoDe(p, 'stock_barril_acero')}`}
+                  >
                     <span style={{ color: stockColor(bp20 + ba20) }}>{bblStr(bp20, ba20)}</span>
                   </td>
-                  <td style={NS} title={`PET: ${bp10}, Acero: ${ba10}`}>
+                  <td
+                    style={NS}
+                    title={`Disponibles — PET: ${bp10}, Acero: ${ba10}. Apartados — PET: ${apartadoDe(p, 'stock_barril10_pet')}, Acero: ${apartadoDe(p, 'stock_barril10_acero')}`}
+                  >
                     <span style={{ color: stockColor(bp10 + ba10) }}>{bblStr(bp10, ba10)}</span>
                   </td>
+                  <td style={{ ...NS, borderLeft: '1px solid #f3f4f6', color: '#6b7280', fontWeight: 500 }}>{formatLitros(litrosFis)}</td>
+                  <td style={{ ...NS, color: litrosApa > 0 ? '#b45309' : '#d1d5db', fontWeight: 500 }}>
+                    {litrosApa > 0 ? formatLitros(litrosApa) : '—'}
+                  </td>
+                  <td style={{ ...NS, color: litrosDis < 0 ? '#dc2626' : '#1a1a1a', fontWeight: 700 }}>{formatLitros(litrosDis)}</td>
                   <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }} title={priceTooltip(p)}>
                     {ps === 'none' ? <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Sin precio</span>
                       : ps === 'mayorista' ? <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Falta may.</span>
@@ -320,16 +375,44 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
                   </td>
                 </tr>
               )
-            }) : <tr><td colSpan={11} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin productos</td></tr>}
+            }) : <tr><td colSpan={14} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin productos</td></tr>}
           </tbody>
         </table>
       </div>
 
+      {/* Un hueco en los datos se dice, no se esconde dentro de un total: una
+          partida sin presentacion no se puede restar de ninguna columna, asi
+          que el disponible de ese producto esta optimista hasta que se
+          corrija. */}
+      {sinClasificar.length > 0 && (
+        <div style={{ marginTop: 12, padding: '11px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10 }}>
+          <p style={{ margin: '0 0 6px', color: '#92400e', fontSize: 12.5, fontWeight: 600 }}>
+            {sinClasificar.length === 1
+              ? 'Una partida de un pedido abierto no se pudo descontar del inventario'
+              : `${sinClasificar.length} partidas de pedidos abiertos no se pudieron descontar del inventario`}
+          </p>
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#92400e', fontSize: 11.5, lineHeight: 1.6 }}>
+            {sinClasificar.map(s => (
+              <li key={`${s.pedido_id}-${s.producto_id}-${s.unidad}`}>
+                Pedido <span className="font-mono">#{s.pedido_id.slice(-6).toUpperCase()}</span>
+                {' · '}{s.nombre || 'producto sin nombre'}
+                {' · '}{s.cantidad} {s.unidad ? `de ${s.unidad}` : 'sin presentación registrada'}
+              </li>
+            ))}
+          </ul>
+          <p style={{ margin: '6px 0 0', color: '#b45309', fontSize: 11 }}>
+            Mientras no tengan presentación no cuentan como apartadas, así que el disponible de esos
+            productos está de más.
+          </p>
+        </div>
+      )}
+
       {/* MOBILE CARDS */}
       <div className="inv-cards" style={{ display: 'none', flexDirection: 'column', gap: 10 }}>
         {filtered.map((p: any) => {
-          const sl = p.stock_latas || 0, c12 = p.stock_caja12 || 0, c24 = p.stock_caja24 || 0
-          const bp = p.stock_barril_pet || 0, ba = p.stock_barril_acero || 0
+          const sl = dispDe(p, 'stock_latas'), c12 = dispDe(p, 'stock_caja12'), c24 = dispDe(p, 'stock_caja24')
+          const bp = dispDe(p, 'stock_barril_pet'), ba = dispDe(p, 'stock_barril_acero')
+          const apa = litrosApartados(p)
           return (
             <div key={p.id} style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, padding: '14px 16px', opacity: p.activo ? 1 : 0.5 }}>
               <div style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
@@ -344,6 +427,12 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
                   <span key={s.l} style={{ padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600, background: s.v === 0 ? '#f3f4f6' : s.v <= 10 ? '#fef3c7' : '#d1fae5', color: stockColor(s.v) }}>{s.l}: {s.v}</span>
                 ))}
               </div>
+              {/* Las cifras de arriba son disponibles; lo apartado se dice
+                  aparte para que el numero no parezca el inventario fisico. */}
+              <p style={{ margin: '8px 0 0', fontSize: 11, color: '#9ca3af' }}>
+                Disponible {formatLitros(litrosDisponibles(p))} de {formatLitros(litrosDeProducto(p))}
+                {apa > 0 && ` · ${formatLitros(apa)} apartados`}
+              </p>
             </div>
           )
         })}
@@ -405,6 +494,29 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts }: P
 
       <WhatsAppModal isOpen={modalOpen} onClose={() => { setModalOpen(false); setModalProductos([]) }} productos={modalProductos} tipoPrecio={tipoPrecio} />
     </div>
+  )
+}
+
+/**
+ * Una celda de stock: el DISPONIBLE grande y el fisico en gris cuando hay algo
+ * apartado. El tooltip trae el desglose completo.
+ *
+ * Mostrar los dos numeros y no solo el disponible es lo que evita la pregunta
+ * "¿y entonces cuantas cajas hay en la bodega?", que es justo lo que alguien
+ * de inventario necesita saber.
+ */
+function Celda({ disp, apartado }: { disp: number; apartado: number }) {
+  const fisico = disp + apartado
+  return (
+    <td
+      style={{ ...NS, color: disp < 0 ? '#dc2626' : stockColor(disp) }}
+      title={`físico ${fisico} · comprometido ${apartado} · disponible ${disp}`}
+    >
+      {disp}
+      {apartado > 0 && (
+        <span style={{ color: '#9ca3af', fontWeight: 400, fontSize: 10.5 }}>{' '}/{fisico}</span>
+      )}
+    </td>
   )
 }
 

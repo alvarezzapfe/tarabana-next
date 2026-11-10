@@ -12,6 +12,7 @@
 // tsc lo resuelven igual (allowImportingTsExtensions en tsconfig). Quitarla
 // rompe los tests.
 import { columnaStockDe } from './unidades.ts'
+import { disponibleDe } from './stock-disponible.ts'
 
 const UNIDAD_LABEL: Record<string, string> = {
   caja12: 'Caja 12',
@@ -76,6 +77,18 @@ export function calcularPedido(
   sufijo: 'taproom' | 'publico',
   esMayorista: boolean,
   parseProductoId: (item: any) => { productoId: string; unidad: string },
+  /**
+   * Lo ya comprometido por pedidos abiertos, por producto y columna (ver
+   * stock-disponible.ts). El stock se valida contra el DISPONIBLE —fisico
+   * menos comprometido—, no contra el fisico: el inventario solo se descuenta
+   * al entregar, asi que validar contra la columna dejaba vender dos veces lo
+   * mismo mientras ninguno de los dos pedidos se entregaba.
+   *
+   * Vacio por default, y entonces equivale a validar contra el fisico. Lo pasa
+   * quien tiene una vista global de los pedidos (ver `cargarComprometido`);
+   * nunca se calcula con la sesion de un vendedor, que solo ve los suyos.
+   */
+  comprometido: Map<string, number> = new Map(),
 ): CalcResult | CalcError {
 
   const pedidoItems: PedidoItem[] = []
@@ -97,8 +110,9 @@ export function calcularPedido(
         const prod = stockMap.get(estilo.producto_id)
         if (!prod) return { error: `Producto ${estilo.nombre || estilo.producto_id} no encontrado.`, status: 400 }
         const latasNecesarias = estilo.latas * cantidad
-        if ((prod.stock_latas || 0) < latasNecesarias) {
-          return { error: `Stock de latas insuficiente de ${prod.nombre}. Disponible: ${prod.stock_latas || 0}, necesitas ${latasNecesarias}.`, status: 400 }
+        const latasDisponibles = disponibleDe(estilo.producto_id, 'stock_latas', Number(prod.stock_latas || 0) || 0, comprometido)
+        if (latasDisponibles < latasNecesarias) {
+          return { error: `Stock de latas insuficiente de ${prod.nombre}. Disponible: ${latasDisponibles}, necesitas ${latasNecesarias}.`, status: 400 }
         }
         if (precioLata(prod, sufijo) <= 0) {
           return { error: `${prod.nombre} no tiene precio por lata configurado.`, status: 400 }
@@ -136,9 +150,9 @@ export function calcularPedido(
       if (!stockKey) {
         return { error: `Presentacion no reconocida: ${label}.`, status: 400 }
       }
-      const stockDisponible = (prod[stockKey] as number) ?? 0
-      if (stockDisponible < cantidad) {
-        return { error: `Stock insuficiente de ${label} para ${prod.nombre}. Disponible: ${stockDisponible}.`, status: 400 }
+      const disponible = disponibleDe(productoId, stockKey, Number(prod[stockKey] ?? 0) || 0, comprometido)
+      if (disponible < cantidad) {
+        return { error: `Stock insuficiente de ${label} para ${prod.nombre}. Disponible: ${disponible}.`, status: 400 }
       }
 
       const subtotal = cantidad * precio

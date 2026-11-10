@@ -65,6 +65,9 @@ type Props = {
   tapado: boolean
   onPago: (f: FilaPedido) => void
   onStatus: (f: FilaPedido) => void
+  /** Solo super admin ve la opcion de entregar sin descontar inventario. */
+  esSuperAdmin: boolean
+  onEntregarSinStock: (f: FilaPedido) => void
   onCancelarPago: (f: FilaPedido, pagoId: string) => void
   onEliminar: (f: FilaPedido) => void
   /** Guardado el envio: el padre refresca y avisa. */
@@ -73,8 +76,8 @@ type Props = {
 
 export default function PanelPedido(props: Props) {
   const {
-    pedido, canEdit, puedeDescuento, esVendedor, nombrePor, tapado,
-    onCerrar, onPago, onStatus, onCancelarPago, onEliminar, onGuardado,
+    pedido, canEdit, puedeDescuento, esVendedor, nombrePor, tapado, esSuperAdmin,
+    onCerrar, onPago, onStatus, onEntregarSinStock, onCancelarPago, onEliminar, onGuardado,
   } = props
 
   const [pestana, setPestana] = useState<Pestana>('resumen')
@@ -254,6 +257,22 @@ export default function PanelPedido(props: Props) {
                     }}
                   >
                     <a href={`/admin/pedidos/${pedido.id}/edit`} style={itemMenu}>Editar pedido</a>
+                    {/* Para los pedidos que ya se entregaron en la realidad y
+                        cuyo inventario se ajusto a mano: marcarlos por el
+                        camino normal lo descontaria por segunda vez. Solo
+                        super admin, y la ruta lo valida tambien. */}
+                    {esSuperAdmin && pedido.status !== 'entregado' && pedido.status !== 'cancelado' && (
+                      <button
+                        type="button"
+                        onClick={() => { setMenu(false); onEntregarSinStock(pedido) }}
+                        style={{ ...itemMenu, borderTop: `1px solid ${PISTA}` }}
+                      >
+                        Marcar entregado
+                        <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 10.5, fontWeight: 400 }}>
+                          sin descontar inventario
+                        </span>
+                      </button>
+                    )}
                     {/* El vendedor no elimina. Y la ruta tambien lo niega: el
                         boton escondido no es la autorizacion. */}
                     {canEdit && !esVendedor && (

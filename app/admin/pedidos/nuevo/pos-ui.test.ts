@@ -4,16 +4,21 @@
  *   npm test
  *
  * Lo que se cubre es lo que se rompe en silencio: que columnas se muestran,
- * por que se bloquea una celda, y que la clave de celda sobreviva los
- * guiones de un uuid.
+ * por que se bloquea una celda, que el numero de la celda sea el DISPONIBLE y
+ * no el fisico, y que la clave de celda sobreviva los guiones de un uuid.
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  PRESENTACIONES, claveCelda, etiquetaDe, litrosDePartida, litrosTotalesDe,
-  motivoBloqueo, precioDe, presentacionesVisibles, productoDeClave, stockDe,
+  PRESENTACIONES, celdaStock, claveCelda, detalleStock, disponibleEn, etiquetaDe,
+  litrosDePartida, litrosTotalesDe, motivoBloqueo, precioDe, presentacionesVisibles,
+  productoDeClave, stockDe,
   type Partida, type Producto,
 } from './pos-ui.ts'
+import { claveStock } from '../../../../src/lib/stock-disponible.ts'
+
+/** Nada comprometido: el caso base de casi todos los tests de abajo. */
+const LIBRE = new Map<string, number>()
 
 function producto(over: Record<string, unknown> = {}): Producto {
   return {
@@ -48,7 +53,7 @@ test('un barril de 10 L aparece si algun producto tiene stock, aunque no tenga p
   assert.ok(visibles.some(p => p.key === 'barril10_acero'))
   assert.ok(!visibles.some(p => p.key === 'barril10_pet'))
 
-  const motivo = motivoBloqueo(producto({ stock_barril10_acero: 2 }), 'barril10_acero', 'publico')
+  const motivo = motivoBloqueo(producto({ stock_barril10_acero: 2 }), 'barril10_acero', 'publico', LIBRE)
   assert.match(String(motivo), /no tiene precio/)
 })
 
@@ -73,16 +78,16 @@ test('la visibilidad no depende del nivel del cliente', () => {
 test('el motivo distingue falta de precio de falta de stock', () => {
   const p = producto()
   // Sin precio mayorista para barril: el caso mas comun del catalogo real.
-  assert.match(String(motivoBloqueo(p, 'barril_pet', 'taproom')), /no tiene precio mayorista/)
-  assert.match(String(motivoBloqueo(p, 'barril_pet', 'publico')), /^$|.*/)
+  assert.match(String(motivoBloqueo(p, 'barril_pet', 'taproom', LIBRE)), /no tiene precio mayorista/)
+  assert.match(String(motivoBloqueo(p, 'barril_pet', 'publico', LIBRE)), /^$|.*/)
   // Con precio y sin stock.
-  assert.match(String(motivoBloqueo(p, 'caja12', 'publico')), /Sin stock/)
+  assert.match(String(motivoBloqueo(p, 'caja12', 'publico', LIBRE)), /Sin stock/)
   // Con los dos: no se bloquea.
-  assert.equal(motivoBloqueo(p, 'caja24', 'publico'), null)
+  assert.equal(motivoBloqueo(p, 'caja24', 'publico', LIBRE), null)
 })
 
 test('el motivo nombra el producto y la presentacion', () => {
-  const motivo = String(motivoBloqueo(producto(), 'barril_acero', 'taproom'))
+  const motivo = String(motivoBloqueo(producto(), 'barril_acero', 'taproom', LIBRE))
   assert.match(motivo, /Magma/)
   assert.match(motivo, /Barril 20L Acero/)
 })
@@ -90,7 +95,7 @@ test('el motivo nombra el producto y la presentacion', () => {
 test('la falta de precio gana sobre la falta de stock', () => {
   // Si no hay precio, el stock es irrelevante: no se puede cotizar.
   const p = producto({ precio_lata_publico: null, stock_latas: 0 })
-  assert.match(String(motivoBloqueo(p, 'lata', 'publico')), /no tiene precio/)
+  assert.match(String(motivoBloqueo(p, 'lata', 'publico', LIBRE)), /no tiene precio/)
 })
 
 // ── Precio y stock por presentacion ─────────────────────────
@@ -177,4 +182,65 @@ test('etiquetaDe nombra las presentaciones como el carrito las muestra', () => {
   assert.equal(etiquetaDe('barril10_acero'), 'Barril 10L Acero')
   // Una desconocida se muestra tal cual en vez de quedar vacia.
   assert.equal(etiquetaDe('rara'), 'rara')
+})
+
+// ── Disponible por celda ────────────────────────────────────
+
+test('la celda resta lo comprometido del fisico', () => {
+  const p = producto()
+  const comprometido = new Map([[claveStock('p-1', 'stock_caja24'), 4]])
+
+  assert.deepEqual(celdaStock(p, 'caja24', comprometido), { fisico: 44, comprometido: 4, disponible: 40 })
+  assert.equal(disponibleEn(p, 'caja24', comprometido), 40)
+  // Una celda sin nada apartado se queda igual al fisico.
+  assert.deepEqual(celdaStock(p, 'lata', comprometido), { fisico: 130, comprometido: 0, disponible: 130 })
+})
+
+test('sin el mapa cargado la celda muestra el fisico, no cero', () => {
+  // Es el estado mientras el fetch del comprometido no responde: se ve de
+  // mas, nunca de menos, y el servidor revalida al confirmar.
+  assert.equal(disponibleEn(producto(), 'caja24', LIBRE), 44)
+})
+
+test('una presentacion sin columna no inventa disponible', () => {
+  assert.deepEqual(celdaStock(producto(), 'mix24', LIBRE), { fisico: 0, comprometido: 0, disponible: 0 })
+})
+
+test('el disponible puede ser negativo y no se recorta', () => {
+  // Pasa si alguien bajo el fisico a mano por debajo de lo ya vendido.
+  const comprometido = new Map([[claveStock('p-1', 'stock_barril_pet'), 5]])
+  assert.equal(disponibleEn(producto(), 'barril_pet', comprometido), -4)
+})
+
+test('el bloqueo distingue "sin stock" de "todo apartado"', () => {
+  const p = producto()
+  // 44 cajas fisicas, las 44 comprometidas: hay inventario pero no se puede
+  // vender, y el mensaje tiene que decir por que.
+  const todo = new Map([[claveStock('p-1', 'stock_caja24'), 44]])
+  const motivo = String(motivoBloqueo(p, 'caja24', 'publico', todo))
+  assert.match(motivo, /Sin disponible/)
+  assert.match(motivo, /44 que hay están comprometidas/)
+
+  // Sin fisico, el mensaje de siempre.
+  assert.match(String(motivoBloqueo(p, 'caja12', 'publico', LIBRE)), /Sin stock/)
+})
+
+test('la falta de precio sigue ganando sobre el disponible', () => {
+  const p = producto({ precio_lata_publico: null })
+  const todo = new Map([[claveStock('p-1', 'stock_latas'), 130]])
+  assert.match(String(motivoBloqueo(p, 'lata', 'publico', todo)), /no tiene precio/)
+})
+
+test('la visibilidad de una columna NO depende de lo comprometido', () => {
+  // Una presentacion con todo el stock apartado sigue siendo parte del
+  // catalogo: su columna se queda, con las celdas bloqueadas. Por eso
+  // `presentacionesVisibles` usa el fisico.
+  const p = producto({ stock_barril10_acero: 2, precio_barril10_acero_publico: 1300 })
+  assert.ok(presentacionesVisibles([p]).some(x => x.key === 'barril10_acero'))
+  assert.equal(stockDe(p, 'barril10_acero'), 2, 'stockDe debe seguir siendo el fisico')
+})
+
+test('detalleStock dice de donde sale el numero', () => {
+  const comprometido = new Map([[claveStock('p-1', 'stock_caja24'), 4]])
+  assert.equal(detalleStock(celdaStock(producto(), 'caja24', comprometido)), 'físico 44 · comprometido 4')
 })

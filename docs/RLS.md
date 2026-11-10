@@ -180,6 +180,7 @@ la acción tenga éxito.
 | Acción | Entidad | Route handler |
 |---|---|---|
 | `pedido.status` | pedidos | `/api/admin/pedidos/[id]/status` |
+| `pedido.entregado_sin_stock` | pedidos | `/api/admin/pedidos/[id]/status` — **solo super_admin**, motivo obligatorio. Marca entregado SIN descontar inventario, para pedidos ya entregados cuyo stock se ajustó a mano. El motivo queda en `detalle`. |
 | `pedido.pago` | pedidos | `/api/admin/pedidos/[id]/pago` |
 | `pedido.eliminar` | pedidos | `/api/admin/pedidos/[id]/eliminar` |
 | `pedido.crear` | pedidos | `/api/admin/pedidos/crear` |

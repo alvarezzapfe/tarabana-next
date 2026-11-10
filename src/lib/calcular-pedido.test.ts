@@ -14,7 +14,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { calcularPedido } from './calcular-pedido.ts'
-import { COLUMNA_STOCK_POR_UNIDAD, columnaStockDe, LITROS_POR_UNIDAD } from './unidades.ts'
+import { COLUMNA_STOCK_POR_UNIDAD, columnaStockDe, LITROS_POR_UNIDAD, type ColumnaStock } from './unidades.ts'
+import { claveStock } from './stock-disponible.ts'
 
 /** Producto con precios y stock holgados en todas las presentaciones. */
 function producto(over: Record<string, unknown> = {}) {
@@ -165,4 +166,91 @@ test('las cajas derivan su precio del precio por lata', () => {
   if ('error' in caja24 || 'error' in caja12) return
   assert.equal(caja24.total, 60 * 24)
   assert.equal(caja12.total, 60 * 12)
+})
+
+// ── Validacion contra el DISPONIBLE ─────────────────────────
+//
+// El inventario solo se descuenta al entregar, asi que validar contra la
+// columna de stock dejaba vender dos veces lo mismo mientras ninguno de los
+// dos pedidos se entregaba. Ver src/lib/stock-disponible.ts.
+
+const conApartado = (
+  unidad: string,
+  cantidad: number,
+  apartado: number,
+  columna: ColumnaStock,
+  p = producto()
+) =>
+  calcularPedido(
+    [{ producto_id: `prod-1-${unidad}`, cantidad }],
+    mapa(p),
+    'publico',
+    false,
+    parsea,
+    new Map([[claveStock('prod-1', columna), apartado]])
+  )
+
+test('lo apartado en pedidos abiertos no se puede volver a vender', () => {
+  // 10 cajas fisicas, 8 apartadas: entran 2, no 10.
+  const dos = conApartado('caja24', 2, 8, 'stock_caja24')
+  assert.ok(!('error' in dos), 'rechazo una cantidad que si cabia en el disponible')
+
+  const tres = conApartado('caja24', 3, 8, 'stock_caja24')
+  assert.ok('error' in tres, 'dejo pasar mas de lo disponible')
+  if (!('error' in tres)) return
+  assert.match(tres.error, /Stock insuficiente/)
+  // El mensaje tiene que decir el DISPONIBLE, no el fisico: "Disponible: 10"
+  // con 8 apartadas manda a buscar cajas que no estan.
+  assert.match(tres.error, /Disponible: 2\./)
+})
+
+test('sin nada apartado se comporta como antes', () => {
+  // El parametro es opcional a proposito: equivale a validar contra el fisico.
+  assert.ok(!('error' in corre('caja24', 10)))
+  assert.ok('error' in corre('caja24', 11))
+  assert.ok(!('error' in conApartado('caja24', 10, 0, 'stock_caja24')))
+})
+
+test('un disponible agotado se rechaza aunque el fisico alcance', () => {
+  const r = conApartado('barril_pet', 1, 5, 'stock_barril_pet')
+  assert.ok('error' in r)
+  if (!('error' in r)) return
+  assert.match(r.error, /Disponible: 0\./)
+})
+
+test('lo apartado de otra columna no estorba', () => {
+  // Las latas apartadas no bloquean cajas: son inventarios distintos.
+  const r = conApartado('caja24', 10, 100, 'stock_latas')
+  assert.ok(!('error' in r), 'un apartado de latas bloqueo la venta de cajas')
+})
+
+test('un mix valida las latas disponibles de CADA estilo', () => {
+  const a = producto({ id: 'prod-a', nombre: 'Magma', stock_latas: 100 })
+  const b = producto({ id: 'prod-b', nombre: 'Brisa', stock_latas: 20 })
+  const catalogo = new Map<string, Record<string, unknown>>([['prod-a', a], ['prod-b', b]])
+  const items = [{
+    producto_id: 'prod-a-mix24',
+    cantidad: 2,
+    metadata: { estilos: [
+      { producto_id: 'prod-a', nombre: 'Magma', latas: 12 },
+      { producto_id: 'prod-b', nombre: 'Brisa', latas: 12 },
+    ] },
+  }]
+
+  // 2 cajas x 12 latas = 24 de cada estilo. Brisa tiene 20 fisicas y ninguna
+  // apartada: alcanza por los pelos... no, no alcanza.
+  const sinApartado = calcularPedido(items, catalogo, 'publico', false, parsea)
+  assert.ok('error' in sinApartado)
+  if ('error' in sinApartado) assert.match(sinApartado.error, /Brisa/)
+
+  // Con Brisa en 30 fisicas si alcanza...
+  const b30 = new Map<string, Record<string, unknown>>([['prod-a', a], ['prod-b', producto({ id: 'prod-b', nombre: 'Brisa', stock_latas: 30 })]])
+  assert.ok(!('error' in calcularPedido(items, b30, 'publico', false, parsea)))
+
+  // ...pero no si 10 de esas 30 ya estan apartadas en otro pedido.
+  const r = calcularPedido(items, b30, 'publico', false, parsea, new Map([[claveStock('prod-b', 'stock_latas'), 10]]))
+  assert.ok('error' in r, 'el mix ignoro las latas apartadas')
+  if (!('error' in r)) return
+  assert.match(r.error, /Stock de latas insuficiente de Brisa/)
+  assert.match(r.error, /Disponible: 20, necesitas 24/)
 })

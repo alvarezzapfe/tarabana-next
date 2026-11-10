@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { canManageAsAdmin, canWrite, isVendedor } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
 import { cargarCatalogoImport } from '../../../../../src/lib/catalogo-import'
-import { cargarStockMap, crearPedido } from '../../../../../src/lib/crear-pedido'
+import { cargarComprometido, cargarStockMap, crearPedido } from '../../../../../src/lib/crear-pedido'
 import { LIMITE_BYTES, leerHojaCaptura } from '../../../../../src/lib/leer-xlsx'
 import { columnaStockDe } from '../../../../../src/lib/unidades'
 import { hoyMx } from '../../../../../src/lib/fechas'
@@ -128,10 +128,19 @@ export async function POST(request: Request) {
 
   // Un solo catalogo para todo el lote, que se va descontando conforme cada
   // pedido se crea: asi dos pedidos del mismo archivo no se reparten el mismo
-  // barril. OJO: esto no RESERVA stock. Hoy el inventario se descuenta al
-  // marcar el pedido como entregado, no al crearlo, asi que un pedido que
-  // alguien mas levante en este momento puede dejar corto al siguiente.
-  const stockMap = await cargarStockMap(service)
+  // barril.
+  //
+  // Y un solo comprometido, que NO se muta: lo que consume cada pedido del
+  // lote ya se descuenta del catalogo de arriba (`descontarDelMapa`), asi que
+  // sumarlo tambien al comprometido contaria dos veces el mismo pedido.
+  //
+  // OJO: esto sigue sin RESERVAR stock. El disponible se calcula al validar,
+  // no se aparta, asi que un pedido que alguien mas levante mientras corre el
+  // archivo puede dejar corto al siguiente.
+  const [stockMap, comprometido] = await Promise.all([
+    cargarStockMap(service),
+    cargarComprometido(service),
+  ])
 
   const creados: { referencia: string; pedido_id: string; total: number }[] = []
   const fallidos: { referencia: string; error: string }[] = []
@@ -160,6 +169,7 @@ export async function POST(request: Request) {
         service,
         request,
         stockMap,
+        comprometido: comprometido.por,
       }
     )
 

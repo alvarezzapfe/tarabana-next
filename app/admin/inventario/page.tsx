@@ -1,6 +1,8 @@
-import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
+import { createServerSupabaseClient, createServiceClient } from '../../../src/lib/supabase-server'
 import InventarioClient from './InventarioClient'
 import { canManageInventory } from '../../../src/lib/roles'
+import { cargarComprometido } from '../../../src/lib/crear-pedido'
+import { comprometidoAJSON } from '../../../src/lib/stock-disponible'
 
 export default async function InventarioPage() {
   const supabase = await createServerSupabaseClient()
@@ -14,9 +16,15 @@ export default async function InventarioPage() {
     return <p style={{ color: '#6b7280', fontSize: 14 }}>Sin acceso a esta sección.</p>
   }
 
-  const [{ data: productos }, { data: countRows }] = await Promise.all([
+  const [{ data: productos }, { data: countRows }, apartado] = await Promise.all([
     supabase.from('productos').select('*').order('nombre'),
     supabase.rpc('pedido_items_count_by_producto'),
+    // Lo comprometido en pedidos abiertos, con el service client: tiene que
+    // ser global, no lo que la sesion alcance a ver. Aqui quien mira ya pasó
+    // el guard de inventario, asi que el detalle de las partidas que no se
+    // pudieron clasificar tambien se le muestra — es la pantalla donde se
+    // corrigen.
+    cargarComprometido(createServiceClient()),
   ])
   const canEdit = canManageInventory(profile?.role)
 
@@ -25,5 +33,13 @@ export default async function InventarioPage() {
     pedidoCounts[row.producto_id] = row.count
   }
 
-  return <InventarioClient productos={productos || []} canEdit={canEdit} pedidoCounts={pedidoCounts} />
+  return (
+    <InventarioClient
+      productos={productos || []}
+      canEdit={canEdit}
+      pedidoCounts={pedidoCounts}
+      comprometido={comprometidoAJSON(apartado.por)}
+      sinClasificar={apartado.sinClasificar}
+    />
+  )
 }

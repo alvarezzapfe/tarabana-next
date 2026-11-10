@@ -125,13 +125,15 @@ type Props = {
   canCreate: boolean
   puedeDescuento: boolean
   esVendedor: boolean
+  /** Solo super admin puede entregar un pedido sin descontar inventario. */
+  esSuperAdmin: boolean
 }
 
 /** El parametro de la URL que abre el panel. */
 const PARAM_PANEL = 'pedido'
 
 export default function PedidosClient(props: Props) {
-  const { pedidos, saldos, pagos, vendedores, staff, canEdit, canCreate, puedeDescuento, esVendedor } = props
+  const { pedidos, saldos, pagos, vendedores, staff, canEdit, canCreate, puedeDescuento, esVendedor, esSuperAdmin } = props
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -142,6 +144,9 @@ export default function PedidosClient(props: Props) {
   const [seleccion, setSeleccion] = useState<Set<string>>(new Set())
   const [pagoDe, setPagoDe] = useState<FilaPedido | null>(null)
   const [statusPedido, setStatusPedido] = useState<FilaPedido | null>(null)
+  /** Pedido al que se le va a marcar entrega sin tocar inventario. */
+  const [sinStock, setSinStock] = useState<FilaPedido | null>(null)
+  const [motivoSinStock, setMotivoSinStock] = useState('')
   const [importar, setImportar] = useState(false)
   const [trabajando, setTrabajando] = useState('')
   const [aviso, setAviso] = useState('')
@@ -352,6 +357,38 @@ export default function PedidosClient(props: Props) {
       setError(`${fila.folio}: ${d.error || 'no se pudo cambiar el status'}`)
       return
     }
+    refrescar()
+  }
+
+  /**
+   * Marca el pedido como entregado SIN descontar inventario.
+   *
+   * Para los pedidos que ya se entregaron en la realidad y cuyo stock se
+   * ajusto a mano: marcarlos por el camino normal lo descontaria por segunda
+   * vez. Pide motivo porque es la unica forma de cerrar un pedido fuera de
+   * cuadre, y queda en audit_log como `pedido.entregado_sin_stock`.
+   */
+  const entregarSinStock = async () => {
+    if (!sinStock) return
+    const motivo = motivoSinStock.trim()
+    if (!motivo) { setError('El motivo es obligatorio.'); return }
+
+    const fila = sinStock
+    setTrabajando(fila.id); setError('')
+    const res = await fetch(`/api/admin/pedidos/${fila.id}/status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: 'entregado', sinDescontar: true, motivo }),
+    })
+    setTrabajando('')
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setError(`${fila.folio}: ${d.error || 'no se pudo marcar como entregado'}`)
+      return
+    }
+    setSinStock(null)
+    setMotivoSinStock('')
+    setAviso(`${fila.folio} quedó entregado sin tocar el inventario.`)
     refrescar()
   }
 
@@ -673,6 +710,69 @@ export default function PedidosClient(props: Props) {
         </div>
       )}
 
+      {/* Entregar sin descontar inventario. Modal propio y no un prompt del
+          navegador: hay que decir con claridad que SI y que NO va a pasar
+          antes de cerrar un pedido fuera de cuadre. */}
+      {sinStock && (
+        <div
+          onClick={() => setSinStock(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: 16 }}
+        >
+          <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 12, padding: '22px 24px', width: 'min(420px, 100%)' }}>
+            <h3 style={{ margin: '0 0 4px', color: TINTA, fontSize: 15, fontWeight: 700 }}>
+              Marcar entregado sin descontar inventario
+            </h3>
+            <p style={{ margin: '0 0 14px', color: GRIS, fontSize: 12 }}>
+              <span className="font-mono">{sinStock.folio}</span> · {sinStock.cliente}
+            </p>
+
+            <ul style={{ margin: '0 0 14px', paddingLeft: 18, color: TINTA_MEDIA, fontSize: 12, lineHeight: 1.7 }}>
+              <li>El pedido pasa a <strong>entregado</strong>, con la fecha de entrega real de hoy.</li>
+              <li><strong>No</strong> se toca el stock de ningún producto.</li>
+              <li>Deja de contar como comprometido, así que el disponible sube.</li>
+              <li>Queda registrado en Actividad con el motivo.</li>
+            </ul>
+            <p style={{ margin: '0 0 12px', padding: '8px 11px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, color: '#92400e', fontSize: 11.5 }}>
+              Úsalo solo si el inventario ya se ajustó a mano por esta entrega. Si no, márcalo como
+              entregado por el camino normal.
+            </p>
+
+            <label style={{ display: 'block', color: GRIS, fontSize: 11.5, marginBottom: 4 }}>
+              Motivo (obligatorio)
+            </label>
+            <input
+              value={motivoSinStock}
+              onChange={e => setMotivoSinStock(e.target.value)}
+              placeholder="Entregado en agosto, inventario ya ajustado"
+              autoFocus
+              style={{ width: '100%', padding: '8px 11px', background: '#fff', border: `1px solid ${BORDE}`, borderRadius: 8, color: TINTA, fontSize: 12.5, outline: 'none', boxSizing: 'border-box' }}
+            />
+
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button
+                type="button"
+                onClick={() => setSinStock(null)}
+                style={{ flex: 1, padding: '9px', background: '#fff', border: `1px solid ${PISTA}`, borderRadius: 8, color: GRIS, fontSize: 12.5, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={entregarSinStock}
+                disabled={!motivoSinStock.trim() || !!trabajando}
+                style={{
+                  flex: 1, padding: '9px', background: motivoSinStock.trim() ? ACENTO : '#e5e7eb',
+                  border: 'none', borderRadius: 8, color: motivoSinStock.trim() ? '#fff' : GRIS_SUAVE,
+                  fontSize: 12.5, fontWeight: 700, cursor: motivoSinStock.trim() ? 'pointer' : 'not-allowed',
+                }}
+              >
+                {trabajando ? 'Marcando…' : 'Marcar entregado'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {pedidoPanel && (
         <PanelPedido
           /* `key` por pedido: el panel guarda estado propio — la pestana
@@ -685,10 +785,12 @@ export default function PedidosClient(props: Props) {
           puedeDescuento={puedeDescuento}
           esVendedor={esVendedor}
           nombrePor={nombrePor}
-          tapado={!!pagoDe || !!statusPedido || importar}
+          tapado={!!pagoDe || !!statusPedido || !!sinStock || importar}
           onCerrar={cerrarPanel}
           onPago={setPagoDe}
           onStatus={setStatusPedido}
+          esSuperAdmin={esSuperAdmin}
+          onEntregarSinStock={f => { setMotivoSinStock(''); setSinStock(f) }}
           onCancelarPago={cancelarPago}
           onEliminar={eliminar}
           onGuardado={msg => { setAviso(msg); refrescar() }}
