@@ -5,7 +5,7 @@ import { createClient } from '../../../src/lib/supabase'
 import { TIPOS_CLIENTE, NIVELES_PRECIO, giroLabel, tipoLabel, nivelLabel, tipoIcon } from '../../../src/lib/clientes'
 import { canWrite, isVendedor } from '../../../src/lib/roles'
 import { nombreCliente } from '../../../src/lib/metricas'
-import { filtrarClientes } from '../../../src/lib/clientes-export'
+import { filtrarClientes } from '../../../src/lib/clientes-lista'
 
 /**
  * El giro, con `tipo_consumidor` como respaldo.
@@ -163,9 +163,10 @@ export default function ClientesClient() {
 
   // Filtered data
   //
-  // El filtro vive en `clientes-export.ts` y no aqui: es el mismo que aplica
+  // El filtro vive en `clientes-lista.ts` y no aqui: es el mismo que aplica
   // la ruta del export, para que "Exportar Excel" no pueda dejar de coincidir
-  // con lo que se esta viendo.
+  // con lo que se esta viendo. Ese archivo NO importa exceljs a proposito:
+  // esto es un client component y todo lo que importe viaja al navegador.
   const filtros = useMemo(
     () => ({ q: search, tipo: filterTipo, nivel: filterNivel }),
     [search, filterTipo, filterNivel]

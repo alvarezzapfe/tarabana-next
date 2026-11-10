@@ -1,16 +1,13 @@
 /**
- * El filtro de la lista de clientes y el libro de Excel que sale de ella.
+ * El libro de Excel de la lista de clientes.
  *
- * Las dos cosas viven juntas porque el contrato del export es exactamente
- * "lo que esta viendo la tabla": si el filtro se implementara dos veces —una
- * en la pantalla y otra en la ruta— el boton "Exportar Excel" diria que
- * respeta los filtros y un dia dejaria de hacerlo sin que nada falle. Por eso
- * `filtrarClientes` la usan los dos: `ClientesClient.tsx` para pintar y
- * `app/api/admin/clientes/exportar` para armar el archivo.
+ * Devuelve `HojaDatos[]`; quien escribe el .xlsx es `libro-xlsx.ts`. Asi se
+ * puede probar el armado del libro sin generar un archivo.
  *
- * Nada de exceljs aqui: esto devuelve `HojaDatos[]` y quien escribe el
- * archivo es `libro-xlsx.ts`, del lado del servidor. Asi se puede probar el
- * armado del libro sin generar un .xlsx.
+ * SOLO SERVIDOR: importa `libro-xlsx.ts`, que importa exceljs. Un client
+ * component que importe algo de aqui se baja casi un mega al navegador. El
+ * filtro compartido con la pantalla vive aparte, en `clientes-lista.ts`,
+ * justamente por eso.
  *
  * DE DONDE SALE LA PLATA: de `pedidos_saldo`, como todo el admin (ver la nota
  * de `metricas.ts`). Dos consecuencias que importan al leer el archivo:
@@ -28,19 +25,12 @@ import {
 import { giroLabel, nivelLabel, regimenLabel, tipoLabel, usoCfdiLabel } from './clientes.ts'
 import { cobradoDe, nombreLegible, netoTotal, porCobrarDe, type FilaSaldo } from './metricas.ts'
 import { fechaMx } from './fechas.ts'
+import type { ClienteLista } from './clientes-lista.ts'
 
-/** Un cliente como lo trae `profiles` para la lista del admin. */
-export type ClienteLista = {
-  id: string
-  email: string
-  full_name: string | null
-  marca_negocio: string | null
-  razon_social: string | null
-  giro: string | null
-  tipo_consumidor: string | null
-  nivel_precio: string | null
-  rfc: string | null
-}
+// Se reexportan para que quien ya arma el libro no tenga que importar de dos
+// lados; el filtro en si vive en `clientes-lista.ts`, sin exceljs detras.
+export { filtrarClientes } from './clientes-lista.ts'
+export type { ClienteLista, FiltrosClientes } from './clientes-lista.ts'
 
 /** Todo lo que ademas necesita el renglon del Excel. */
 export type ClienteExport = ClienteLista & {
@@ -71,43 +61,7 @@ export type ClienteExport = ClienteLista & {
   created_at: string
 }
 
-/** Los tres controles de la tabla: buscador, tipo y nivel de precio. */
-export type FiltrosClientes = {
-  q?: string | null
-  /** `tipo_consumidor`, que es por lo que filtra el select de la pantalla. */
-  tipo?: string | null
-  nivel?: string | null
-}
-
 export const SIN_VENDEDOR = 'Sin vendedor'
-
-/**
- * El filtro de la lista, tal cual lo aplica la tabla.
- *
- * El buscador cubre nombre comercial, razon social, nombre, correo y RFC: es
- * lo mismo que se ve y lo mismo que se factura, que son las dos formas en que
- * alguien busca a un cliente.
- *
- * Generico en `T` para que no haga falta un tipo mas ancho del que cada lado
- * ya tiene: la pantalla pasa su `Cliente` y la ruta su `ClienteExport`.
- */
-export function filtrarClientes<T extends ClienteLista>(clientes: T[], filtros: FiltrosClientes): T[] {
-  const q = (filtros.q || '').trim().toLowerCase()
-  const tipo = filtros.tipo || ''
-  const nivel = filtros.nivel || ''
-
-  return clientes.filter(c => {
-    if (q) {
-      const campos = [c.marca_negocio, c.razon_social, c.full_name, c.email, c.rfc]
-      if (!campos.some(v => (v || '').toLowerCase().includes(q))) return false
-    }
-    if (tipo && c.tipo_consumidor !== tipo) return false
-    // Un cliente sin nivel es publico: es el default de la columna y lo que
-    // pinta la tabla.
-    if (nivel && (c.nivel_precio || 'publico') !== nivel) return false
-    return true
-  })
-}
 
 // ── Lo que aporta cada cliente ──────────────────────────────
 
