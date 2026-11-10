@@ -295,3 +295,68 @@ export function armarLote(
     errores,
   }
 }
+
+// ── Formularios de producto ─────────────────────────────────
+//
+// La lista de precios no es la unica pantalla que escribe estas columnas: la
+// ficha del producto y el alta tambien. Si cada una tuviera su propia lectura,
+// la regla de "pesos enteros" valdria en una y no en las otras, y el mismo
+// precio con centavos entraria por la puerta de al lado.
+
+/** Nombre legible de una columna, para los mensajes de error. */
+export function etiquetaColumna(columna: string): string {
+  for (const f of FILAS_EDITABLES) {
+    if (f.columna!.publico === columna) return `${f.label} · Público`
+    if (f.columna!.taproom === columna) return `${f.label} · Mayorista`
+  }
+  return columna
+}
+
+export type PreciosLeidos =
+  | { precios: Record<string, number | null>; errores?: undefined }
+  | { errores: Record<string, string>; precios?: undefined }
+
+/**
+ * Lee los campos de precio de un formulario de producto.
+ *
+ * Diferencias con `leerPrecio`, que es para una celda de la lista:
+ *
+ *   - Una celda VACIA es `null` (sin precio), no un error: al dar de alta un
+ *     producto es normal no tener todavia el precio de todas las
+ *     presentaciones, y en la ficha se guarda lo que haya.
+ *   - Solo se leen las columnas que vienen en el objeto. Una columna ausente
+ *     se OMITE del resultado en vez de devolverse como null, para que un
+ *     formulario que no la trae no borre un precio ya capturado.
+ *
+ * Lo demas es la misma regla: mayor que 0 y en pesos enteros.
+ */
+export function leerPreciosDeFormulario(crudos: Record<string, unknown>): PreciosLeidos {
+  const precios: Record<string, number | null> = {}
+  const errores: Record<string, string> = {}
+
+  for (const columna of COLUMNAS_PRECIO) {
+    if (!(columna in crudos)) continue
+
+    const crudo = crudos[columna]
+    const texto = crudo === null || crudo === undefined ? '' : String(crudo)
+    if (texto.trim() === '') {
+      precios[columna] = null
+      continue
+    }
+
+    const leido = leerPrecio(texto)
+    if ('error' in leido) errores[columna] = leido.error
+    else precios[columna] = leido.valor
+  }
+
+  return Object.keys(errores).length > 0 ? { errores } : { precios }
+}
+
+/** El primer error, ya redactado. Para formularios que muestran un solo aviso. */
+export function primerErrorDePrecios(errores: Record<string, string>): string {
+  const [columna, motivo] = Object.entries(errores)[0] ?? []
+  if (!columna) return ''
+  const cuantos = Object.keys(errores).length
+  return `${etiquetaColumna(columna)}: ${motivo}.` +
+    (cuantos > 1 ? ` (y ${cuantos - 1} ${cuantos === 2 ? 'precio más' : 'precios más'} con problemas)` : '')
+}
