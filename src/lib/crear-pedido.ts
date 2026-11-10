@@ -13,7 +13,8 @@
  *   4. Si es vendedor: su ficha manda, y el cliente tiene que ser de su
  *      cartera. El vendedor_id del body se ignora.
  *   5. El precio sale del `nivel_precio` DEL CLIENTE, nunca del body.
- *   6. Stock suficiente, via calcularPedido.
+ *   6. Stock DISPONIBLE suficiente (fisico menos lo comprometido en
+ *      pedidos abiertos), via calcularPedido.
  *   7. Fecha del pedido: nunca futura, y para un vendedor siempre hoy.
  *   8. Pedido y partidas, o ninguno de los dos.
  *
@@ -26,6 +27,7 @@ import { canManageAsAdmin, canWrite, isVendedor } from './roles'
 import { hoyMx } from './fechas'
 import { precioSufijo } from './clientes'
 import { calcularPedido } from './calcular-pedido'
+import { STATUS_SIN_COMPROMISO, comprometidoDe } from './stock-disponible'
 import { logAction } from './audit'
 import { enviarInvitacionCliente } from './invitar-cliente'
 
@@ -77,6 +79,15 @@ export type ContextoPedido = {
    */
   stockMap?: Map<string, Record<string, unknown>>
   /**
+   * Lo comprometido por los pedidos abiertos. Si no viene, se carga aqui.
+   *
+   * La importacion masiva pasa UNO para todo el archivo y NO lo muta: lo que
+   * cada pedido creado consume se descuenta del `stockMap` de arriba
+   * (`descontarDelMapa`), asi que sumarlo tambien al comprometido contaria dos
+   * veces el mismo pedido dentro del mismo lote.
+   */
+  comprometido?: Map<string, number>
+  /**
    * Saltarse el correo de invitacion al primer pedido. La importacion masiva
    * lo usa cuando quiere evitar una tanda de correos de golpe.
    */
@@ -95,6 +106,50 @@ export async function cargarStockMap(service: SupabaseClient) {
   return new Map<string, Record<string, unknown>>(
     (productos || []).map((p: Record<string, unknown>) => [String(p.id), p])
   )
+}
+
+/**
+ * Lo comprometido por los pedidos abiertos, por producto y columna de stock.
+ *
+ * Va con el SERVICE client a proposito: el comprometido tiene que ser global.
+ * Con la sesion de un vendedor, `pedidos_vendedor_read` solo le devuelve los
+ * suyos, veria menos comprometido del que hay y podria vender producto que ya
+ * tiene dueno.
+ *
+ * El filtro de status se repite aqui y dentro de `comprometidoDe`: el de la
+ * consulta es para no traer el historial completo, y el de la funcion es el
+ * que manda. Si el de la consulta se equivocara de mas, la funcion igual
+ * descarta; si se equivocara de menos, contariamos corto, asi que la lista
+ * sale de la misma constante.
+ */
+export async function cargarComprometido(service: SupabaseClient) {
+  const { data: pedidos } = await service
+    .from('pedidos')
+    .select('id, status, pedido_items(producto_id, unidad, cantidad, metadata, productos(nombre))')
+    .not('status', 'in', `(${STATUS_SIN_COMPROMISO.join(',')})`)
+
+  return comprometidoDe(
+    (pedidos || []).map((p: Record<string, unknown>) => ({
+      id: String(p.id),
+      status: String(p.status),
+      pedido_items: (p.pedido_items as PartidaCruda[] | null)?.map(it => ({
+        producto_id: String(it.producto_id),
+        unidad: it.unidad,
+        cantidad: it.cantidad,
+        metadata: it.metadata,
+        nombre: Array.isArray(it.productos) ? it.productos[0]?.nombre : it.productos?.nombre,
+      })) ?? [],
+    }))
+  )
+}
+
+/** Partida tal como la devuelve el embed de PostgREST. */
+type PartidaCruda = {
+  producto_id: string
+  unidad: string | null
+  cantidad: number | null
+  metadata?: { estilos?: { producto_id: string; nombre?: string | null; latas?: number | null }[] | null } | null
+  productos?: { nombre?: string | null } | { nombre?: string | null }[] | null
 }
 
 /** "<uuid>-<unidad>" -> partes. El uuid trae guiones, la unidad no. */
@@ -190,8 +245,9 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
   const esMayorista = sufijo === 'taproom'
 
   const stockMap = ctx.stockMap ?? (await cargarStockMap(service))
+  const comprometido = ctx.comprometido ?? (await cargarComprometido(service)).por
 
-  const calculo = calcularPedido(datos.items, stockMap, sufijo, esMayorista, parsearProductoId)
+  const calculo = calcularPedido(datos.items, stockMap, sufijo, esMayorista, parsearProductoId, comprometido)
   if ('error' in calculo) return malo(calculo.error, calculo.status)
 
   if (datos.descuento_tipo === 'monto' && Number(datos.descuento_valor) > calculo.total) {

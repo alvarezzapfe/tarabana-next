@@ -3,7 +3,7 @@ import { useCallback, useMemo, useRef } from 'react'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type Presentacion, type Producto,
-  claveCelda, moneda, motivoBloqueo, precioDe, stockDe, tabular,
+  celdaStock, claveCelda, detalleStock, moneda, motivoBloqueo, precioDe, tabular,
 } from './pos-ui'
 
 /**
@@ -16,6 +16,11 @@ import {
  *
  * En movil la matriz no se encoge: se cambia por tarjetas, porque siete
  * columnas en 390 px no se leen ni se pican.
+ *
+ * El numero de cada celda es el DISPONIBLE —fisico menos lo comprometido en
+ * pedidos abiertos—, no la columna de stock. El fisico solo baja al entregar,
+ * asi que la matriz ofrecia producto que ya tenia dueno; el desglose va en el
+ * tooltip para que no se pierda de donde sale el numero.
  */
 
 type Props = {
@@ -27,10 +32,12 @@ type Props = {
   onCantidad: (productoId: string, presentacion: string, cantidad: number) => void
   /** Un cliente sin elegir deja la matriz en modo lectura. */
   habilitada: boolean
+  /** claveStock -> unidades comprometidas, de /api/admin/pedidos/comprometido. */
+  comprometido: Map<string, number>
 }
 
 export default function MatrizProductos({
-  productos, presentaciones, sufijo, cantidades, onCantidad, habilitada,
+  productos, presentaciones, sufijo, cantidades, onCantidad, habilitada, comprometido,
 }: Props) {
   // Un ref por celda, para mover el foco con las flechas.
   const refs = useRef(new Map<string, HTMLInputElement | null>())
@@ -103,11 +110,13 @@ export default function MatrizProductos({
               {presentaciones.map((pres, col) => {
                 const k = claveCelda(producto.id, pres.key)
                 const cantidad = cantidades[k] || 0
-                const motivo = motivoBloqueo(producto, pres.key, sufijo)
+                const motivo = motivoBloqueo(producto, pres.key, sufijo, comprometido)
                 const precio = precioDe(producto, pres.key, sufijo)
-                const stock = stockDe(producto, pres.key)
+                const celda = celdaStock(producto, pres.key, comprometido)
+                const stock = celda.disponible
                 const excede = cantidad > stock
                 const bloqueada = !habilitada || !!motivo
+                const apartado = celda.comprometido > 0
 
                 return (
                   <td
@@ -121,8 +130,8 @@ export default function MatrizProductos({
                       title={
                         !habilitada ? 'Elige un cliente para capturar.'
                           : motivo ? motivo
-                          : excede ? `Solo quedan ${stock}.`
-                          : `${moneda(precio)} · quedan ${stock}`
+                          : excede ? `Solo quedan ${stock} disponibles — ${detalleStock(celda)}.`
+                          : `${moneda(precio)} · ${stock} disponibles — ${detalleStock(celda)}`
                       }
                       style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', gap: 3, opacity: bloqueada ? 0.4 : 1 }}
                     >
@@ -175,8 +184,11 @@ export default function MatrizProductos({
                       <span style={{ ...tabular, fontSize: 10, color: motivo ? GRIS_SUAVE : GRIS, lineHeight: 1.2 }}>
                         {precio > 0 ? moneda(precio) : 'sin precio'}
                       </span>
-                      <span style={{ ...tabular, fontSize: 9.5, color: excede ? ROJO : GRIS_SUAVE, lineHeight: 1 }}>
+                      {/* El asterisco marca que hay unidades apartadas, o sea
+                          que este numero no es la columna de inventario. */}
+                      <span style={{ ...tabular, fontSize: 9.5, color: excede || stock < 0 ? ROJO : GRIS_SUAVE, lineHeight: 1 }}>
                         {excede ? `solo ${stock}` : `${stock} disp.`}
+                        {apartado && <span title={detalleStock(celda)}>*</span>}
                       </span>
                     </div>
                   </td>

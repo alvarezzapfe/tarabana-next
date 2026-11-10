@@ -323,3 +323,23 @@ pena listar los que quedan en la tabla y abortar si hay más de uno. Y antes de
 dar por buena una migración de trigger, probarla con un INSERT real: la
 estructura, la vista y el backfill de `20261105000000` pasaron todas las
 verificaciones, y el bug sólo apareció al insertar una fila de prueba.
+
+## `pedidos.fecha_entrega` y `fecha_entrega_real` son `timestamptz`, y el código las trata como fechas
+
+Verificado contra producción el 2026-11-10 con el spec OpenAPI de PostgREST.
+Es la divergencia inversa a la de `pagos.fecha_pago` y
+`pedidos.fecha_vencimiento`, que están declaradas `timestamptz` y viven como
+`date`: estas dos sí son `timestamptz`.
+
+Lo que escribe el código es `'YYYY-MM-DD'` —el `<input type="date">` del panel
+de envío, y la ruta de status al entregar sin descontar inventario— y Postgres
+lo interpreta como **medianoche UTC**, que en CDMX son las 18:00 del día
+anterior. No se nota porque nadie lo parsea: `pedidos-ui.ts:299` lo lee con
+`.slice(0, 10)` sobre el string crudo, así que la fecha que se muestra es la
+que se escribió.
+
+**La consecuencia para quien toque esto:** pasarlas por `new Date()` o
+compararlas como instantes da un día de menos en la zona del negocio. Si
+alguna vez hacen falta como instante, hay que decidir la hora a propósito
+(mediodía México, por ejemplo) en vez de heredar la medianoche UTC. Mientras se
+traten como fecha y se lean cortando el string, el comportamiento es correcto.

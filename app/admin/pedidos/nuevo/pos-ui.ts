@@ -14,6 +14,7 @@
  */
 import { precioUnitario } from '../../../../src/lib/calcular-pedido.ts'
 import { columnaStockDe, litrosDeItem } from '../../../../src/lib/unidades.ts'
+import { claveStock, type Disponibilidad } from '../../../../src/lib/stock-disponible.ts'
 
 export const ACENTO = '#D95F2E'
 export const ROJO = '#dc2626'
@@ -64,12 +65,55 @@ export const PRESENTACIONES: Presentacion[] = [
 export const etiquetaDe = (key: string) =>
   PRESENTACIONES.find(p => p.key === key)?.largo ?? key
 
-/** Stock de un producto en una presentacion. */
+/**
+ * Stock FISICO de un producto en una presentacion: la columna tal cual.
+ *
+ * Casi nunca es lo que hay que mostrar ni contra lo que hay que validar — para
+ * eso esta `celdaStock`, que resta lo comprometido. Esto sirve para decidir si
+ * una columna de la matriz existe (`presentacionesVisibles`), que no debe
+ * depender de los pedidos abiertos: una presentacion con todo el stock
+ * apartado sigue siendo parte del catalogo.
+ */
 export function stockDe(producto: Producto, presentacion: string): number {
   const col = columnaStockDe(presentacion)
   if (!col) return 0
   return Number(producto[col] ?? 0) || 0
 }
+
+/**
+ * Los tres numeros de una celda: fisico, comprometido y disponible.
+ *
+ * Es lo que el POS muestra y contra lo que valida. El fisico solo baja al
+ * ENTREGAR, asi que ofrecer el fisico significaba ofrecer producto que ya
+ * tenia dueno (ver src/lib/stock-disponible.ts).
+ *
+ * `comprometido` llega de /api/admin/pedidos/comprometido, no de un select del
+ * navegador: con la sesion de un vendedor solo se ven sus propios pedidos.
+ * Mientras ese fetch no responde el mapa esta vacio, asi que la celda muestra
+ * el fisico; es un estado transitorio y el servidor revalida al confirmar.
+ */
+export function celdaStock(
+  producto: Producto,
+  presentacion: string,
+  comprometido: Map<string, number>
+): Disponibilidad {
+  const col = columnaStockDe(presentacion)
+  if (!col) return { fisico: 0, comprometido: 0, disponible: 0 }
+  const fisico = Number(producto[col] ?? 0) || 0
+  const comp = comprometido.get(claveStock(producto.id, col)) || 0
+  return { fisico, comprometido: comp, disponible: fisico - comp }
+}
+
+/** Lo que se puede vender de una celda. */
+export const disponibleEn = (
+  producto: Producto,
+  presentacion: string,
+  comprometido: Map<string, number>
+): number => celdaStock(producto, presentacion, comprometido).disponible
+
+/** "físico 200 · comprometido 47", para el tooltip de la celda. */
+export const detalleStock = (d: Disponibilidad): string =>
+  `físico ${d.fisico} · comprometido ${d.comprometido}`
 
 /** Precio de un producto en una presentacion, para el nivel del cliente. */
 export function precioDe(producto: Producto, presentacion: string, sufijo: 'publico' | 'taproom'): number {
@@ -141,14 +185,20 @@ export const litrosTotalesDe = (partidas: Partida[]) =>
 export function motivoBloqueo(
   producto: Producto,
   presentacion: string,
-  sufijo: 'publico' | 'taproom'
+  sufijo: 'publico' | 'taproom',
+  comprometido: Map<string, number>
 ): string | null {
   const precio = precioDe(producto, presentacion, sufijo)
   if (precio <= 0) {
     return `${producto.nombre} no tiene precio ${sufijo === 'taproom' ? 'mayorista' : 'al público'} para ${etiquetaDe(presentacion)}.`
   }
-  if (stockDe(producto, presentacion) <= 0) {
-    return `Sin stock de ${etiquetaDe(presentacion)} para ${producto.nombre}.`
+  // Contra el DISPONIBLE, no el fisico: lo que esta apartado en otro pedido no
+  // se puede vender otra vez, aunque siga en la bodega.
+  const celda = celdaStock(producto, presentacion, comprometido)
+  if (celda.disponible <= 0) {
+    return celda.fisico > 0
+      ? `Sin disponible de ${etiquetaDe(presentacion)} para ${producto.nombre}: las ${celda.fisico} que hay están comprometidas en pedidos abiertos.`
+      : `Sin stock de ${etiquetaDe(presentacion)} para ${producto.nombre}.`
   }
   return null
 }

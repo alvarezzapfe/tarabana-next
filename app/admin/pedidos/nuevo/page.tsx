@@ -14,8 +14,9 @@ import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA,
   type Partida, type Producto,
   card, claveCelda, etiquetaDe, moneda, precioDe, presentacionesVisibles,
-  productoDeClave, stockDe, tabular,
+  celdaStock, detalleStock, disponibleEn, productoDeClave, tabular,
 } from './pos-ui'
+import { comprometidoDeJSON } from '../../../../src/lib/stock-disponible'
 
 /**
  * Captura de pedidos, estilo punto de venta.
@@ -29,6 +30,13 @@ import {
  * `precioUnitario` y `columnaStockDe` (ver pos-ui.ts), las mismas primitivas
  * que usa el servidor, en vez de los helpers locales e incompletos que tenia
  * esta pagina y que no conocian ni las latas sueltas ni los barriles de 10 L.
+ *
+ * Lo que la matriz ofrece es el DISPONIBLE, no el fisico: el inventario solo
+ * se descuenta al entregar, asi que mientras un pedido sigue abierto su
+ * producto ya tiene dueno aunque la columna de stock no se haya movido. Lo
+ * comprometido NO se consulta desde aqui —con la sesion de un vendedor solo se
+ * verian sus propios pedidos— sino por /api/admin/pedidos/comprometido, que lo
+ * calcula con vista global. Ver src/lib/stock-disponible.ts.
  */
 
 const CONDICIONES = [
@@ -75,6 +83,8 @@ export default function NuevoPedidoPage() {
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [recientes, setRecientes] = useState<string[]>([])
   const [productos, setProductos] = useState<Producto[]>([])
+  /** claveStock -> unidades apartadas en pedidos abiertos. */
+  const [comprometido, setComprometido] = useState<Map<string, number>>(new Map())
   const [vendedores, setVendedores] = useState<{ id: string; nombre: string }[]>([])
   const [esVendedor, setEsVendedor] = useState(false)
   const [puedeDescuento, setPuedeDescuento] = useState(false)
@@ -106,13 +116,19 @@ export default function NuevoPedidoPage() {
   // ── Carga ─────────────────────────────────────────────────
   useEffect(() => {
     const cargar = async () => {
-      const [{ data: perfiles }, { data: prods }, { data: vend }, config] = await Promise.all([
+      const [{ data: perfiles }, { data: prods }, { data: vend }, config, apartado] = await Promise.all([
         supabase.from('profiles')
           .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
           .eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
         supabase.from('vendedores').select('id, nombre').eq('activo', true).order('nombre'),
         fetch('/api/admin/config').then(r => (r.ok ? r.json() : {})).catch(() => ({})),
+        // Si esto falla, el mapa queda vacio y la matriz muestra el fisico.
+        // Es la degradacion correcta: se ve de mas, nunca de menos, y el
+        // servidor revalida contra el disponible al confirmar.
+        fetch('/api/admin/pedidos/comprometido')
+          .then(r => (r.ok ? r.json() : null))
+          .catch(() => null),
       ])
 
       setClientes((perfiles || []).map(p => ({
@@ -123,6 +139,7 @@ export default function NuevoPedidoPage() {
       })))
       setProductos((prods || []) as Producto[])
       setVendedores(vend || [])
+      setComprometido(comprometidoDeJSON((apartado as { comprometido?: Record<string, number> } | null)?.comprometido))
 
       // Clientes mas recientes POR ULTIMO PEDIDO, no por fecha de alta: la
       // pregunta es "a quien le vendi hace poco". Con RLS, un vendedor ve
@@ -205,10 +222,10 @@ export default function NuevoPedidoPage() {
     for (const clave of Object.keys(cantidades)) {
       const producto = porId.get(productoDeClave(clave))
       if (!producto) continue
-      mapa[clave] = stockDe(producto, presentacionDe(clave))
+      mapa[clave] = disponibleEn(producto, presentacionDe(clave), comprometido)
     }
     return mapa
-  }, [cantidades, porId, presentacionDe])
+  }, [cantidades, porId, presentacionDe, comprometido])
 
   // ── Reprecio al cambiar de cliente ────────────────────────
   //
@@ -330,15 +347,15 @@ export default function NuevoPedidoPage() {
         ajustes.push(`${etiqueta}: sin precio para este cliente`)
         continue
       }
-      const stock = stockDe(producto, presentacion)
+      const stock = disponibleEn(producto, presentacion, comprometido)
       if (stock <= 0) {
-        ajustes.push(`${etiqueta}: sin stock`)
+        ajustes.push(`${etiqueta}: sin disponible`)
         continue
       }
       // Se ajusta a lo que hay en vez de precargar un exceso, que bloquearia
       // Confirmar sin que se vea el motivo.
       const ajustada = Math.min(cantidad, stock)
-      if (ajustada < cantidad) ajustes.push(`${etiqueta}: bajo de ${cantidad} a ${ajustada} por stock`)
+      if (ajustada < cantidad) ajustes.push(`${etiqueta}: bajo de ${cantidad} a ${ajustada} por disponible`)
       nuevas[claveCelda(producto.id, presentacion)] = ajustada
     }
 
@@ -358,15 +375,17 @@ export default function NuevoPedidoPage() {
   // ── Mix ───────────────────────────────────────────────────
   const mixProducts = useMemo<MixProduct[]>(
     () => productos
-      .filter(p => precioDe(p, 'lata', sufijo) > 0 && stockDe(p, 'lata') > 0)
+      // Las latas que el mix puede usar son las DISPONIBLES: las apartadas en
+      // otro pedido ya no estan para armar una caja mixta.
+      .filter(p => precioDe(p, 'lata', sufijo) > 0 && disponibleEn(p, 'lata', comprometido) > 0)
       .map(p => ({
         id: p.id,
         nombre: p.nombre,
         imagen_url: typeof p.imagen_url === 'string' ? p.imagen_url : undefined,
-        stock_latas: stockDe(p, 'lata'),
+        stock_latas: disponibleEn(p, 'lata', comprometido),
         precio_por_lata: precioDe(p, 'lata', sufijo),
       })),
-    [productos, sufijo]
+    [productos, sufijo, comprometido]
   )
 
   const agregarMix = (resultado: MixResult) => {
@@ -675,6 +694,7 @@ export default function NuevoPedidoPage() {
               cantidades={cantidades}
               onCantidad={setCantidad}
               habilitada={!!clienteId}
+              comprometido={comprometido}
             />
           </div>
 
@@ -696,9 +716,10 @@ export default function NuevoPedidoPage() {
                     const clave = claveCelda(producto.id, pres.key)
                     const cantidad = cantidades[clave] || 0
                     const precio = precioDe(producto, pres.key, sufijo)
-                    const stock = stockDe(producto, pres.key)
-                    // Lo que no tiene ni precio ni stock no se pinta: en movil
-                    // el espacio es el recurso escaso.
+                    const celda = celdaStock(producto, pres.key, comprometido)
+                    const stock = celda.disponible
+                    // Lo que no tiene ni precio ni disponible no se pinta: en
+                    // movil el espacio es el recurso escaso.
                     if (precio <= 0 && stock <= 0) return null
                     const bloqueada = !clienteId || precio <= 0 || stock <= 0
                     const excede = cantidad > stock
@@ -706,8 +727,12 @@ export default function NuevoPedidoPage() {
                       <div key={pres.key} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: bloqueada ? 0.45 : 1 }}>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <span style={{ display: 'block', color: TINTA_MEDIA, fontSize: 12.5 }}>{pres.largo}</span>
-                          <span style={{ ...tabular, display: 'block', color: excede ? '#dc2626' : GRIS_SUAVE, fontSize: 10.5 }}>
+                          <span
+                            title={detalleStock(celda)}
+                            style={{ ...tabular, display: 'block', color: excede ? '#dc2626' : GRIS_SUAVE, fontSize: 10.5 }}
+                          >
                             {precio > 0 ? `${moneda(precio)} · ${stock} disp.` : 'sin precio'}
+                            {celda.comprometido > 0 && ` (${celda.comprometido} apartadas)`}
                           </span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>

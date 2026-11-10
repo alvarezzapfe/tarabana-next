@@ -1,6 +1,7 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
 import { calcularPedido } from '../../../../../src/lib/calcular-pedido'
+import { cargarComprometido } from '../../../../../src/lib/crear-pedido'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -23,11 +24,16 @@ export async function POST(request: Request) {
   const { data: productos } = await service.from('productos').select('*').eq('activo', true)
   const stockMap = new Map<string, Record<string, any>>(productos?.map((p: any) => [p.id, p]) || [])
 
+  // El mismo disponible que el POS: el portal tambien tiene que respetar lo
+  // que ya esta comprometido en pedidos abiertos, o un cliente podria comprar
+  // por web producto que el equipo ya le vendio a otro.
+  const { por: comprometido } = await cargarComprometido(service)
+
   // Portal items use { tipo, producto_id }
   const result = calcularPedido(items, stockMap, sufijo, esMayorista, (item) => ({
     productoId: item.producto_id || '',
     unidad: item.tipo || 'caja24',
-  }))
+  }), comprometido)
 
   if ('error' in result) return NextResponse.json({ error: result.error }, { status: result.status })
 

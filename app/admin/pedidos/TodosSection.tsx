@@ -1,6 +1,6 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import PedidosClient from './PedidosClient'
-import { STAFF_ROLES, canManageAsAdmin, canWrite, isVendedor } from '../../../src/lib/roles'
+import { STAFF_ROLES, canManageAsAdmin, canWrite, isSuperAdmin, isVendedor } from '../../../src/lib/roles'
 import { nombreLegible } from '../../../src/lib/metricas'
 
 export default async function TodosSection() {
@@ -50,6 +50,10 @@ export default async function TodosSection() {
       canCreate={canCreate}
       puedeDescuento={puedeDescuento}
       esVendedor={isVendedor(myProfile?.role)}
+      // Marcar entregado SIN descontar inventario es solo de super admin: es
+      // la unica forma de cerrar un pedido fuera de cuadre. La ruta lo valida
+      // tambien; esto solo decide si el item del menu se pinta.
+      esSuperAdmin={isSuperAdmin(myProfile?.role)}
     />
   )
 }

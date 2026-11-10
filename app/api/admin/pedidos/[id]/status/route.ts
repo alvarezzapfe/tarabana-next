@@ -1,8 +1,9 @@
 import { createServerSupabaseClient } from '../../../../../../src/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { canWrite } from '../../../../../../src/lib/roles'
+import { canWrite, isSuperAdmin } from '../../../../../../src/lib/roles'
 import { logAction } from '../../../../../../src/lib/audit'
 import { movimientosDeEntrega, porProducto } from '../../../../../../src/lib/stock-entrega'
+import { hoyMx } from '../../../../../../src/lib/fechas'
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,7 +15,66 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!canWrite(profile?.role))
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
 
-  const { status } = await request.json()
+  const { status, sinDescontar, motivo } = await request.json()
+
+  /**
+   * Entregar SIN tocar el inventario.
+   *
+   * Para los pedidos que ya se entregaron en la realidad pero nunca se
+   * marcaron, y cuyo inventario ya se ajusto a mano. Marcarlos por el camino
+   * normal descontaria el stock por segunda vez.
+   *
+   * Lo que si hace: pasa el pedido a entregado con su fecha de entrega real, y
+   * con eso deja de contar como comprometido (ver stock-disponible.ts), que es
+   * justo lo que se busca — ese producto ya salio y el fisico ya lo refleja.
+   *
+   * Es de super admin y pide motivo porque es la unica forma de mover stock y
+   * status fuera de cuadre: queda en `audit_log` como
+   * `pedido.entregado_sin_stock` con el motivo adentro, que es el unico rastro
+   * de por que ese pedido no descuenta nada.
+   */
+  if (sinDescontar) {
+    if (status !== 'entregado') {
+      return NextResponse.json(
+        { error: 'Saltarse el inventario solo aplica al marcar un pedido como entregado.' },
+        { status: 400 }
+      )
+    }
+    if (!isSuperAdmin(profile?.role)) {
+      return NextResponse.json({ error: 'Solo un super administrador puede entregar sin descontar inventario' }, { status: 403 })
+    }
+
+    const texto = typeof motivo === 'string' ? motivo.trim() : ''
+    if (!texto) {
+      return NextResponse.json({ error: 'El motivo es obligatorio' }, { status: 400 })
+    }
+
+    const { data: pedido } = await supabase.from('pedidos').select('status').eq('id', id).single()
+    if (!pedido) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
+    if (pedido.status === 'entregado') {
+      return NextResponse.json({ error: 'Este pedido ya fue marcado como entregado' }, { status: 400 })
+    }
+    if (pedido.status === 'cancelado') {
+      return NextResponse.json({ error: 'Un pedido cancelado no se puede marcar como entregado' }, { status: 400 })
+    }
+
+    const { error } = await supabase
+      .from('pedidos')
+      // La fecha de entrega REAL, no la programada: es la que la tabla y la
+      // linea de tiempo muestran como "entregado el".
+      .update({ status: 'entregado', fecha_entrega_real: hoyMx() })
+      .eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+
+    logAction({
+      actorId: user.id, actorEmail: user.email!, actorRole: profile!.role,
+      accion: 'pedido.entregado_sin_stock', entidad: 'pedidos', entidadId: id,
+      detalle: { from: pedido.status, to: 'entregado', motivo: texto, inventario: 'no descontado' },
+      request,
+    })
+
+    return NextResponse.json({ ok: true })
+  }
 
   // When marking as 'entregado', deduct stock
   if (status === 'entregado') {
