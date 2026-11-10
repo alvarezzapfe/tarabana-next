@@ -96,3 +96,82 @@ export function diasEntre(desde: string, hasta: string): number {
   }
   return Math.round((ms(hasta) - ms(desde)) / 86400000)
 }
+
+/** true si el string tiene la forma 'YYYY-MM-DD' y es una fecha que existe. */
+export function esFechaDB(valor: unknown): valor is string {
+  if (typeof valor !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false
+  const [a, m, d] = valor.split('-').map(Number)
+  if (m < 1 || m > 12 || d < 1) return false
+  return d <= diasDelMes(a, m)
+}
+
+/** Dias que tiene el mes `m` (1-12) del anio `a`. Cuenta los bisiestos. */
+const diasDelMes = (a: number, m: number): number => new Date(Date.UTC(a, m, 0)).getUTCDate()
+
+const dosDigitos = (n: number) => String(n).padStart(2, '0')
+
+/**
+ * Suma meses a una fecha 'YYYY-MM-DD'. Si el mes destino es mas corto, el dia
+ * se RECORTA al ultimo que existe.
+ *
+ * El recorte no es un detalle: sin el, "un anio antes del 29 de febrero" o "un
+ * mes despues del 31 de enero" se desbordarian al mes siguiente, y la
+ * comparacion contra el anio anterior quedaria corrida un dia justo en los
+ * bordes. Postgres (`date + interval '1 year'`) recorta igual.
+ */
+export function sumarMeses(fecha: string, meses: number): string {
+  const [a, m, d] = fecha.split('-').map(Number)
+  const total = a * 12 + (m - 1) + meses
+  // Con `total` negativo, `%` en JS da negativo; se despeja desde el floor.
+  const anio = Math.floor(total / 12)
+  const mes = total - anio * 12 + 1
+  return `${anio}-${dosDigitos(mes)}-${dosDigitos(Math.min(d, diasDelMes(anio, mes)))}`
+}
+
+/** El dia 1 del mes de una fecha 'YYYY-MM-DD'. */
+export const inicioMes = (fecha: string): string => `${fecha.slice(0, 7)}-01`
+
+/** El ultimo dia del mes de una fecha 'YYYY-MM-DD'. */
+export function finMes(fecha: string): string {
+  const [a, m] = fecha.split('-').map(Number)
+  return `${fecha.slice(0, 7)}-${dosDigitos(diasDelMes(a, m))}`
+}
+
+/**
+ * El LUNES de la semana de una fecha 'YYYY-MM-DD'.
+ *
+ * Lunes y no domingo porque la semana del negocio empieza el lunes; con
+ * domingo, un corte semanal parte el fin de semana en dos.
+ *
+ * El dia de la semana se saca a mediodia UTC por lo mismo que `sumarDias`:
+ * desde medianoche, cualquier corrimiento de zona cambia el dia.
+ */
+export function inicioSemana(fecha: string): string {
+  const [a, m, d] = fecha.split('-').map(Number)
+  const dow = new Date(Date.UTC(a, m - 1, d, 12)).getUTCDay() // 0 = domingo
+  return sumarDias(fecha, -((dow + 6) % 7))
+}
+
+/** Etiqueta de eje para un dia: "5 nov". */
+export function etiquetaDiaCorto(fecha: string): string {
+  const [a, m, d] = fecha.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(a, m - 1, d, 12)).toLocaleDateString('es-MX', {
+    day: 'numeric', month: 'short', timeZone: 'UTC',
+  })
+}
+
+/** Etiqueta de eje para un mes: "nov 26". */
+export function etiquetaMesCorto(fecha: string): string {
+  const [a, m] = fecha.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(a, m - 1, 1, 12)).toLocaleDateString('es-MX', {
+    month: 'short', year: '2-digit', timeZone: 'UTC',
+  })
+}
+
+/** Etiqueta de tooltip para un mes: "noviembre 2026". */
+export function etiquetaMesLargo(fecha: string): string {
+  const [a, m] = fecha.slice(0, 10).split('-').map(Number)
+  return new Date(Date.UTC(a, m - 1, 1, 12)).toLocaleDateString('es-MX', {
+    month: 'long', year: 'numeric', timeZone: 'UTC',
+  })
+}

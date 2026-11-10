@@ -17,7 +17,11 @@
  * no cuadra con Cobrado ni con Por cobrar.
  */
 
-import { diasEntre, fechaMx, periodoDeFechaDB, periodoMx, sumarDias } from './fechas.ts'
+import {
+  diasEntre, esFechaDB, etiquetaDiaCorto, etiquetaFecha, etiquetaMesCorto, etiquetaMesLargo,
+  fechaMx, finMes, inicioMes, inicioSemana, periodoDeFechaDB, periodoMx, sumarDias, sumarMeses,
+} from './fechas.ts'
+import { litrosDeItem, type ItemVendido } from './unidades.ts'
 
 /**
  * Ventana de inactividad de un cliente.
@@ -225,42 +229,6 @@ export function vencidoDe(filas: FilaSaldo[]): number {
   return filas
     .filter(f => (f.dias_vencido || 0) > 0)
     .reduce((s, f) => s + saldoPositivo(f), 0)
-}
-
-// ── Facturado vs cobrado por mes ────────────────────────────
-
-export type MesFacturado = {
-  mes: string
-  /** Neto facturado: pagado + saldo. */
-  facturado: number
-  cobrado: number
-  /** Lo que falta por cobrar de los pedidos de ese mes. */
-  pendiente: number
-  /** Fraccion cobrada, o null si ese mes no facturo nada. */
-  pct: number | null
-}
-
-/**
- * Serie mensual de facturado y cobrado, con los meses vacios en cero.
- *
- * `pendiente` es la resta y no `porCobrarDe` para que las dos barras apiladas
- * sumen exactamente `facturado` y la grafica no mienta por un centavo de
- * redondeo. Puede dar 0 pero nunca negativo: un sobrepago no resta.
- */
-export function serieFacturadoVsCobrado(filas: FilaSaldo[], n = 12, ahora = new Date()): MesFacturado[] {
-  const mapa = porMes(filas)
-  return ultimosMeses(n, ahora).map(m => {
-    const delMes = mapa.get(m.clave) || []
-    const facturado = netoTotal(delMes)
-    const cobrado = cobradoDe(delMes)
-    return {
-      mes: m.etiqueta,
-      facturado,
-      cobrado,
-      pendiente: Math.max(0, facturado - cobrado),
-      pct: facturado > 0 ? (cobrado / facturado) * 100 : null,
-    }
-  })
 }
 
 // ── Antiguedad de cartera ───────────────────────────────────
@@ -474,3 +442,489 @@ export function topClientes(filas: FilaSaldo[], clientes: DatosCliente[], limite
     .sort((a, b) => b.facturado - a.facturado)
     .slice(0, limite)
 }
+
+// ── Periodos ────────────────────────────────────────────────
+//
+// Todo lo de aqui abajo trabaja con fechas 'YYYY-MM-DD' y las compara como
+// STRING. No es pereza: `fecha_pedido` y `pagos.fecha_pago` son columnas
+// `date` en produccion (ver docs/SCHEMA_NOTES.md), no tienen hora ni zona, y
+// pasarlas por `Date` las movia un dia en CDMX. Como 'YYYY-MM-DD' ordena
+// lexicograficamente igual que cronologicamente, `>=` y `<=` sobre el string
+// son exactos.
+//
+// El unico `Date` que entra es el `ahora` que viene del servidor, y lo
+// primero que se le hace es `fechaMx()`.
+
+/** Un rango de fechas, inclusivo en los dos extremos. */
+export type Rango = { desde: string; hasta: string }
+
+export type ClavePeriodo =
+  | 'mes' | 'mes_anterior' | 'trimestre' | 'ytd' | '12m' | '24m' | 'personalizado'
+
+export const PERIODOS: { clave: ClavePeriodo; label: string }[] = [
+  { clave: 'mes', label: 'Este mes' },
+  { clave: 'mes_anterior', label: 'Mes anterior' },
+  { clave: 'trimestre', label: 'Trimestre' },
+  { clave: 'ytd', label: 'Año a la fecha' },
+  { clave: '12m', label: '12 meses' },
+  { clave: '24m', label: '24 meses' },
+  { clave: 'personalizado', label: 'Personalizado' },
+]
+
+export const PERIODO_DEFAULT: ClavePeriodo = '12m'
+
+export const etiquetaPeriodo = (c: ClavePeriodo): string =>
+  PERIODOS.find(p => p.clave === c)?.label || ''
+
+export const esClavePeriodo = (v: unknown): v is ClavePeriodo =>
+  typeof v === 'string' && PERIODOS.some(p => p.clave === v)
+
+/**
+ * Tope de un rango personalizado, en dias (~5 anios).
+ *
+ * No es una regla de negocio, es una defensa: el rango llega por la URL y
+ * `?desde=0001-01-01` generaria miles de buckets. Se RECORTA en vez de
+ * rechazarse para que la pantalla siga contestando algo, y los inputs del
+ * selector muestran las fechas recortadas, asi que el ajuste se ve.
+ */
+export const RANGO_MAX_DIAS = 1830
+
+/**
+ * El rango de un periodo con nombre, en la zona del negocio.
+ *
+ * Los periodos "a la fecha" (este mes, trimestre, YTD, 12m, 24m) terminan HOY
+ * y no al final del mes: es lo que uno espera de un tablero, y un rango que se
+ * extiende al futuro mete buckets vacios a la derecha de la grafica.
+ *
+ * 'mes_anterior' si es el mes completo, porque ya cerro.
+ */
+export function rangoDePeriodo(clave: ClavePeriodo, ahora: Date = new Date()): Rango {
+  const hoy = fechaMx(ahora)
+  switch (clave) {
+    case 'mes':
+      return { desde: inicioMes(hoy), hasta: hoy }
+    case 'mes_anterior': {
+      const primero = sumarMeses(inicioMes(hoy), -1)
+      return { desde: primero, hasta: finMes(primero) }
+    }
+    case 'trimestre': {
+      // Trimestre CALENDARIO en curso: ene-mar, abr-jun, jul-sep, oct-dic.
+      const mes = Number(hoy.slice(5, 7))
+      const primero = mes - ((mes - 1) % 3)
+      return { desde: `${hoy.slice(0, 4)}-${String(primero).padStart(2, '0')}-01`, hasta: hoy }
+    }
+    case 'ytd':
+      return { desde: `${hoy.slice(0, 4)}-01-01`, hasta: hoy }
+    case '12m':
+      return { desde: sumarMeses(inicioMes(hoy), -11), hasta: hoy }
+    case '24m':
+      return { desde: sumarMeses(inicioMes(hoy), -23), hasta: hoy }
+    case 'personalizado':
+      // Sin fechas explicitas no hay rango propio; `resolverPeriodo` es quien
+      // decide cuando esta clave aplica. Esto es solo el fallback.
+      return rangoDePeriodo(PERIODO_DEFAULT, ahora)
+  }
+}
+
+/** Dias que abarca un rango, contando los dos extremos. */
+export const diasDeRango = (r: Rango): number => diasEntre(r.desde, r.hasta) + 1
+
+/**
+ * Normaliza un rango pedido a mano: ordena los extremos si vienen al reves y
+ * recorta `desde` si el rango pasa de RANGO_MAX_DIAS.
+ */
+export function normalizarRango(desde: string, hasta: string): Rango {
+  const [a, b] = desde <= hasta ? [desde, hasta] : [hasta, desde]
+  if (diasEntre(a, b) + 1 <= RANGO_MAX_DIAS) return { desde: a, hasta: b }
+  return { desde: sumarDias(b, -(RANGO_MAX_DIAS - 1)), hasta: b }
+}
+
+/**
+ * El periodo que pide la URL.
+ *
+ * Un `desde`/`hasta` valido manda sobre `periodo`: si los dos vienen, el
+ * rango es explicito y la clave es 'personalizado'. Cualquier basura cae en el
+ * default en vez de reventar — es una URL, la escribe quien sea.
+ */
+export function resolverPeriodo(
+  params: { periodo?: string | string[]; desde?: string | string[]; hasta?: string | string[] },
+  ahora: Date = new Date()
+): { clave: ClavePeriodo; rango: Rango } {
+  const uno = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v)
+  const desde = uno(params.desde)
+  const hasta = uno(params.hasta)
+
+  if (esFechaDB(desde) && esFechaDB(hasta)) {
+    return { clave: 'personalizado', rango: normalizarRango(desde, hasta) }
+  }
+
+  const pedido = uno(params.periodo)
+  const clave = esClavePeriodo(pedido) && pedido !== 'personalizado' ? pedido : PERIODO_DEFAULT
+  return { clave, rango: rangoDePeriodo(clave, ahora) }
+}
+
+/**
+ * El periodo anterior de la MISMA DURACION, pegado al que se mira.
+ *
+ * Se corre por dias y no por meses a proposito: "la misma duracion" es lo que
+ * hace comparable la variacion de cualquier rango, incluido uno personalizado
+ * de 10 dias. El efecto lateral conocido: para 'mes_anterior' (octubre, 31
+ * dias) la base no es septiembre completo sino los 31 dias previos al 1 de
+ * octubre, o sea del 31 de agosto al 30 de septiembre. Comparar 31 dias contra
+ * 30 seria peor.
+ */
+export function rangoAnterior(r: Rango): Rango {
+  const n = diasDeRango(r)
+  return { desde: sumarDias(r.desde, -n), hasta: sumarDias(r.desde, -1) }
+}
+
+/**
+ * El mismo periodo un anio antes, por fecha de calendario.
+ *
+ * Por calendario y no "menos 365 dias": lo que se compara contra noviembre es
+ * noviembre, no una ventana corrida que empieza a media semana. El 29 de
+ * febrero lo recorta `sumarMeses`.
+ */
+export function rangoAnoAnterior(r: Rango): Rango {
+  return { desde: sumarMeses(r.desde, -12), hasta: sumarMeses(r.hasta, -12) }
+}
+
+// ── Granularidad y buckets ──────────────────────────────────
+
+export type Granularidad = 'dia' | 'semana' | 'mes'
+
+export const GRANULARIDADES: { clave: Granularidad; label: string }[] = [
+  { clave: 'dia', label: 'Día' },
+  { clave: 'semana', label: 'Semana' },
+  { clave: 'mes', label: 'Mes' },
+]
+
+/** Cuantas barras caben antes de que la grafica deje de leerse. */
+export const MAX_BUCKETS = 120
+
+/**
+ * La granularidad que le toca a un rango por su largo.
+ *
+ * Los cortes son 31 y 120 dias: hasta un mes se lee dia por dia, hasta cuatro
+ * meses por semana (17 barras), y de ahi en adelante por mes.
+ */
+export function granularidadAuto(r: Rango): Granularidad {
+  const dias = diasDeRango(r)
+  if (dias <= 31) return 'dia'
+  if (dias <= 120) return 'semana'
+  return 'mes'
+}
+
+/** Cuantos buckets daria un rango con esa granularidad, sin construirlos. */
+export function contarBuckets(r: Rango, gran: Granularidad): number {
+  if (gran === 'dia') return diasDeRango(r)
+  if (gran === 'semana') return Math.floor(diasEntre(inicioSemana(r.desde), r.hasta) / 7) + 1
+  const [a1, m1] = r.desde.split('-').map(Number)
+  const [a2, m2] = r.hasta.split('-').map(Number)
+  return (a2 - a1) * 12 + (m2 - m1) + 1
+}
+
+/**
+ * Las granularidades que se pueden ofrecer para un rango: las que no pasan de
+ * MAX_BUCKETS. Siempre devuelve al menos una, para que el override tenga algo
+ * que elegir aunque el rango sea enorme.
+ */
+export function granularidadesPosibles(r: Rango): Granularidad[] {
+  const cabe = GRANULARIDADES.map(g => g.clave).filter(g => contarBuckets(r, g) <= MAX_BUCKETS)
+  return cabe.length ? cabe : ['mes']
+}
+
+/** La granularidad que se usa: el override si cabe en el rango, si no la automatica. */
+export function granularidadEfectiva(r: Rango, override?: Granularidad | null): Granularidad {
+  if (override && granularidadesPosibles(r).includes(override)) return override
+  const auto = granularidadAuto(r)
+  return granularidadesPosibles(r).includes(auto) ? auto : 'mes'
+}
+
+/** Un tramo del eje X. `clave` es su `desde`, que ya es unico. */
+export type Bucket = {
+  clave: string
+  /** Corta, para el eje: "5 nov", "nov 26". */
+  etiqueta: string
+  /** Completa, para el tooltip: "5 nov 2026", "5 nov – 11 nov 2026". */
+  rotulo: string
+  desde: string
+  hasta: string
+  gran: Granularidad
+}
+
+/** Hasta donde llega el bucket que arranca en `desde`, sin recortar al rango. */
+const finDeBucket = (desde: string, gran: Granularidad): string =>
+  gran === 'dia' ? desde
+  : gran === 'semana' ? sumarDias(inicioSemana(desde), 6)
+  : finMes(desde)
+
+function armarBucket(desde: string, hasta: string, gran: Granularidad): Bucket {
+  const etiqueta = gran === 'mes' ? etiquetaMesCorto(desde) : etiquetaDiaCorto(desde)
+  const rotulo =
+    gran === 'dia' ? etiquetaFecha(desde)
+    : gran === 'semana' ? `${etiquetaDiaCorto(desde)} – ${etiquetaFecha(hasta)}`
+    : etiquetaMesLargo(desde)
+  return { clave: desde, etiqueta, rotulo, desde, hasta, gran }
+}
+
+/**
+ * Los tramos del eje X, contiguos y cubriendo el rango completo.
+ *
+ * El primero y el ultimo se RECORTAN al rango: un periodo que empieza un
+ * miercoles tiene una primera semana de cinco dias. Recortar y no desbordar es
+ * lo que hace que la suma de los buckets sea exactamente el total del periodo
+ * — si el primer bucket se extendiera hacia atras, la grafica mostraria dinero
+ * que el KPI no cuenta.
+ *
+ * Los buckets vacios NO se omiten: salen en cero, que es justo lo que hay que
+ * ver en un mes sin ventas.
+ */
+export function bucketsDe(r: Rango, gran: Granularidad): Bucket[] {
+  const salida: Bucket[] = []
+  let cursor = r.desde
+  while (cursor <= r.hasta) {
+    const fin = finDeBucket(cursor, gran)
+    const hasta = fin < r.hasta ? fin : r.hasta
+    salida.push(armarBucket(cursor, hasta, gran))
+    cursor = sumarDias(hasta, 1)
+  }
+  return salida
+}
+
+/**
+ * El mismo bucket un anio antes. Uno a uno contra el actual, para que la linea
+ * de comparacion no se desalinee cuando los dos anios no parten los meses en
+ * la misma cantidad de semanas.
+ */
+export const bucketAnoAnterior = (b: Bucket): Bucket =>
+  armarBucket(sumarMeses(b.desde, -12), sumarMeses(b.hasta, -12), b.gran)
+
+// ── Filtrado por rango ──────────────────────────────────────
+
+export const enRango = (fecha: string, r: Rango): boolean => fecha >= r.desde && fecha <= r.hasta
+
+/** Pedidos cuya FECHA DE PEDIDO cae en el rango. */
+export const filasEnRango = (filas: FilaSaldo[], r: Rango): FilaSaldo[] =>
+  filas.filter(f => enRango(f.fecha_pedido, r))
+
+/**
+ * Un pago, para medir Cobrado por FECHA DE PAGO.
+ *
+ * `pedidos_saldo.pagado` no sirve para esto: es la suma de los pagos de un
+ * pedido, sin fecha, asi que agrupando por la vista el dinero queda en el mes
+ * del PEDIDO. Un pedido de agosto cobrado en noviembre aparece como cobro de
+ * agosto. Para la pregunta "cuanto entro este mes" hace falta `pagos`.
+ */
+export type PagoFila = {
+  monto: number | null
+  /** 'YYYY-MM-DD'. Es `date` en produccion, no timestamptz. */
+  fecha_pago: string
+}
+
+export const pagosEnRango = (pagos: PagoFila[], r: Rango): PagoFila[] =>
+  pagos.filter(p => enRango(p.fecha_pago, r))
+
+/** Lo que REALMENTE entro en el rango, por fecha de pago. */
+export const cobradoEnRango = (pagos: PagoFila[], r: Rango): number =>
+  pagosEnRango(pagos, r).reduce((s, p) => s + (p.monto || 0), 0)
+
+// ── Litros vendidos ─────────────────────────────────────────
+
+/** Supabase tipa un to-one anidado como arreglo segun la version. */
+export type ProductoRef = { nombre?: string | null } | { nombre?: string | null }[] | null
+
+export type PartidaPedido = {
+  cantidad: number | null
+  unidad: string | null
+  productos?: ProductoRef
+}
+
+/** Un pedido con sus partidas. `fecha_pedido` es la que lo ubica en el periodo. */
+export type PedidoConItems = {
+  id: string
+  fecha_pedido: string
+  pedido_items?: PartidaPedido[] | null
+}
+
+const nombreProducto = (ref: ProductoRef): string => {
+  const p = Array.isArray(ref) ? ref[0] : ref
+  return p?.nombre || 'Sin producto'
+}
+
+/** Las partidas de los pedidos del rango, listas para `topProductosEnLitros`. */
+export function itemsVendidosEn(pedidos: PedidoConItems[], r: Rango): ItemVendido[] {
+  return pedidos
+    .filter(p => enRango(p.fecha_pedido, r))
+    .flatMap(p =>
+      (p.pedido_items || []).map(it => ({
+        unidad: it.unidad,
+        cantidad: it.cantidad,
+        nombre: nombreProducto(it.productos ?? null),
+      }))
+    )
+}
+
+/**
+ * Litros de un conjunto de partidas. Las de unidad desconocida se OMITEN, no
+ * se asumen: `litrosDeItem` devuelve null ahi, y rellenarlo inventaria volumen
+ * que no se vendio. Quien quiera reportar el hueco usa `topProductosEnLitros`,
+ * que si cuenta las partidas sin unidad.
+ */
+export const litrosDeItems = (items: ItemVendido[]): number =>
+  items.reduce((s, it) => s + (litrosDeItem(it.unidad, it.cantidad) || 0), 0)
+
+// ── Resumen del periodo (los KPIs) ──────────────────────────
+
+/** Lo que necesita cualquier agregacion por periodo. Nada mas. */
+export type DatosPeriodo = {
+  saldos: FilaSaldo[]
+  pagos: PagoFila[]
+  pedidos: PedidoConItems[]
+}
+
+export type ResumenPeriodo = {
+  /** Neto facturado de los pedidos del periodo (fecha de pedido). */
+  facturado: number
+  /** Lo que entro en el periodo (fecha de pago). NO es parte de `facturado`. */
+  cobrado: number
+  /**
+   * Que fraccion de lo facturado EN EL PERIODO ya se cobro.
+   *
+   * Es la cohorte del pedido, no el cociente de los dos KPIs de arriba:
+   * Cobrado va por fecha de pago y puede traer dinero de pedidos viejos, asi
+   * que cobrado/facturado podria pasar del 100% y no significaria nada.
+   * null si el periodo no facturo.
+   */
+  pctCobrado: number | null
+  pedidos: number
+  litros: number
+  /** facturado / pedidos. null si no hubo pedidos. */
+  ticket: number | null
+  /** Clientes distintos con al menos un pedido en el periodo. */
+  clientes: number
+}
+
+const clientesDistintos = (filas: FilaSaldo[]): number =>
+  new Set(filas.map(f => f.cliente_id).filter(Boolean) as string[]).size
+
+export function resumenDePeriodo(datos: DatosPeriodo, r: Rango): ResumenPeriodo {
+  const filas = filasEnRango(datos.saldos, r)
+  const facturado = netoTotal(filas)
+  return {
+    facturado,
+    cobrado: cobradoEnRango(datos.pagos, r),
+    pctCobrado: facturado > 0 ? (cobradoDe(filas) / facturado) * 100 : null,
+    pedidos: filas.length,
+    litros: litrosDeItems(itemsVendidosEn(datos.pedidos, r)),
+    ticket: filas.length > 0 ? facturado / filas.length : null,
+    clientes: clientesDistintos(filas),
+  }
+}
+
+// ── Serie por bucket (la grafica y los sparklines) ──────────
+
+export type PuntoSerie = Bucket & {
+  /** Neto facturado de los pedidos del bucket. */
+  facturado: number
+  /**
+   * De ese facturado, lo que ya entro — por cohorte del PEDIDO, no por fecha
+   * de pago. Es la mitad de abajo de la barra apilada.
+   */
+  cobradoCohorte: number
+  /** facturado - cobradoCohorte. Nunca negativo: un sobrepago no resta. */
+  pendiente: number
+  /** Cobrado por FECHA DE PAGO: el dinero que entro dentro del bucket. */
+  cobrado: number
+  litros: number
+  pedidos: number
+  clientes: number
+  /** facturado / pedidos. 0 si no hubo pedidos (para el sparkline). */
+  ticket: number
+  /** cobradoCohorte / facturado, o null si el bucket no facturo. */
+  pct: number | null
+}
+
+/**
+ * Ubica una fecha en los buckets. -1 si cae fuera.
+ *
+ * Busqueda binaria sobre `desde`, que esta ordenado por construccion: con
+ * granularidad diaria y 24 meses esto se llama una vez por fila y por bucket,
+ * y recorrer la lista completa cada vez es gratis hasta que deja de serlo.
+ */
+function indiceBucket(buckets: Bucket[], fecha: string): number {
+  let lo = 0
+  let hi = buckets.length - 1
+  let res = -1
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1
+    if (buckets[mid].desde <= fecha) {
+      res = mid
+      lo = mid + 1
+    } else {
+      hi = mid - 1
+    }
+  }
+  if (res < 0 || fecha > buckets[res].hasta) return -1
+  return res
+}
+
+/**
+ * La serie completa de un juego de buckets.
+ *
+ * Un solo recorrido por cada fuente, repartiendo a su bucket: asi la grafica
+ * no vuelve a filtrar las filas una vez por barra. Los buckets sin nada se
+ * quedan en cero.
+ */
+export function serieDePeriodo(datos: DatosPeriodo, buckets: Bucket[]): PuntoSerie[] {
+  const puntos: PuntoSerie[] = buckets.map(b => ({
+    ...b,
+    facturado: 0, cobradoCohorte: 0, pendiente: 0, cobrado: 0,
+    litros: 0, pedidos: 0, clientes: 0, ticket: 0, pct: null,
+  }))
+  const clientesPorBucket = buckets.map(() => new Set<string>())
+
+  for (const f of datos.saldos) {
+    const i = indiceBucket(buckets, f.fecha_pedido)
+    if (i < 0) continue
+    puntos[i].facturado += netoDe(f)
+    puntos[i].cobradoCohorte += f.pagado || 0
+    puntos[i].pedidos += 1
+    if (f.cliente_id) clientesPorBucket[i].add(f.cliente_id)
+  }
+
+  for (const p of datos.pagos) {
+    const i = indiceBucket(buckets, p.fecha_pago)
+    if (i < 0) continue
+    puntos[i].cobrado += p.monto || 0
+  }
+
+  for (const ped of datos.pedidos) {
+    const i = indiceBucket(buckets, ped.fecha_pedido)
+    if (i < 0) continue
+    for (const it of ped.pedido_items || []) {
+      puntos[i].litros += litrosDeItem(it.unidad, it.cantidad) || 0
+    }
+  }
+
+  return puntos.map((p, i) => ({
+    ...p,
+    clientes: clientesPorBucket[i].size,
+    pendiente: Math.max(0, p.facturado - p.cobradoCohorte),
+    ticket: p.pedidos > 0 ? p.facturado / p.pedidos : 0,
+    pct: p.facturado > 0 ? (p.cobradoCohorte / p.facturado) * 100 : null,
+  }))
+}
+
+// ── Metricas de la grafica ──────────────────────────────────
+
+export type Metrica = 'facturado' | 'cobrado' | 'litros' | 'pedidos'
+
+export const METRICAS: { clave: Metrica; label: string }[] = [
+  { clave: 'facturado', label: 'Facturado' },
+  { clave: 'cobrado', label: 'Cobrado' },
+  { clave: 'litros', label: 'Litros' },
+  { clave: 'pedidos', label: 'Pedidos' },
+]
+
+export const valorDe = (p: PuntoSerie, m: Metrica): number => p[m]

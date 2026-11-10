@@ -1,3 +1,6 @@
+import { etiquetaFecha } from '../../src/lib/fechas'
+import type { Rango } from '../../src/lib/metricas'
+
 /**
  * Tokens del Inicio. Un solo lugar para que los seis paneles se vean como
  * una sola pantalla y no como seis widgets pegados.
@@ -53,6 +56,23 @@ export function monedaCorta(n: number): string {
 
 export const pctCorto = (n: number) => `${n.toFixed(n < 10 ? 1 : 0)}%`
 
+/** Un rango en una linea: "1 dic 2025 – 5 nov 2026". */
+export const rangoLegible = (r: Rango): string =>
+  r.desde === r.hasta ? etiquetaFecha(r.desde) : `${etiquetaFecha(r.desde)} – ${etiquetaFecha(r.hasta)}`
+
+/** Conteos: miles con separador y sin decimales. */
+export const enteros = (n: number) => Math.round(n).toLocaleString('es-MX')
+
+/** Litros compactos para ejes: 340 L, 12k L. */
+export function litrosCorto(n: number): string {
+  if (Math.abs(n) >= 1_000) return `${(n / 1_000).toFixed(Math.abs(n) >= 10_000 ? 0 : 1)}k L`
+  return `${Math.round(n)} L`
+}
+
+/** Fondo de la fila "Al dia de hoy": separa lo que NO se mueve con el periodo. */
+export const FONDO_HOY = '#f9fafb'
+export const VERDE = '#059669'
+
 /**
  * El CSS responsive del Inicio.
  *
@@ -90,4 +110,107 @@ export const CSS_DASH = `
   .dash-fila-link { text-decoration: none; color: inherit; display: block; }
   .dash-fila-link:hover .dash-nombre { color: ${ACENTO}; }
   .dash-fila-link:hover { background: #fafafa; }
+
+  /* Encabezado: titulo a la izquierda, selector de periodo a la derecha. */
+  .dash-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+  }
+
+  /* La fila "Al dia de hoy". Mismo grid que los KPIs pero sin sparkline. */
+  .dash-hoy {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
+  }
+
+  /* Control segmentado: metricas de la grafica, granularidad, periodos. */
+  .dash-seg { display: inline-flex; background: ${PISTA}; border-radius: 8px; padding: 2px; gap: 2px; }
+  .dash-seg > button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: ${GRIS};
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 5px 11px;
+    border-radius: 6px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 120ms ease, background 120ms ease;
+  }
+  .dash-seg > button:hover { color: ${TINTA}; }
+  .dash-seg > button[aria-pressed="true"] {
+    background: #fff;
+    color: ${TINTA};
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(17,24,39,0.08);
+  }
+
+  /* Boton neutro de barra de herramientas (comparar, aplicar, el selector). */
+  .dash-btn {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #fff;
+    border: 1px solid ${BORDE};
+    border-radius: 8px;
+    color: ${TINTA_MEDIA};
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    padding: 6px 11px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: border-color 120ms ease, background 120ms ease;
+  }
+  .dash-btn:hover { background: #fafafa; border-color: #d1d5db; }
+  .dash-btn[aria-pressed="true"] { border-color: ${ACENTO}; color: ${ACENTO}; }
+  .dash-btn:focus-visible, .dash-seg > button:focus-visible {
+    outline: 2px solid ${ACENTO};
+    outline-offset: 1px;
+  }
+
+  /* Popover del selector de periodo. */
+  .dash-pop {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    z-index: 30;
+    min-width: 232px;
+    background: #fff;
+    border: 1px solid ${BORDE};
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(17,24,39,0.12);
+    padding: 6px;
+  }
+  .dash-pop-op {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-radius: 7px;
+    color: ${TINTA_MEDIA};
+    font: inherit;
+    font-size: 12.5px;
+    text-align: left;
+    padding: 7px 9px;
+    cursor: pointer;
+  }
+  .dash-pop-op:hover { background: ${PISTA}; color: ${TINTA}; }
+  .dash-pop-op[aria-current="true"] { color: ${TINTA}; font-weight: 600; }
+
+  @media (max-width: 760px) {
+    .dash-pop { right: auto; left: 0; }
+  }
 `
