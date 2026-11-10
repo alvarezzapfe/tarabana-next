@@ -2,6 +2,7 @@ import { createServerSupabaseClient, createServiceClient } from '../../../../../
 import { NextResponse } from 'next/server'
 import { canManageInventory } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
+import { leerPreciosDeFormulario, primerErrorDePrecios } from '../../../../../src/lib/precios'
 
 export async function POST(request: Request) {
   const supabase = await createServerSupabaseClient()
@@ -16,6 +17,16 @@ export async function POST(request: Request) {
   if (!body.nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 })
   if (!body.estilo?.trim()) return NextResponse.json({ error: 'Estilo requerido' }, { status: 400 })
 
+  // Los precios con la misma regla que la lista de precios: mayor que 0 y en
+  // pesos enteros. Antes esto era `parseFloat(...) || null`, que aceptaba
+  // centavos —y `precioUnitario` redondea la lata suelta pero no la caja, asi
+  // que las dos presentaciones cobraban distinto— y convertia un 0 en null
+  // sin decirlo.
+  const leidos = leerPreciosDeFormulario(body)
+  if (leidos.errores) {
+    return NextResponse.json({ error: primerErrorDePrecios(leidos.errores) }, { status: 400 })
+  }
+
   const service = createServiceClient()
   const { data, error } = await service.from('productos').insert({
     nombre: body.nombre.trim(),
@@ -25,16 +36,7 @@ export async function POST(request: Request) {
     descripcion: body.descripcion || null,
     descripcion_larga: body.descripcion_larga || null,
     imagen_url: body.imagen_url || null,
-    precio_lata_publico: parseFloat(body.precio_lata_publico) || null,
-    precio_lata_taproom: parseFloat(body.precio_lata_taproom) || null,
-    precio_barril_pet_publico: parseFloat(body.precio_barril_pet_publico) || null,
-    precio_barril_pet_taproom: parseFloat(body.precio_barril_pet_taproom) || null,
-    precio_barril_acero_publico: parseFloat(body.precio_barril_acero_publico) || null,
-    precio_barril_acero_taproom: parseFloat(body.precio_barril_acero_taproom) || null,
-    precio_barril10_pet_publico: parseFloat(body.precio_barril10_pet_publico) || null,
-    precio_barril10_pet_taproom: parseFloat(body.precio_barril10_pet_taproom) || null,
-    precio_barril10_acero_publico: parseFloat(body.precio_barril10_acero_publico) || null,
-    precio_barril10_acero_taproom: parseFloat(body.precio_barril10_acero_taproom) || null,
+    ...leidos.precios,
     stock_latas: parseInt(body.stock_latas) || 0,
     stock_caja12: parseInt(body.stock_caja12) || 0,
     stock_caja24: parseInt(body.stock_caja24) || 0,

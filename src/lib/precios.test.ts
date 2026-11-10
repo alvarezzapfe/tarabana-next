@@ -18,9 +18,12 @@ import {
   armarLote,
   claveCelda,
   esColumnaPrecio,
+  etiquetaColumna,
   faltantesDe,
   leerPrecio,
+  leerPreciosDeFormulario,
   mayoristaSugerido,
+  primerErrorDePrecios,
   precioGuardado,
   precioMostrado,
   redondeoLata,
@@ -320,4 +323,79 @@ test('partirClave corta por el ultimo separador', () => {
   assert.deepEqual(partirClave('a|b|precio_lata_publico'), { productoId: 'a|b', columna: 'precio_lata_publico' })
   assert.equal(partirClave('sinseparador'), null)
   assert.equal(partirClave('|empieza-con-separador'), null)
+})
+
+// ── Formularios de producto ─────────────────────────────────
+
+test('la ficha y el alta usan la misma regla de pesos enteros', () => {
+  // Si cada pantalla leyera los precios a su manera, un precio con centavos
+  // entraria por la puerta de al lado y la lista lo mostraria avisando.
+  const r = leerPreciosDeFormulario({
+    precio_lata_publico: '60',
+    precio_barril_pet_publico: '2700.50',
+  })
+  assert.ok(r.errores, 'dejo pasar los centavos')
+  assert.match(r.errores!.precio_barril_pet_publico, /pesos enteros/)
+  assert.equal(r.precios, undefined, 'con errores no debe devolver precios a medias')
+})
+
+test('una celda vacia del formulario es "sin precio", no un error', () => {
+  // Al dar de alta un producto es normal no tener todavia el precio de todas
+  // las presentaciones.
+  const r = leerPreciosDeFormulario({
+    precio_lata_publico: '60',
+    precio_lata_taproom: '',
+    precio_barril_pet_publico: null,
+    precio_barril_pet_taproom: undefined,
+  })
+  assert.equal(r.errores, undefined)
+  assert.deepEqual(r.precios, {
+    precio_lata_publico: 60,
+    precio_lata_taproom: null,
+    precio_barril_pet_publico: null,
+    precio_barril_pet_taproom: null,
+  })
+})
+
+test('una columna ausente se omite y no borra lo que ya estaba', () => {
+  // El alta manda solo las presentaciones que se eligieron; devolver null por
+  // las demas borraria precios en un UPDATE.
+  const r = leerPreciosDeFormulario({ precio_lata_publico: '60' })
+  assert.deepEqual(Object.keys(r.precios!), ['precio_lata_publico'])
+})
+
+test('el formulario tampoco acepta cero ni negativos', () => {
+  for (const malo of ['0', '-10']) {
+    const r = leerPreciosDeFormulario({ precio_lata_publico: malo })
+    assert.ok(r.errores, `${malo} paso`)
+    assert.match(r.errores!.precio_lata_publico, /mayor que 0/)
+  }
+})
+
+test('lo que no es columna de precio se ignora', () => {
+  // El body de un formulario trae stock, nombre, imagen… nada de eso puede
+  // terminar en el resultado.
+  const r = leerPreciosDeFormulario({ stock_latas: '100', nombre: 'Magma', precio_lata_publico: '60' })
+  assert.deepEqual(r.precios, { precio_lata_publico: 60 })
+})
+
+test('primerErrorDePrecios redacta el aviso con el nombre de la celda', () => {
+  assert.equal(
+    primerErrorDePrecios({ precio_barril_pet_taproom: 'solo pesos enteros, sin centavos' }),
+    'Barril PET 20 L · Mayorista: solo pesos enteros, sin centavos.'
+  )
+  const dos = primerErrorDePrecios({ precio_lata_publico: 'vacío', precio_lata_taproom: 'vacío' })
+  assert.match(dos, /Lata · Público: vacío\. \(y 1 precio más/)
+  const tres = primerErrorDePrecios({ a1: 'x', precio_lata_publico: 'y', precio_lata_taproom: 'z' })
+  assert.match(tres, /y 2 precios más/)
+  assert.equal(primerErrorDePrecios({}), '')
+})
+
+test('etiquetaColumna nombra las diez celdas y no inventa las que no conoce', () => {
+  assert.equal(etiquetaColumna('precio_lata_publico'), 'Lata · Público')
+  assert.equal(etiquetaColumna('precio_barril10_acero_taproom'), 'Barril acero 10 L · Mayorista')
+  assert.equal(etiquetaColumna('stock_latas'), 'stock_latas')
+  for (const c of COLUMNAS_PRECIO) {
+    assert.notEqual(etiquetaColumna(c), c, `${c} no tiene etiqueta`)
+  }
 })

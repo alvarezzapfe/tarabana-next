@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { leerPreciosDeFormulario, primerErrorDePrecios } from '../../../../src/lib/precios'
 
 interface Estilo { id: string; nombre: string; familia: string | null; orden: number }
 
@@ -127,8 +128,15 @@ export default function NuevoProductoPage() {
   const prev = () => { setError(''); setStep(s => Math.max(s - 1, 0)) }
 
   const handleSubmit = async () => {
-    setSaving(true)
     setError('')
+
+    // Los precios se validan ANTES de subir la imagen. La ruta los valida
+    // igual, pero un 400 despues de la subida deja una imagen huerfana que hay
+    // que ir a borrar; revisarlo aqui ahorra el viaje completo.
+    const leidos = leerPreciosDeFormulario(precios)
+    if (leidos.errores) { setError(primerErrorDePrecios(leidos.errores)); return }
+
+    setSaving(true)
 
     // 1. Upload image if present
     let imagen_url: string | null = null

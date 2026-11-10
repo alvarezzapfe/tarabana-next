@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { canManageInventory, isSuperAdmin as checkSuperAdmin } from '../../../../../src/lib/roles'
+import { leerPreciosDeFormulario, primerErrorDePrecios } from '../../../../../src/lib/precios'
 
 interface EstiloDB { id: string; nombre: string; familia: string | null; orden: number }
 
@@ -96,6 +97,22 @@ export default function EditProductoPage() {
   }
 
   const handleSave = async () => {
+    // Los precios se validan ANTES de subir la imagen: un precio con centavos
+    // no tiene por que costar una subida al storage que luego habria que
+    // limpiar. Misma regla que la lista de precios y que el alta — mayor que 0
+    // y en pesos enteros— porque `precioUnitario` redondea la lata suelta pero
+    // no la caja, y con centavos las dos presentaciones cobran distinto.
+    //
+    // Solo aplica si quien edita puede tocar precios; si no, esos campos no
+    // entran al update de todos modos.
+    const esSuperAdmin = checkSuperAdmin(userRole)
+    let preciosValidados: Record<string, number | null> = {}
+    if (esSuperAdmin) {
+      const leidos = leerPreciosDeFormulario(form)
+      if (leidos.errores) { alert(primerErrorDePrecios(leidos.errores)); return }
+      preciosValidados = leidos.precios
+    }
+
     setSaving(true)
     let imagen_url = form.imagen_url
 
@@ -108,7 +125,6 @@ export default function EditProductoPage() {
       imagen_url = publicUrl
     }
 
-    const isSuperAdmin = checkSuperAdmin(userRole)
 
     const updateData: any = {
       stock_caja12: parseInt(form.stock_caja12) || 0,
@@ -120,23 +136,15 @@ export default function EditProductoPage() {
       stock_latas: parseInt(form.stock_latas) || 0,
     }
 
-    if (isSuperAdmin) {
+    if (esSuperAdmin) {
       Object.assign(updateData, {
         nombre: form.nombre, estilo: form.estilo,
         abv: form.abv ? parseFloat(form.abv) : null,
         ibu: form.ibu ? parseInt(form.ibu) : null,
         descripcion: form.descripcion, descripcion_larga: form.descripcion_larga,
         imagen_url,
-        precio_lata_publico: parseFloat(form.precio_lata_publico) || null,
-        precio_lata_taproom: parseFloat(form.precio_lata_taproom) || null,
-        precio_barril_pet_publico: parseFloat(form.precio_barril_pet_publico) || null,
-        precio_barril_pet_taproom: parseFloat(form.precio_barril_pet_taproom) || null,
-        precio_barril_acero_publico: parseFloat(form.precio_barril_acero_publico) || null,
-        precio_barril_acero_taproom: parseFloat(form.precio_barril_acero_taproom) || null,
-        precio_barril10_pet_publico: parseFloat(form.precio_barril10_pet_publico) || null,
-        precio_barril10_pet_taproom: parseFloat(form.precio_barril10_pet_taproom) || null,
-        precio_barril10_acero_publico: parseFloat(form.precio_barril10_acero_publico) || null,
-        precio_barril10_acero_taproom: parseFloat(form.precio_barril10_acero_taproom) || null,
+        // Validados una sola vez, arriba: enteros o null, nunca centavos.
+        ...preciosValidados,
         activo: form.activo,
       })
     }
