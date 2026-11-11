@@ -1,7 +1,7 @@
 'use client'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
-  type Partida, litrosDePartida, litrosTotalesDe, moneda, tabular,
+  type Partida, estadoIva, gravableDe, importeDe, litrosDePartida, litrosTotalesDe, moneda, tabular,
 } from './pos-ui'
 import { formatLitros } from '../../../../src/lib/unidades'
 import { desglosar, etiquetaTasa } from '../../../../src/lib/iva'
@@ -16,8 +16,10 @@ import { desglosar, etiquetaTasa } from '../../../../src/lib/iva'
  * despues cobra la vista `pedidos_saldo`. Si las dos no coincidieran al
  * centavo, el pedido nunca llegaria a 'pagado'.
  *
- * Los precios de lista son SIN IVA. El switch decide si se cobra, y arranca
- * prendido para los clientes con `requiere_factura`.
+ * Los precios de lista son SIN IVA. El IVA se decide POR PARTIDA: cada
+ * renglon tiene su casilla, el switch de arriba las prende todas de un golpe
+ * —y se pinta indeterminado cuando hay mezcla— y el flete decide aparte.
+ * Todos arrancan segun el `requiere_factura` del cliente.
  */
 
 export type Descuento = {
@@ -39,14 +41,19 @@ type Props = {
   costoEnvio: string
   onCostoEnvio: (v: string) => void
 
-  incluyeIva: boolean
-  onIncluyeIva: (v: boolean) => void
+  /** Marca o desmarca una partida. */
+  onIvaPartida: (partida: Partida, valor: boolean) => void
+  /** Todas de un golpe, desde el switch de arriba. */
+  onIvaTodas: (valor: boolean) => void
+  envioConIva: boolean
+  onEnvioConIva: (valor: boolean) => void
   /** Tasa vigente, la que se guardara en el pedido. */
   ivaTasa: number
   /**
-   * Quien puede mover el switch. El vendedor no: prenderlo o apagarlo cambia
+   * Quien puede mover los switches. El vendedor no: gravar o desgravar cambia
    * en 16% lo que paga el cliente, igual que un descuento, y por eso sigue el
-   * mismo criterio. Apagado sigue viendo el renglon, para saber que se cobra.
+   * mismo criterio. Apagado sigue viendo los renglones, para saber que se
+   * cobra.
    */
   puedeIva: boolean
 
@@ -67,7 +74,7 @@ export default function Carrito(props: Props) {
   const {
     partidas, stockPorClave, onCantidad, onQuitar,
     puedeDescuento, descuento, onDescuento, costoEnvio, onCostoEnvio,
-    incluyeIva, onIncluyeIva, ivaTasa, puedeIva,
+    onIvaPartida, onIvaTodas, envioConIva, onEnvioConIva, ivaTasa, puedeIva,
     bloqueos, enviando, onConfirmar, error,
     etiquetaConfirmar = 'Confirmar pedido', etiquetaEnviando = 'Creando…',
   } = props
@@ -80,13 +87,15 @@ export default function Carrito(props: Props) {
     : descuento.tipo === 'monto' ? descVal : 0
   // El descuento se tope al subtotal, como antes: un descuento mayor que la
   // mercancia no puede volver negativa la base ni regalar envio.
-  const { iva, total } = desglosar({
+  const { baseGravable, iva, total } = desglosar({
     subtotal,
+    gravable: gravableDe(partidas),
     descuento: Math.min(descuentoMonto, subtotal),
     envio,
-    incluyeIva,
+    envioConIva,
     tasa: ivaTasa,
   })
+  const estado = estadoIva(partidas)
   const litros = litrosTotalesDe(partidas)
 
   const input: React.CSSProperties = {
@@ -129,6 +138,19 @@ export default function Carrito(props: Props) {
                     padding: '8px 0', borderTop: `1px solid ${PISTA}`,
                   }}
                 >
+                  {/* La casilla va PRIMERO y pegada al nombre: la pregunta
+                      "esta partida lleva IVA" se contesta leyendo el renglon,
+                      no buscando una columna al otro lado. */}
+                  <input
+                    type="checkbox"
+                    checked={!!p.incluyeIva}
+                    disabled={!puedeIva}
+                    onChange={e => onIvaPartida(p, e.target.checked)}
+                    title={puedeIva ? 'Cobrar IVA en esta partida' : 'Solo admin cambia el IVA'}
+                    aria-label={`IVA en ${p.nombre}`}
+                    style={{ width: 14, height: 14, accentColor: ACENTO, margin: 0, flexShrink: 0, cursor: puedeIva ? 'pointer' : 'default' }}
+                  />
+
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span
                       title={p.nombre}
@@ -238,26 +260,46 @@ export default function Carrito(props: Props) {
 
       {/* ── IVA ───────────────────────────────────────────── */}
       {partidas.length > 0 && (
-        <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12 }}>
-          <label
-            style={{
-              display: 'flex', alignItems: 'center', gap: 9,
-              cursor: puedeIva ? 'pointer' : 'default',
-            }}
-          >
+        <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: puedeIva ? 'pointer' : 'default' }}>
+            {/* `indeterminate` no es un atributo de React: se pone sobre el
+                nodo. Sin esto, una mezcla se pintaria como "ninguna" y el
+                primer clic prenderia lo que ya estaba prendido. */}
             <input
               type="checkbox"
-              checked={incluyeIva}
+              checked={estado === 'todas'}
+              ref={el => { if (el) el.indeterminate = estado === 'mezcla' }}
               disabled={!puedeIva}
-              onChange={e => onIncluyeIva(e.target.checked)}
+              onChange={e => onIvaTodas(e.target.checked)}
               style={{ width: 15, height: 15, accentColor: ACENTO, cursor: puedeIva ? 'pointer' : 'default', margin: 0 }}
             />
             <span style={{ color: puedeIva ? TINTA : GRIS, fontSize: 12.5, fontWeight: 600 }}>
-              Incluir IVA ({etiquetaTasa(ivaTasa)})
+              IVA en todo ({etiquetaTasa(ivaTasa)})
             </span>
+            {estado === 'mezcla' && (
+              <span style={{ marginLeft: 'auto', color: GRIS_SUAVE, fontSize: 10.5 }}>
+                {partidas.filter(p => p.incluyeIva).length} de {partidas.length}
+              </span>
+            )}
           </label>
-          <p style={{ margin: '5px 0 0 24px', color: GRIS_SUAVE, fontSize: 11 }}>
-            Los precios de lista son sin IVA.
+
+          {envio > 0 && (
+            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: puedeIva ? 'pointer' : 'default' }}>
+              <input
+                type="checkbox"
+                checked={envioConIva}
+                disabled={!puedeIva}
+                onChange={e => onEnvioConIva(e.target.checked)}
+                style={{ width: 15, height: 15, accentColor: ACENTO, cursor: puedeIva ? 'pointer' : 'default', margin: 0 }}
+              />
+              <span style={{ color: puedeIva ? TINTA_MEDIA : GRIS, fontSize: 12.5 }}>
+                IVA en el envío
+              </span>
+            </label>
+          )}
+
+          <p style={{ margin: 0, color: GRIS_SUAVE, fontSize: 11 }}>
+            Los precios de lista son sin IVA. Cada partida decide por su cuenta.
           </p>
         </div>
       )}
@@ -273,7 +315,14 @@ export default function Carrito(props: Props) {
           />
         )}
         {envio > 0 && <Renglon label="Envío" valor={moneda(envio)} />}
-        {incluyeIva && <Renglon label={`IVA (${etiquetaTasa(ivaTasa)})`} valor={moneda(iva)} />}
+        {/* La base gravable solo aparece cuando hay IVA: en un pedido
+            exento seria un renglon en cero invitando a preguntar por que. */}
+        {baseGravable > 0 && (
+          <>
+            <Renglon label="Base gravable" valor={moneda(baseGravable)} />
+            <Renglon label={`IVA (${etiquetaTasa(ivaTasa)})`} valor={moneda(iva)} />
+          </>
+        )}
         <Renglon label="Litros" valor={formatLitros(litros)} />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, paddingTop: 8, marginTop: 3, borderTop: `1px solid ${PISTA}` }}>
           <span style={{ color: TINTA, fontSize: 13, fontWeight: 600 }}>Total</span>

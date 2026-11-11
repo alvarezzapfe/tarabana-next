@@ -4,6 +4,7 @@ import { createClient } from '../../../src/lib/supabase'
 import { precioSufijo } from '../../../src/lib/clientes'
 import { comprometidoDeJSON } from '../../../src/lib/stock-disponible'
 import { claveLinea } from '../../../src/lib/editar-partidas'
+import { IVA_TASA_DEFAULT } from '../../../src/lib/iva'
 import MixBuilder, { type MixProduct, type MixResult } from '../../../src/components/MixBuilder'
 import MatrizProductos from './nuevo/MatrizProductos'
 import Carrito from './nuevo/Carrito'
@@ -62,6 +63,7 @@ type PartidaGuardada = {
   cantidad: number
   precio_unitario: number
   metadata: { estilos?: { producto_id: string; nombre?: string | null; latas?: number | null }[] | null } | null
+  incluye_iva: boolean | null
 }
 
 export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) {
@@ -75,8 +77,16 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
 
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   const [mixes, setMixes] = useState<Partida[]>([])
+  /**
+   * Si cada partida causa IVA, por clave de celda. Se precarga con lo que el
+   * pedido ya tiene; una partida NUEVA nace exenta, porque gravarla es una
+   * decision y heredarla de la de al lado seria adivinar.
+   */
+  const [ivaPorClave, setIvaPorClave] = useState<Record<string, boolean>>({})
   const [drawerMix, setDrawerMix] = useState(false)
 
+  /** Solo para rotular el renglon; la que se guarda la decide el servidor. */
+  const [ivaTasa, setIvaTasa] = useState(IVA_TASA_DEFAULT)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
   const [sobrepago, setSobrepago] = useState<{ aCobrar: number; pagado: number; sobra: number } | null>(null)
@@ -87,7 +97,7 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
       const [{ data: prods }, { data: partidas }, apartado, { data: cliente }] = await Promise.all([
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
         supabase.from('pedido_items')
-          .select('id, producto_id, unidad, cantidad, precio_unitario, metadata')
+          .select('id, producto_id, unidad, cantidad, precio_unitario, metadata, incluye_iva')
           .eq('pedido_id', pedido.id),
         fetch(`/api/admin/pedidos/comprometido?excepto=${encodeURIComponent(pedido.id)}`)
           .then(r => (r.ok ? r.json() : null)).catch(() => null),
@@ -104,9 +114,15 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
       const guardadas = (partidas || []) as PartidaGuardada[]
       setOriginales(guardadas)
 
+      // La tasa del PEDIDO y no la vigente: un pedido viejo se rotula con la
+      // que se le facturo.
+      const { data: cab } = await supabase.from('pedidos').select('iva_tasa').eq('id', pedido.id).maybeSingle()
+      if (cab?.iva_tasa) setIvaTasa(Number(cab.iva_tasa))
+
       // Precarga: las presentaciones normales van a la matriz y los mixes al
       // carrito, que es donde viven en el POS.
       const celdas: Record<string, number> = {}
+      const ivaIniciales: Record<string, boolean> = {}
       const mixIniciales: Partida[] = []
       for (const p of guardadas) {
         if (p.unidad === 'mix24') {
@@ -119,13 +135,18 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
             precio: Number(p.precio_unitario) || 0,
             metadata: p.metadata,
           })
+          ivaIniciales[`${p.producto_id}-mix24`] = !!p.incluye_iva
           continue
         }
         if (!p.unidad) continue
         const clave = claveCelda(p.producto_id, p.unidad)
         celdas[clave] = (celdas[clave] || 0) + p.cantidad
+        // Dos partidas de la misma celda se consolidan en una; si una venia
+        // gravada, la consolidada lo queda. Es lo que ya pasa con la cantidad.
+        ivaIniciales[clave] = !!ivaIniciales[clave] || !!p.incluye_iva
       }
       setCantidades(celdas)
+      setIvaPorClave(ivaIniciales)
       setMixes(mixIniciales)
       setCargando(false)
     }
@@ -166,8 +187,13 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
         precio,
       })
     }
-    return [...deMatriz, ...mixes]
-  }, [cantidades, mixes, porId, sufijo, precioOriginal])
+    // La bandera de IVA se aplica aqui, en un solo lugar: lo precargado del
+    // pedido mas lo que se haya tocado. Lo que no esta, no lleva IVA.
+    return [...deMatriz, ...mixes].map(p => ({
+      ...p,
+      incluyeIva: !!ivaPorClave[p.producto_id],
+    }))
+  }, [cantidades, mixes, porId, sufijo, precioOriginal, ivaPorClave])
 
   const stockPorClave = useMemo(() => {
     const mapa: Record<string, number> = {}
@@ -250,7 +276,12 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: partidas.map(p => ({ producto_id: p.producto_id, cantidad: p.cantidad, metadata: p.metadata ?? null })),
+          items: partidas.map(p => ({
+            producto_id: p.producto_id,
+            cantidad: p.cantidad,
+            metadata: p.metadata ?? null,
+            incluye_iva: !!p.incluyeIva,
+          })),
           ...(confirmarSobrepago ? { confirmarSobrepago: true } : {}),
         }),
       })
@@ -354,15 +385,20 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
                 onDescuento={() => {}}
                 costoEnvio=""
                 onCostoEnvio={() => {}}
-                // Sin IVA, igual que sin descuento y sin envio: aqui se
-                // edita la MERCANCIA, y el total que importa mientras se
-                // captura es el de las partidas. El IVA del pedido se prende
-                // y apaga desde el panel, con su propia confirmacion de
-                // sobrepago, y el servidor lo recalcula al guardar.
-                incluyeIva={false}
-                onIncluyeIva={() => {}}
-                ivaTasa={0}
-                puedeIva={false}
+                // El IVA SI se edita aqui, partida por partida: es la unica
+                // pantalla donde se puede gravar una linea y no la de al
+                // lado. El envio no, porque no es una partida y vive en el
+                // panel; por eso va fijo en lo que el pedido ya tiene.
+                onIvaPartida={(partida, valor) =>
+                  setIvaPorClave(prev => ({ ...prev, [partida.producto_id]: valor }))
+                }
+                onIvaTodas={valor =>
+                  setIvaPorClave(Object.fromEntries(partidas.map(p => [p.producto_id, valor])))
+                }
+                envioConIva={false}
+                onEnvioConIva={() => {}}
+                ivaTasa={ivaTasa}
+                puedeIva
                 bloqueos={bloqueos}
                 enviando={guardando}
                 onConfirmar={() => guardar(false)}

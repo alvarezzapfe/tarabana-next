@@ -108,13 +108,18 @@ export default function NuevoPedidoPage() {
   const [descuento, setDescuento] = useState<Descuento>({ tipo: '', valor: '', motivo: '' })
   const [costoEnvio, setCostoEnvio] = useState('')
   /**
-   * null = "lo que diga el cliente". Asi el default por `requiere_factura`
-   * se aplica solo, tambien cuando el cliente llega por ?cliente= antes de
-   * que carguen los perfiles, sin necesidad de un efecto que reescriba el
-   * estado detras del usuario. En cuanto alguien toca el switch pasa a ser
-   * true/false explicito y ya manda sobre el default.
+   * El IVA es por PARTIDA, y lo que se guarda aqui son las EXCEPCIONES: la
+   * clave de celda que alguien toco a mano, con su valor. Lo que no esta en
+   * el mapa toma el default del cliente (`requiere_factura`).
+   *
+   * Guardar excepciones en vez de valores absolutos resuelve solo dos cosas:
+   * el default se aplica aunque el cliente llegue por ?cliente= antes de que
+   * carguen los perfiles, y una partida nueva nace con el default del pedido
+   * sin que nadie tenga que acordarse de inicializarla.
    */
-  const [ivaManual, setIvaManual] = useState<boolean | null>(null)
+  const [ivaPorClave, setIvaPorClave] = useState<Record<string, boolean>>({})
+  /** null = el default del cliente, igual que arriba. */
+  const [envioIvaManual, setEnvioIvaManual] = useState<boolean | null>(null)
   const [ivaTasa, setIvaTasa] = useState(IVA_TASA_DEFAULT)
 
   const [drawerMix, setDrawerMix] = useState(false)
@@ -188,7 +193,9 @@ export default function NuevoPedidoPage() {
   // ── Derivados ─────────────────────────────────────────────
   const cliente = clientes.find(c => c.id === clienteId) || null
   const sufijo = precioSufijo(cliente?.nivel_precio)
-  const incluyeIva = ivaManual ?? !!cliente?.requiere_factura
+  /** El default de TODO el IVA de este pedido: lo que factura el cliente. */
+  const ivaDefault = !!cliente?.requiere_factura
+  const envioConIva = envioIvaManual ?? ivaDefault
   const presentaciones = useMemo(() => presentacionesVisibles(productos), [productos])
   const porId = useMemo(() => new Map(productos.map(p => [p.id, p])), [productos])
 
@@ -231,8 +238,13 @@ export default function NuevoPedidoPage() {
         return p ? precioDe(p, 'lata', sufijo) > 0 : false
       })
     })
-    return [...deMatriz, ...mixesValidos]
-  }, [cantidades, mixes, porId, sufijo, presentacionDe])
+    // La bandera de IVA se aplica aqui y en ningun otro lado: lo que alguien
+    // toco manda, y lo demas toma el default del cliente.
+    return [...deMatriz, ...mixesValidos].map(p => ({
+      ...p,
+      incluyeIva: ivaPorClave[p.producto_id] ?? ivaDefault,
+    }))
+  }, [cantidades, mixes, porId, sufijo, presentacionDe, ivaPorClave, ivaDefault])
 
   const stockPorClave = useMemo(() => {
     const mapa: Record<string, number> = {}
@@ -306,6 +318,26 @@ export default function NuevoPedidoPage() {
   }, [])
 
   const quitarPartida = useCallback((partida: Partida) => cambiarPartida(partida, 0), [cambiarPartida])
+
+  const ivaDePartida = useCallback((partida: Partida, valor: boolean) => {
+    setIvaPorClave(prev => ({ ...prev, [partida.producto_id]: valor }))
+  }, [])
+
+  /**
+   * El switch general escribe una excepcion por cada partida EN EL CARRITO,
+   * no un valor global: si despues se agrega otra partida, nace con el
+   * default del cliente y el switch general queda en "mezcla", que es la
+   * verdad. Un valor global haria que la partida nueva heredara una decision
+   * que nadie tomo para ella.
+   */
+  const ivaDeTodas = useCallback((valor: boolean) => {
+    setIvaPorClave(prev => {
+      const siguiente = { ...prev }
+      for (const p of partidas) siguiente[p.producto_id] = valor
+      return siguiente
+    })
+    setEnvioIvaManual(valor)
+  }, [partidas])
 
   /** Precarga el carrito con el pedido anterior del cliente. */
   const repetirUltimo = async () => {
@@ -473,7 +505,15 @@ export default function NuevoPedidoPage() {
         fecha_entrega: fechaEntrega || null,
         orden_compra: ordenCompra.trim() || null,
         folio_factura: folioFactura.trim() || null,
-        items: partidas,
+        // Se mapea en vez de mandar las partidas tal cual: el nombre y el
+        // precio de la UI no viajan —el precio lo resuelve el servidor— y la
+        // bandera va con el nombre de la columna.
+        items: partidas.map(p => ({
+          producto_id: p.producto_id,
+          cantidad: p.cantidad,
+          metadata: p.metadata,
+          incluye_iva: p.incluyeIva,
+        })),
         notas,
         vendedor_id: esVendedor ? null : (vendedorId || null),
         costo_envio: puedeDescuento ? envio : null,
@@ -483,7 +523,7 @@ export default function NuevoPedidoPage() {
         // La TASA no viaja: la lee el servidor de app_config. Que el
         // navegador pudiera proponer la tasa de IVA seria dejarle fijar el
         // precio final.
-        incluye_iva: incluyeIva,
+        envio_incluye_iva: envioConIva,
       }),
     })
 
@@ -510,8 +550,10 @@ export default function NuevoPedidoPage() {
       onDescuento={setDescuento}
       costoEnvio={costoEnvio}
       onCostoEnvio={setCostoEnvio}
-      incluyeIva={incluyeIva}
-      onIncluyeIva={setIvaManual}
+      onIvaPartida={ivaDePartida}
+      onIvaTodas={ivaDeTodas}
+      envioConIva={envioConIva}
+      onEnvioConIva={setEnvioIvaManual}
       ivaTasa={ivaTasa}
       puedeIva={puedeDescuento}
       bloqueos={bloqueos}
@@ -554,9 +596,10 @@ export default function NuevoPedidoPage() {
               valor={clienteId}
               onElegir={id => {
                 setClienteId(id)
-                // Cada cliente trae su propio default; lo que se eligio para
-                // el anterior no tiene por que seguir puesto.
-                setIvaManual(null)
+                // Cada cliente trae su propio default; las excepciones que se
+                // marcaron para el anterior no tienen por que seguir puestas.
+                setIvaPorClave({})
+                setEnvioIvaManual(null)
               }}
             />
             {cliente && (

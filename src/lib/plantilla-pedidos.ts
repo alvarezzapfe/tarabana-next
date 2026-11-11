@@ -49,7 +49,11 @@ const ENCABEZADOS_ADMIN: Encabezado[] = [
   { clave: 'folio_factura', titulo: 'folio_factura', ancho: 16 },
   {
     clave: 'incluye_iva', titulo: 'incluye_iva', ancho: 13,
-    nota: 'Si / No. Vacio = como factura ese cliente.',
+    nota: 'Si / No, para TODO el pedido y su envio. Vacio = como factura ese cliente.',
+  },
+  {
+    clave: 'iva', titulo: 'iva', ancho: 9,
+    nota: 'Si / No para ESTE renglon. Manda sobre incluye_iva.',
   },
 ]
 
@@ -200,9 +204,11 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
       // Vacio es una respuesta valida —"como factura ese cliente"— asi que
       // allowBlank y nada de default escrito en la celda: llenarla con "No"
       // convertiria el silencio en una instruccion.
-      captura.getCell(r, col('incluye_iva')).dataValidation = {
-        type: 'list', allowBlank: true, formulae: [rango('F', 2)],
-        showErrorMessage: true, errorTitle: 'Valor invalido', error: 'Usa "Si" o "No", o dejala vacia.',
+      for (const clave of ['incluye_iva', 'iva']) {
+        captura.getCell(r, col(clave)).dataValidation = {
+          type: 'list', allowBlank: true, formulae: [rango('F', 2)],
+          showErrorMessage: true, errorTitle: 'Valor invalido', error: 'Usa "Si" o "No", o dejala vacia.',
+        }
       }
     }
   }
@@ -250,7 +256,11 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
     linea('folio_factura', 'Opcional. El folio de la factura emitida.')
     linea(
       'incluye_iva',
-      'Si o No. Vacio = como factura ese cliente. Los precios de lista son SIN IVA.'
+      'Si o No para TODO el pedido y su envio. Vacio = como factura ese cliente.'
+    )
+    linea(
+      'iva',
+      'Si o No para ESE renglon, y manda sobre incluye_iva. Asi se factura un pedido con unas partidas gravadas y otras no. Los precios de lista son SIN IVA.'
     )
   }
   inst.addRow([])

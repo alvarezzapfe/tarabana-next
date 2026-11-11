@@ -26,7 +26,7 @@
  */
 import { precioUnitario } from './calcular-pedido.ts'
 import { columnaStockDe } from './unidades.ts'
-import { IVA_TASA_DEFAULT, ivaDe } from './iva.ts'
+import { IVA_TASA_DEFAULT, baseGravableDe, ivaDe } from './iva.ts'
 
 /** Tope de pedidos por archivo: acota el bucle de creacion. */
 export const LIMITE_PEDIDOS = 200
@@ -41,7 +41,10 @@ export const COLUMNAS_BASE = [
 /** Solo se generan y se leen si quien sube es admin o super admin. */
 export const COLUMNAS_ADMIN = [
   'costo_envio', 'descuento_tipo', 'descuento_valor', 'descuento_motivo', 'folio_factura',
-  'incluye_iva',
+  // `incluye_iva` es del PEDIDO y pone el default de todo el renglonaje; `iva`
+  // es de la PARTIDA y manda sobre el. Las dos vacias = lo que facture el
+  // cliente.
+  'incluye_iva', 'iva',
 ] as const
 
 /**
@@ -115,6 +118,8 @@ export type PartidaPlan = {
   cantidad: number
   precioUnitario: number
   subtotal: number
+  /** Si esta partida causa IVA. */
+  incluye_iva: boolean
 }
 
 export type PedidoPlan = {
@@ -132,8 +137,14 @@ export type PedidoPlan = {
   descuento_tipo: string | null
   descuento_valor: number | null
   descuento_motivo: string | null
-  /** Si se va a facturar con IVA. Sale de la columna o del cliente. */
+  /** Resumen: TODAS las partidas gravadas y el envio tambien (o sin envio). */
   incluye_iva: boolean
+  /** Si el flete causa IVA. */
+  envio_incluye_iva: boolean
+  /** Bruto de las partidas gravadas, antes de prorratear el descuento. */
+  gravable: number
+  /** La base ya prorrateada, sobre la que corre la tasa. */
+  baseGravable: number
   /** El IVA en pesos, ya incluido en `total`. */
   ivaMonto: number
   partidas: PartidaPlan[]
@@ -377,7 +388,12 @@ export function construirPlan(
     // (misma regla que en el POS: cambia en 16% lo que paga el cliente), y
     // entonces manda el default del cliente. `crearPedido` vuelve a imponer
     // esa regla del lado del servidor.
-    let incluyeIva = !!cliente?.requiere_factura
+    //
+    // La columna `incluye_iva` es del PEDIDO y pone el default de todos sus
+    // renglones y del envio; la columna `iva` es de la PARTIDA y manda sobre
+    // ese default. Asi el archivo de siempre sigue funcionando igual y el
+    // caso fino solo pide marcar los renglones que cambian.
+    let ivaDefault = !!cliente?.requiere_factura
     const textosIva = [...new Set(filasDelPedido.map(f => norm(f.valores.incluye_iva || '')).filter(Boolean))]
     if (textosIva.length && !opciones.puedeDescuento) {
       errores.push({
@@ -390,7 +406,7 @@ export function construirPlan(
       const v = parseSiNo(textosIva[0])
       if (v === null) {
         errores.push({ fila: numerosFila[0], mensaje: `Valor de incluye_iva "${textosIva[0]}" no valido. Usa "Si" o "No".` })
-      } else incluyeIva = v
+      } else ivaDefault = v
     }
 
     // ── Fecha del pedido ────────────────────────────────────
@@ -501,7 +517,14 @@ export function construirPlan(
     const sufijo = cliente ? (cliente.nivel_precio === 'taproom' || cliente.nivel_precio === 'distribuidor' ? 'taproom' : 'publico') : 'publico'
 
     // ── Partidas ────────────────────────────────────────────
-    type Acum = { filas: number[]; producto: ProductoCatalogo; presentacion: string; cantidad: number }
+    type Acum = {
+      filas: number[]
+      producto: ProductoCatalogo
+      presentacion: string
+      cantidad: number
+      /** Si CUALQUIER renglon de la celda pidio IVA, la celda queda gravada. */
+      iva: boolean
+    }
     const acum = new Map<string, Acum>()
 
     for (const f of filasDelPedido) {
@@ -548,14 +571,31 @@ export function construirPlan(
         continue
       }
 
+      // El IVA de ESTE renglon: lo que diga su celda, y si esta vacia, el
+      // default del pedido.
+      const textoIvaFila = norm(f.valores.iva || '')
+      let ivaFila = ivaDefault
+      if (textoIvaFila) {
+        const v = parseSiNo(textoIvaFila)
+        if (v === null) {
+          errores.push({ fila: f.fila, mensaje: `Valor de iva "${f.valores.iva}" no valido. Usa "Si" o "No".` })
+        } else if (!opciones.puedeDescuento) {
+          errores.push({
+            fila: f.fila,
+            mensaje: 'Capturaste la columna iva, y solo admin y super admin pueden cambiar el IVA de una partida.',
+          })
+        } else ivaFila = v
+      }
+
       // Consolidacion: mismo producto y presentacion en el mismo pedido.
       const k = `${producto.id}|${presentacion}`
       const previo = acum.get(k)
       if (previo) {
         previo.cantidad += cantidad
         previo.filas.push(f.fila)
+        previo.iva = previo.iva || ivaFila
       } else {
-        acum.set(k, { filas: [f.fila], producto, presentacion, cantidad })
+        acum.set(k, { filas: [f.fila], producto, presentacion, cantidad, iva: ivaFila })
       }
     }
 
@@ -617,6 +657,7 @@ export function construirPlan(
         cantidad: a.cantidad,
         precioUnitario: precio,
         subtotal: sub,
+        incluye_iva: a.iva,
       })
     }
 
@@ -631,6 +672,7 @@ export function construirPlan(
           cantidad: a.cantidad,
           precioUnitario: 0,
           subtotal: 0,
+          incluye_iva: a.iva,
         })
       }
     }
@@ -659,10 +701,19 @@ export function construirPlan(
     }
 
     // La vista previa tiene que prometer el mismo total que va a cobrar la
-    // vista `pedidos_saldo`, asi que el IVA se calcula con `ivaDe`, que
-    // replica su redondeo.
+    // vista `pedidos_saldo`, asi que la base y el IVA salen de las mismas
+    // funciones que usa el carrito.
+    const gravable = partidas.reduce((t, p) => t + (p.incluye_iva ? p.subtotal : 0), 0)
+    const envioIva = ivaDefault
+    const baseGravable = baseGravableDe({
+      subtotal,
+      gravable,
+      descuento: Math.min(descuentoMonto, subtotal),
+      envio: costoEnvio,
+      envioConIva: envioIva,
+    })
+    const ivaMonto = ivaDe(baseGravable, opciones.ivaTasa ?? IVA_TASA_DEFAULT)
     const base = Math.max(0, subtotal - descuentoMonto) + costoEnvio
-    const ivaMonto = incluyeIva ? ivaDe(base, opciones.ivaTasa ?? IVA_TASA_DEFAULT) : 0
 
     pedidos.push({
       referencia,
@@ -682,7 +733,13 @@ export function construirPlan(
       partidas,
       subtotal,
       descuentoMonto,
-      incluye_iva: incluyeIva,
+      // El resumen, con la misma regla del trigger: todas gravadas y el
+      // envio tambien, salvo que no haya envio.
+      incluye_iva: partidas.length > 0 && partidas.every(p => p.incluye_iva)
+        && (costoEnvio === 0 || envioIva),
+      envio_incluye_iva: envioIva,
+      gravable,
+      baseGravable,
       ivaMonto,
       total: base + ivaMonto,
       errores,
@@ -700,7 +757,7 @@ export function construirPlan(
       condiciones_pago: 'contado', fecha_pedido: opciones.hoy, fecha_entrega: null,
       orden_compra: null, folio_factura: null, notas: null, costo_envio: 0,
       descuento_tipo: null, descuento_valor: null, descuento_motivo: null,
-      incluye_iva: false, ivaMonto: 0,
+      incluye_iva: false, envio_incluye_iva: false, gravable: 0, baseGravable: 0, ivaMonto: 0,
       partidas: [], subtotal: 0, descuentoMonto: 0, total: 0,
       errores: sinReferencia, valido: false,
       filas: sinReferencia.map(e => e.fila!).filter(Boolean),
@@ -724,5 +781,6 @@ export function itemsParaCrear(pedido: PedidoPlan) {
   return pedido.partidas.map(p => ({
     producto_id: `${p.producto_id}-${p.presentacion}`,
     cantidad: p.cantidad,
+    incluye_iva: p.incluye_iva,
   }))
 }

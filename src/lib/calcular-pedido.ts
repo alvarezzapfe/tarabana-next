@@ -58,6 +58,12 @@ export interface PedidoItem {
   precio_unitario: number
   subtotal: number
   metadata: any
+  /**
+   * Si la partida causa IVA. Solo viaja: no toca el precio ni el subtotal,
+   * y `total` sigue siendo el bruto sin IVA. Quien la pone es `crearPedido`,
+   * que es quien conoce el default del cliente y el permiso de quien captura.
+   */
+  incluye_iva: boolean
 }
 
 export interface CalcResult {
@@ -126,7 +132,7 @@ export function calcularPedido(
       }, 0))
 
       const subtotal = cantidad * precioMix
-      pedidoItems.push({ producto_id: estilos[0].producto_id, unidad: 'mix24', cantidad, precio_unitario: precioMix, subtotal, metadata: item.metadata })
+      pedidoItems.push({ producto_id: estilos[0].producto_id, unidad: 'mix24', cantidad, precio_unitario: precioMix, subtotal, metadata: item.metadata, incluye_iva: !!item.incluye_iva })
       totalCalculado += subtotal
 
     } else {
@@ -156,7 +162,7 @@ export function calcularPedido(
       }
 
       const subtotal = cantidad * precio
-      pedidoItems.push({ producto_id: productoId, unidad, cantidad, precio_unitario: precio, subtotal, metadata: item.metadata || null })
+      pedidoItems.push({ producto_id: productoId, unidad, cantidad, precio_unitario: precio, subtotal, metadata: item.metadata || null, incluye_iva: !!item.incluye_iva })
       totalCalculado += subtotal
     }
   }

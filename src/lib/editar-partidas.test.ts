@@ -339,42 +339,69 @@ test('urlNuevoPedido abre el POS con el cliente puesto', () => {
   assert.equal(urlNuevoPedido(''), '/admin/pedidos/nuevo')
 })
 
-// ── Sobrepago con IVA ───────────────────────────────────────
+// ── Sobrepago con IVA por partida ───────────────────────────
 //
 // El saldo de la vista incluye el IVA. Si `sobrepagoDe` no lo contara, un
-// pedido con IVA pagado completo se veria sobrepagado por el 16% y la
-// pantalla pediria confirmar algo que no esta pasando.
+// pedido con IVA pagado completo se veria sobrepagado y la pantalla pediria
+// confirmar algo que no esta pasando.
+//
+// Desde que el IVA es por partida, `sobrepagoDe` recibe el BRUTO GRAVADO y no
+// una bandera: con 600 de 1,000 gravados el IVA no es 160 ni 0.
 
-test('sobrepago: un pedido con IVA pagado completo no esta sobrepagado', () => {
-  // 1,000 de mercancia + 160 de IVA = 1,160, y eso pago.
+test('sobrepago: todo gravado y pagado completo no esta sobrepagado', () => {
   assert.equal(
-    sobrepagoDe({ total: 1_000, incluye_iva: true, iva_tasa: 0.16, pagado: 1_160 }),
+    sobrepagoDe({ total: 1_000, gravable: 1_000, iva_tasa: 0.16, pagado: 1_160 }),
     null
   )
 })
 
-test('sobrepago: sin IVA, esos mismos 1,160 si sobran', () => {
-  const s = sobrepagoDe({ total: 1_000, pagado: 1_160 })
+test('sobrepago: nada gravado, esos mismos 1,160 si sobran', () => {
+  const s = sobrepagoDe({ total: 1_000, gravable: 0, iva_tasa: 0.16, pagado: 1_160 })
   assert.deepEqual(s, { aCobrar: 1_000, pagado: 1_160, sobra: 160 })
 })
 
-test('sobrepago: el IVA va sobre la base, con descuento y envio', () => {
-  // 2,260 - 226 + 100 = 2,134; IVA 341.44; total 2,475.44.
+test('sobrepago: mixto cobra solo el IVA de lo gravado', () => {
+  // 600 de 1,000 gravados: IVA 96, total 1,096.
+  assert.equal(sobrepagoDe({ total: 1_000, gravable: 600, iva_tasa: 0.16, pagado: 1_096 }), null)
+  const s = sobrepagoDe({ total: 1_000, gravable: 600, iva_tasa: 0.16, pagado: 1_160 })
+  assert.equal(s!.aCobrar, 1_096)
+  assert.equal(s!.sobra, 64)
+})
+
+test('sobrepago: el descuento se prorratea sobre lo gravado', () => {
+  // 2,260 con 600 gravados y descuento de 226 (10%): base 540, IVA 86.40.
+  // A cobrar: 2,260 - 226 + 100 de envio + 86.40 = 2,220.40.
   const s = sobrepagoDe({
     total: 2_260,
+    gravable: 600,
     descuento_tipo: 'monto',
     descuento_valor: 226,
     costo_envio: 100,
-    incluye_iva: true,
     iva_tasa: 0.16,
-    pagado: 2_500,
+    pagado: 2_300,
   })
-  assert.equal(s!.aCobrar, 2_475.44)
-  assert.equal(s!.sobra, 24.56)
+  assert.equal(s!.aCobrar, 2_220.4)
+  assert.equal(s!.sobra, 79.6)
 })
 
-test('sobrepago: apagar el IVA de un pedido pagado lo deja sobrepagado', () => {
+test('sobrepago: el envio gravado sube lo que se debe', () => {
+  const sinFlete = sobrepagoDe({
+    total: 1_000, gravable: 1_000, costo_envio: 200, iva_tasa: 0.16, pagado: 0,
+  })
+  const conFlete = sobrepagoDe({
+    total: 1_000, gravable: 1_000, costo_envio: 200, envio_incluye_iva: true, iva_tasa: 0.16, pagado: 0,
+  })
+  // Sin pagos no hay sobrepago; se comparan via un pago que los distingue.
+  assert.equal(sinFlete, null)
+  assert.equal(conFlete, null)
+  const a = sobrepagoDe({ total: 1_000, gravable: 1_000, costo_envio: 200, iva_tasa: 0.16, pagado: 2_000 })!
+  const b = sobrepagoDe({ total: 1_000, gravable: 1_000, costo_envio: 200, envio_incluye_iva: true, iva_tasa: 0.16, pagado: 2_000 })!
+  assert.equal(a.aCobrar, 1_360)   // 1,000 + 200 + IVA(1,000)
+  assert.equal(b.aCobrar, 1_392)   // 1,000 + 200 + IVA(1,200)
+})
+
+test('sobrepago: desgravar un pedido cobrado lo deja sobrepagado', () => {
   // Es el caso que la ruta de IVA tiene que avisar antes de guardar.
-  const s = sobrepagoDe({ total: 1_000, incluye_iva: false, iva_tasa: 0.16, pagado: 1_160 })
+  const s = sobrepagoDe({ total: 1_000, gravable: 0, iva_tasa: 0.16, pagado: 1_160 })
   assert.equal(s!.sobra, 160)
 })

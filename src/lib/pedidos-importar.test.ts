@@ -489,7 +489,9 @@ test('el resumen cuenta validos, invalidos y el total de lo que se va a crear', 
 
 test('itemsParaCrear devuelve el formato que espera crearPedido', () => {
   const p = plan(filas(partida({ presentacion: 'Caja 24 latas', cantidad: '2' })))
-  assert.deepEqual(itemsParaCrear(p.pedidos[0]), [{ producto_id: 'p-magma-caja24', cantidad: 2 }])
+  assert.deepEqual(itemsParaCrear(p.pedidos[0]), [
+    { producto_id: 'p-magma-caja24', cantidad: 2, incluye_iva: false },
+  ])
 })
 
 test('cada presentacion de la lista produce un producto_id que se puede parsear', () => {

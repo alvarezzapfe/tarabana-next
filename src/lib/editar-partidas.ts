@@ -24,7 +24,7 @@
  * Todo aqui es puro. Quien escribe es la ruta, via el RPC `set_pedido_items`.
  */
 import { precioLata, precioUnitario } from './calcular-pedido.ts'
-import { ivaDe } from './iva.ts'
+import { baseGravableDe, ivaDe } from './iva.ts'
 import { movimientosDeEntrega, type EstiloMix, type ItemEntrega } from './stock-entrega.ts'
 import { disponibleDe } from './stock-disponible.ts'
 import { ETIQUETA_COLUMNA } from './unidades.ts'
@@ -37,6 +37,8 @@ export type PartidaActual = {
   cantidad: number
   precio_unitario: number
   metadata?: { estilos?: EstiloMix[] | null } | null
+  /** Solo para el antes/despues del audit_log: no se hereda. */
+  incluye_iva?: boolean | null
 }
 
 /** Una linea como la deja la pantalla: sin precio, el precio lo resuelve esto. */
@@ -45,6 +47,12 @@ export type LineaDeseada = {
   unidad: string
   cantidad: number
   metadata?: { estilos?: EstiloMix[] | null } | null
+  /**
+   * Si esta partida causa IVA. Viene de la pantalla y NO se hereda de la
+   * partida previa: el usuario puede estar quitandoselo, y quedarse con el
+   * valor viejo haria que el switch no respondiera.
+   */
+  incluye_iva?: boolean | null
 }
 
 /** Una partida lista para escribirse. Misma forma que la de `calcularPedido`. */
@@ -55,6 +63,7 @@ export type PartidaFinal = {
   precio_unitario: number
   subtotal: number
   metadata: unknown
+  incluye_iva: boolean
   /** true si conservo el precio de la partida que ya existia. */
   conservada: boolean
 }
@@ -209,6 +218,7 @@ export function recalcularPartidas(entrada: EntradaEdicion): ResultadoEdicion {
       precio_unitario: precio,
       subtotal: linea.cantidad * precio,
       metadata: linea.metadata ?? null,
+      incluye_iva: !!linea.incluye_iva,
       conservada: !!previa,
     })
   }
@@ -290,19 +300,29 @@ export function sobrepagoDe(entrada: {
   descuento_valor?: number | null
   costo_envio?: number | null
   /**
-   * El IVA del pedido. Va aqui porque `pedidos_saldo` lo suma al saldo: sin
-   * el, un pedido con IVA pagado completo se veria como sobrepagado por el
-   * 16%, y la pantalla pediria confirmar un sobrepago que no existe.
+   * Bruto de las partidas GRAVADAS, no una bandera: desde que el IVA es por
+   * partida, saber si el pedido "lleva IVA" no alcanza para saber cuanto.
+   *
+   * Va aqui porque `pedidos_saldo` suma el IVA al saldo: sin el, un pedido
+   * con IVA pagado completo se veria sobrepagado por el 16% y la pantalla
+   * pediria confirmar un sobrepago que no existe.
    */
-  incluye_iva?: boolean | null
+  gravable?: number | null
+  envio_incluye_iva?: boolean | null
   iva_tasa?: number | null
   pagado: number
 }): Sobrepago | null {
-  const base =
-    entrada.total -
-    descuentoMonto(entrada.total, entrada.descuento_tipo, entrada.descuento_valor) +
-    (Number(entrada.costo_envio) || 0)
-  const aCobrar = base + (entrada.incluye_iva ? ivaDe(base, Number(entrada.iva_tasa) || 0) : 0)
+  const descuento = descuentoMonto(entrada.total, entrada.descuento_tipo, entrada.descuento_valor)
+  const envio = Number(entrada.costo_envio) || 0
+
+  const base = baseGravableDe({
+    subtotal: entrada.total,
+    gravable: entrada.gravable,
+    descuento,
+    envio,
+    envioConIva: entrada.envio_incluye_iva,
+  })
+  const aCobrar = entrada.total - descuento + envio + ivaDe(base, Number(entrada.iva_tasa) || 0)
 
   const pagado = Number(entrada.pagado) || 0
   const sobra = Math.round((pagado - aCobrar) * 100) / 100

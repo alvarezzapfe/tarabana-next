@@ -219,6 +219,32 @@ export type Partida = {
   cantidad: number
   precio: number
   metadata?: unknown
+  /**
+   * Si esta partida causa IVA. Es una bandera: no cambia el importe, solo
+   * decide si entra en la base gravable (ver src/lib/iva.ts).
+   */
+  incluyeIva?: boolean
+}
+
+/** Lo que vale una partida, sin IVA. */
+export const importeDe = (p: Partida) => p.precio * p.cantidad
+
+/** El bruto de las partidas marcadas con IVA. */
+export const gravableDe = (partidas: Partida[]) =>
+  partidas.reduce((s, p) => s + (p.incluyeIva ? importeDe(p) : 0), 0)
+
+/**
+ * El estado del switch general: todas, ninguna o mezcla.
+ *
+ * 'mezcla' es un estado real y no un limbo: el pedido puede tener partidas
+ * gravadas y exentas a la vez, y el switch tiene que decirlo en vez de
+ * mentir con un true o un false.
+ */
+export function estadoIva(partidas: Partida[]): 'todas' | 'ninguna' | 'mezcla' {
+  if (partidas.length === 0) return 'ninguna'
+  const conIva = partidas.filter(p => p.incluyeIva).length
+  if (conIva === 0) return 'ninguna'
+  return conIva === partidas.length ? 'todas' : 'mezcla'
 }
 
 /** La clave de celda de una partida normal. */
