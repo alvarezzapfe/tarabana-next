@@ -65,10 +65,13 @@
  */
 
 import { periodoMx } from './fechas.ts'
+import { IVA_TASA_DEFAULT } from './iva.ts'
 
-/** Fallback si no se puede leer `app_config.impuestos`. Mismos valores que siembra la migracion. */
-export const IVA_TASA_DEFAULT = 0.16
-/** IEPS de cerveza hasta 14 grados GL. */
+// La tasa de IVA la define ./iva.ts, que es quien la usa para cobrar. Aqui se
+// reexporta para no partir la constante en dos: lo unico que hace comisiones
+// con ella es asentarla en el corte.
+export { IVA_TASA_DEFAULT }
+/** IEPS de cerveza hasta 14 grados GL. Fallback si no se puede leer `app_config.impuestos`. */
 export const IEPS_TASA_DEFAULT = 0.265
 
 /** Un tramo de la escalera. `hasta` null = abierto (solo el ultimo). */
