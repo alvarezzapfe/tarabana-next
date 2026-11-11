@@ -681,3 +681,49 @@ test('con impuestos reales el medio centavo tambien es determinista', () => {
     assert.equal(Math.round(v * 100), v * 100, `${v} tiene mas de 2 decimales`)
   }
 })
+
+test('IVA mixto: la base sigue siendo la mercancia neta', () => {
+  // Desde que el IVA es por partida, un pedido puede traer IVA de solo una
+  // parte. La formula no cambia y sigue siendo correcta porque el prorrateo
+  // divide entre `total_con_envio`, que incluye EXACTAMENTE el IVA que ese
+  // pedido tenga — todo, nada o un pedazo.
+  //
+  // Mercancia 1,000 con 600 gravados: IVA 96, total_con_envio 1,096.
+  const r = calcularComision({
+    pagos: [pago('g1', 'p1', 1_096)],
+    pedidos: [pedido('p1', 1_000, { total_con_envio: 1_096 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+
+  // 1,096 x 1,000/1,096 = 1,000 de mercancia; / 1.265 = 790.51.
+  assert.equal(r.base, 790.51)
+
+  // Y es el MISMO numero que sin IVA y que con IVA en todo: lo que comisiona
+  // es la mercancia, y gravar una partida no la cambia.
+  const sinIva = calcularComision({
+    pagos: [pago('g1', 'p1', 1_000)],
+    pedidos: [pedido('p1', 1_000)],
+    tramos: ESCALERA, periodo: PERIODO,
+  })
+  const todoIva = calcularComision({
+    pagos: [pago('g1', 'p1', 1_160)],
+    pedidos: [pedido('p1', 1_000, { total_con_envio: 1_160 })],
+    tramos: ESCALERA, periodo: PERIODO,
+  })
+  assert.equal(r.base, sinIva.base)
+  assert.equal(r.base, todoIva.base)
+})
+
+test('IVA mixto con envio: el envio sale y el IVA tambien', () => {
+  // Mercancia 1,400 con 700 gravados, envio 100 exento:
+  // base gravable 700, IVA 112, total_con_envio 1,400 + 100 + 112 = 1,612.
+  const r = calcularComision({
+    pagos: [pago('g1', 'p1', 1_612)],
+    pedidos: [pedido('p1', 1_400, { total_con_envio: 1_612 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+  // 1,612 x 1,400/1,612 = 1,400; / 1.265 = 1,106.72.
+  assert.equal(r.base, 1_106.72)
+})

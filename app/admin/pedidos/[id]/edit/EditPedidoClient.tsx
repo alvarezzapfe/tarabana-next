@@ -206,7 +206,10 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
         pedidoId={pedido.id}
         folio={folioDe(pedido.id)}
         status={pedido.status}
-        incluyeIva={!!pedido.incluye_iva}
+        partidas={(pedido.pedido_items || []).length}
+        partidasConIva={(pedido.pedido_items || []).filter((i: { incluye_iva?: boolean }) => i.incluye_iva).length}
+        envioConIva={!!pedido.envio_incluye_iva}
+        conEnvio={Number(pedido.costo_envio || 0) > 0}
         ivaTasa={pedido.iva_tasa}
         canEdit
         onGuardado={() => router.refresh()}

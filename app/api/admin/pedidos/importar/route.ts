@@ -164,7 +164,7 @@ export async function POST(request: Request) {
         descuento_tipo: pedido.descuento_tipo,
         descuento_valor: pedido.descuento_valor,
         descuento_motivo: pedido.descuento_motivo,
-        incluye_iva: pedido.incluye_iva,
+        envio_incluye_iva: pedido.envio_incluye_iva,
       },
       {
         userId: user.id,

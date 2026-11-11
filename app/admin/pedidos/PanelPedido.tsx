@@ -476,6 +476,11 @@ function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
                 <th style={{ ...encabezado, textAlign: 'right' }}>P. unit.</th>
                 <th style={{ ...encabezado, textAlign: 'right' }}>Litros</th>
                 <th style={{ ...encabezado, textAlign: 'right' }}>Importe</th>
+                {/* Solo cuando hay mezcla: con todo gravado o nada gravado,
+                    una columna de palomitas identicas es ruido. */}
+                {pedido.partidas_con_iva > 0 && pedido.partidas_con_iva < pedido.items.length && (
+                  <th style={{ ...encabezado, textAlign: 'center' }}>IVA</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -489,6 +494,11 @@ function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
                     {it.litros > 0 ? formatLitros(it.litros) : '—'}
                   </td>
                   <td style={{ ...celda, ...tabular, textAlign: 'right', fontWeight: 600 }}>{moneda(it.subtotal)}</td>
+                  {pedido.partidas_con_iva > 0 && pedido.partidas_con_iva < pedido.items.length && (
+                    <td style={{ ...celda, textAlign: 'center', color: it.incluye_iva ? ACENTO : GRIS_SUAVE, fontSize: 11 }}>
+                      {it.incluye_iva ? 'Sí' : '—'}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -503,8 +513,15 @@ function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
             <Renglon etiqueta="Descuento" valor={`−${moneda(pedido.descuento)}`} color={ACENTO} />
           )}
           {pedido.costo_envio > 0 && <Renglon etiqueta="Envío" valor={moneda(pedido.costo_envio)} />}
-          {pedido.incluye_iva && (
-            <Renglon etiqueta={`IVA (${etiquetaTasa(pedido.iva_tasa || IVA_TASA_DEFAULT)})`} valor={moneda(pedido.iva)} />
+          {pedido.iva > 0 && (
+            <>
+              {/* La base solo cuando no es todo el pedido: si coincide con lo
+                  de arriba, el renglon no explica nada. */}
+              {Math.abs(pedido.base_gravable - (pedido.subtotal - pedido.descuento + pedido.costo_envio)) > 0.005 && (
+                <Renglon etiqueta="Base gravable" valor={moneda(pedido.base_gravable)} />
+              )}
+              <Renglon etiqueta={`IVA (${etiquetaTasa(pedido.iva_tasa || IVA_TASA_DEFAULT)})`} valor={moneda(pedido.iva)} />
+            </>
           )}
           <Renglon etiqueta="Total" valor={moneda(pedido.total)} fuerte />
         </div>
@@ -516,7 +533,10 @@ function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
             pedidoId={pedido.id}
             folio={pedido.folio}
             status={pedido.status}
-            incluyeIva={pedido.incluye_iva}
+            partidas={pedido.items.length}
+            partidasConIva={pedido.partidas_con_iva}
+            envioConIva={pedido.envio_incluye_iva}
+            conEnvio={pedido.costo_envio > 0}
             ivaTasa={pedido.iva_tasa}
             canEdit={canEdit}
             onGuardado={onGuardado}

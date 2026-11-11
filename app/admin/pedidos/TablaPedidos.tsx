@@ -300,10 +300,15 @@ export default function TablaPedidos(props: Props) {
                 <td style={{ ...td, ...tabular, textAlign: 'right', color: TINTA, fontWeight: 600 }}>
                   {moneda(f.total)}
                   {/* El total es con IVA. Sin esta linea, dos pedidos de la
-                      misma mercancia se ven como precios distintos. */}
-                  {f.incluye_iva && (
-                    <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }} title={`Incluye ${moneda(f.iva)} de IVA`}>
-                      IVA incl.
+                      misma mercancia se ven como precios distintos. Y dice
+                      "parcial" cuando solo algunas partidas van gravadas,
+                      porque "IVA incl." a secas se leeria como todo. */}
+                  {f.iva > 0 && (
+                    <span
+                      style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}
+                      title={`Incluye ${moneda(f.iva)} de IVA sobre una base de ${moneda(f.base_gravable)}`}
+                    >
+                      {f.incluye_iva ? 'IVA incl.' : `IVA en ${f.partidas_con_iva}/${f.items.length}`}
                     </span>
                   )}
                 </td>

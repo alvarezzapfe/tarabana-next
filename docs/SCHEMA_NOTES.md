@@ -440,3 +440,42 @@ despues.
 - Las verificaciones al final siguen valiendo la pena aunque no puedan
   revertir: avisan. Pero hay que leerlas como una **alarma**, no como un
   seguro, y confirmar a mano cuando una truene.
+
+## El IVA es por PARTIDA desde el 2026-11-12
+
+`20261112000000_iva_por_partida.sql` movió el IVA de `pedidos.incluye_iva` a
+`pedido_items.incluye_iva`, con `pedidos.envio_incluye_iva` para el flete.
+`pedidos_saldo` ganó `base_gravable` (columna 25) y `iva_monto` cambió de
+fórmula:
+
+```
+gravable   = suma de (cantidad * precio_unitario) de las partidas gravadas
+razon      = 1 - descuento_monto / total   (1 si total = 0; nunca negativa)
+base_grav  = round( gravable * razon + (costo_envio si envio_incluye_iva), 2 )
+iva_monto  = round( base_grav * iva_tasa, 2 )
+```
+
+Cuatro cosas que importan al leer o tocar esto:
+
+- **`pedidos.incluye_iva` ya es DERIVADA.** La mantienen dos triggers
+  (`trg_pedido_items_sync_iva`, `trg_pedidos_sync_iva`) y significa "hay
+  partidas, todas gravadas, y el envío es 0 o gravado". **No escribirla a
+  mano**: el trigger de `pedidos` la recalcula en cada INSERT y UPDATE, así que
+  un valor puesto a mano se pierde. Para medir el IVA de un pedido se usa
+  `iva_monto`, no esta bandera.
+
+- **La vista suma `cantidad * precio_unitario`, no `subtotal`.** En producción
+  hay una partida con `subtotal` en NULL (`eec25a6f`, la huérfana de #0E1B76);
+  con `sum(subtotal)` ese pedido calcularía $1,000 menos de base.
+
+- **Las partidas se agregan en una subconsulta 1:1, no en un join.** La vista
+  ya hace `left join pagos`; un segundo join a `pedido_items` multiplicaría las
+  filas y `sum(monto)` contaría cada pago una vez por partida. La verificación
+  de la migración compara `pagado` contra una suma independiente justamente por
+  eso.
+
+- **`pedido_todas_las_partidas_con_iva(uuid)` tiene el EXECUTE revocado.** Es
+  `SECURITY DEFINER` y devuelve un escalar: con el EXECUTE por default de
+  PUBLIC, PostgREST la publicaba como RPC y cualquier `anon` podía sondear
+  pedidos ajenos saltándose RLS. Regla general: una función DEFINER que
+  devuelva algo distinto de `trigger` necesita su `revoke`.

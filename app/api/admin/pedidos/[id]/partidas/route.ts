@@ -60,11 +60,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const [{ data: pedido }, { data: saldo }, { data: actualesRaw }] = await Promise.all([
     supabase
       .from('pedidos')
-      .select('id, status, cliente_id, descuento_tipo, descuento_valor, costo_envio, total, incluye_iva, iva_tasa')
+      .select('id, status, cliente_id, descuento_tipo, descuento_valor, costo_envio, total, envio_incluye_iva, iva_tasa')
       .eq('id', id)
       .maybeSingle(),
     supabase.from('pedidos_saldo').select('pagado').eq('id', id).maybeSingle(),
-    supabase.from('pedido_items').select('id, producto_id, unidad, cantidad, precio_unitario, metadata').eq('pedido_id', id),
+    supabase.from('pedido_items').select('id, producto_id, unidad, cantidad, precio_unitario, metadata, incluye_iva').eq('pedido_id', id),
   ])
 
   if (!pedido) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
@@ -140,7 +140,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (!crudo || typeof crudo !== 'object') {
       return NextResponse.json({ error: 'Hay una partida con forma invalida.' }, { status: 400 })
     }
-    const item = crudo as { producto_id?: unknown; cantidad?: unknown; metadata?: unknown }
+    const item = crudo as { producto_id?: unknown; cantidad?: unknown; metadata?: unknown; incluye_iva?: unknown }
     if (typeof item.producto_id !== 'string' || !item.producto_id) {
       return NextResponse.json({ error: 'Hay una partida sin producto.' }, { status: 400 })
     }
@@ -149,11 +149,15 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: 'Hay una partida con cantidad invalida.' }, { status: 400 })
     }
     const { productoId, unidad } = parsearProductoId({ producto_id: item.producto_id })
+    if (item.incluye_iva !== undefined && typeof item.incluye_iva !== 'boolean') {
+      return NextResponse.json({ error: 'Hay una partida con incluye_iva invalido.' }, { status: 400 })
+    }
     deseadas.push({
       producto_id: productoId,
       unidad,
       cantidad,
       metadata: (item.metadata as LineaDeseada['metadata']) ?? null,
+      incluye_iva: !!item.incluye_iva,
     })
   }
 
@@ -172,9 +176,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     descuento_tipo: pedido.descuento_tipo,
     descuento_valor: pedido.descuento_valor,
     costo_envio: pedido.costo_envio,
-    // El IVA del pedido no cambia aqui, pero si entra en lo que debe: sin el,
-    // el aviso mentiria por el 16% en los pedidos facturados.
-    incluye_iva: pedido.incluye_iva,
+    // El gravable sale de las partidas NUEVAS, que es lo que se va a guardar:
+    // el aviso tiene que hablar del pedido que va a quedar, no del que habia.
+    gravable: calculo.partidas.reduce((t, p) => t + (p.incluye_iva ? p.subtotal : 0), 0),
+    envio_incluye_iva: pedido.envio_incluye_iva,
     iva_tasa: pedido.iva_tasa,
     pagado: Number(saldo?.pagado) || 0,
   })
@@ -198,6 +203,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       cantidad: p.cantidad,
       precio_unitario: p.precio_unitario,
       metadata: p.metadata,
+      incluye_iva: p.incluye_iva,
     })),
     p_total: calculo.total,
   })
@@ -211,11 +217,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     detalle: {
       antes: {
         total: Number(pedido.total) || 0,
-        partidas: actuales.map(p => ({ producto_id: p.producto_id, unidad: p.unidad, cantidad: p.cantidad, precio_unitario: p.precio_unitario })),
+        partidas: actuales.map(p => ({ producto_id: p.producto_id, unidad: p.unidad, cantidad: p.cantidad, precio_unitario: p.precio_unitario, incluye_iva: p.incluye_iva })),
       },
       despues: {
         total: calculo.total,
-        partidas: calculo.partidas.map(p => ({ producto_id: p.producto_id, unidad: p.unidad, cantidad: p.cantidad, precio_unitario: p.precio_unitario })),
+        partidas: calculo.partidas.map(p => ({ producto_id: p.producto_id, unidad: p.unidad, cantidad: p.cantidad, precio_unitario: p.precio_unitario, incluye_iva: p.incluye_iva })),
       },
       conservadas: calculo.conservadas,
       nuevas: calculo.nuevas,

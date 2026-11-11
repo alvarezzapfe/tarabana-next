@@ -39,12 +39,12 @@ export default function MisPedidosPage() {
       const [{ data }, { data: saldos }] = await Promise.all([
         supabase
           .from('pedidos')
-          .select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
+          .select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, incluye_iva, productos(nombre, estilo, imagen_url))')
           .eq('cliente_id', user.id)
           .order('fecha_pedido', { ascending: false }),
         supabase
           .from('pedidos_saldo')
-          .select('id, descuento_monto, iva_monto, total_con_envio')
+          .select('id, descuento_monto, base_gravable, iva_monto, total_con_envio')
           .eq('cliente_id', user.id),
       ])
 
@@ -90,16 +90,22 @@ export default function MisPedidosPage() {
                   subtotal: p.total || 0,
                   descuento: Number(p.saldo.descuento_monto) || 0,
                   envio: p.costo_envio || 0,
+                  baseGravable: Number(p.saldo.base_gravable) || 0,
                   iva: Number(p.saldo.iva_monto) || 0,
                   total: Number(p.saldo.total_con_envio) || 0,
                 }
               : desglosar({
                   subtotal: p.total || 0,
+                  // El gravable sale de las partidas, que ya vienen en la
+                  // misma consulta: esto es solo para un pedido CANCELADO,
+                  // que la vista excluye.
+                  gravable: (p.pedido_items as { cantidad: number; precio_unitario: number; incluye_iva: boolean }[] || [])
+                    .reduce((t, i) => t + (i.incluye_iva ? (i.cantidad || 0) * (i.precio_unitario || 0) : 0), 0),
                   descuento: p.descuento_tipo === 'porcentaje'
                     ? Math.round((p.total || 0) * (p.descuento_valor || 0)) / 100
                     : (p.descuento_valor || 0),
                   envio: p.costo_envio || 0,
-                  incluyeIva: p.incluye_iva,
+                  envioConIva: p.envio_incluye_iva,
                   tasa: p.iva_tasa,
                 })
             const pesos = (n: number) => n.toLocaleString('es-MX', { minimumFractionDigits: 2 })
@@ -214,9 +220,19 @@ export default function MisPedidosPage() {
                             )}
                             {d.envio > 0 && <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>Envio: ${pesos(d.envio)}</p>}
                             {d.iva > 0 && (
-                              <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>
-                                IVA ({etiquetaTasa(Number(p.iva_tasa) || IVA_TASA_DEFAULT)}): ${pesos(d.iva)}
-                              </p>
+                              <>
+                                {/* La base solo cuando no es todo el pedido:
+                                    si coincide con el subtotal menos el
+                                    descuento, el renglon no explica nada. */}
+                                {Math.abs(d.baseGravable - (d.subtotal - d.descuento + d.envio)) > 0.005 && (
+                                  <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>
+                                    Base gravable: ${pesos(d.baseGravable)}
+                                  </p>
+                                )}
+                                <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>
+                                  IVA ({etiquetaTasa(Number(p.iva_tasa) || IVA_TASA_DEFAULT)}): ${pesos(d.iva)}
+                                </p>
+                              </>
                             )}
                           </>
                         )}

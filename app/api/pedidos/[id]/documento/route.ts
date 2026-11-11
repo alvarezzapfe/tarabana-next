@@ -31,7 +31,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   // Load pedido with all related data
   const { data: pedido } = await service.from('pedidos')
-    .select('*, profiles!pedidos_cliente_id_fkey(full_name, email, phone, rfc, razon_social, marca_negocio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo))')
+    .select('*, profiles!pedidos_cliente_id_fkey(full_name, email, phone, rfc, razon_social, marca_negocio, calle, num_ext, num_int, colonia, municipio, estado, cp, referencias, direccion_entrega), pedido_items(cantidad, precio_unitario, unidad, metadata, incluye_iva, productos(nombre, estilo))')
     .eq('id', id).single()
 
   if (!pedido) return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
@@ -136,11 +136,27 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   // Products table
   children.push(new Paragraph({ children: [new TextRun({ text: 'PRODUCTOS', bold: true, size: 18, color: '666666' })], spacing: { after: 100 } }))
 
+  // La columna de IVA aparece solo cuando el pedido viene MEZCLADO. Con todo
+  // gravado o nada gravado, una columna de "Si" identicos no dice nada y el
+  // renglon de IVA de abajo ya lo explica; con mezcla, en cambio, es la unica
+  // forma de que el cliente sepa sobre que se le cobro el impuesto.
+  const gravadas = items.filter((i: any) => i.incluye_iva).length
+  const mezclaIva = gravadas > 0 && gravadas < items.length
+
+  const columnas = mezclaIva
+    ? ['Producto', 'Presentacion', 'Cant.', 'P. Unitario', 'Importe', 'IVA']
+    : ['Producto', 'Presentacion', 'Cant.', 'P. Unitario', 'Importe']
+  const anchos = mezclaIva ? [36, 18, 9, 14, 14, 9] : [40, 20, 10, 15, 15]
+  const alineadaDerecha = (i: number) => i >= 3 && i <= 4
+
   const headerRow = new TableRow({
-    children: ['Producto', 'Presentacion', 'Cant.', 'P. Unitario', 'Importe'].map((h, i) => new TableCell({
+    children: columnas.map((h, i) => new TableCell({
       borders: thinBorder, shading: { fill: 'F3F4F6' },
-      width: { size: [40, 20, 10, 15, 15][i], type: WidthType.PERCENTAGE },
-      children: [new Paragraph({ alignment: i >= 3 ? AlignmentType.RIGHT : AlignmentType.LEFT, children: [new TextRun({ text: h, bold: true, size: 16, color: '666666' })] })],
+      width: { size: anchos[i], type: WidthType.PERCENTAGE },
+      children: [new Paragraph({
+        alignment: alineadaDerecha(i) ? AlignmentType.RIGHT : (i === 5 ? AlignmentType.CENTER : AlignmentType.LEFT),
+        children: [new TextRun({ text: h, bold: true, size: 16, color: '666666' })],
+      })],
     })),
   })
 
@@ -156,6 +172,15 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
         new TableCell({ borders: thinBorder, children: [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: String(item.cantidad), size: 18, bold: true })] })] }),
         new TableCell({ borders: thinBorder, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: fmt(item.precio_unitario || 0), size: 18 })] })] }),
         new TableCell({ borders: thinBorder, children: [new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: fmt(importe), size: 18, bold: true })] })] }),
+        ...(mezclaIva
+          ? [new TableCell({
+              borders: thinBorder,
+              children: [new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ text: item.incluye_iva ? 'Si' : '--', size: 18 })],
+              })],
+            })]
+          : []),
       ],
     })
   })
@@ -179,6 +204,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
     : (pedido.descuento_valor || 0)
   const descMonto = saldo ? Number(saldo.descuento_monto) || 0 : descLocal
   const ivaMonto = saldo ? Number(saldo.iva_monto) || 0 : 0
+  const baseGravable = saldo ? Number(saldo.base_gravable) || 0 : 0
   const totalCobrar = saldo
     ? Number(saldo.total_con_envio) || 0
     : (pedido.total || 0) - descLocal + (pedido.costo_envio || 0)
@@ -194,7 +220,13 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   }
   // El renglon de IVA solo cuando lo hay: los precios de lista son sin IVA y
   // un "IVA $0.00" en un pedido que no lo lleva invita a preguntar por que.
-  if (pedido.incluye_iva && ivaMonto > 0) {
+  if (ivaMonto > 0) {
+    // La base gravable se imprime cuando NO es todo el pedido. Es lo que
+    // vuelve verificable un total con IVA parcial: sin ella, el cliente ve un
+    // impuesto que no cuadra con ningun numero de la hoja.
+    if (Math.abs(baseGravable - ((pedido.total || 0) - descMonto + (pedido.costo_envio || 0))) > 0.005) {
+      desgloseRows.push(['Base gravable', fmt(baseGravable)])
+    }
     desgloseRows.push([`IVA (${etiquetaTasa(Number(pedido.iva_tasa) || IVA_TASA_DEFAULT)})`, fmt(ivaMonto)])
   }
   desgloseRows.push(['TOTAL', fmt(totalCobrar), true])
