@@ -572,6 +572,7 @@ export default function PedidosClient(props: Props) {
           canEdit={canEdit}
           onPago={setPagoDe}
           onStatus={setStatusPedido}
+          onEditarPartidas={setEditandoPartidas}
         />
       </div>
 

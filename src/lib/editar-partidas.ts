@@ -306,3 +306,27 @@ export const STATUS_NO_EDITABLES: readonly string[] = ['entregado', 'cancelado']
 
 export const puedeEditarPartidas = (status: string | null | undefined): boolean =>
   !!status && !STATUS_NO_EDITABLES.includes(status)
+
+/**
+ * Por que no se puede editar, en palabras. null si si se puede.
+ *
+ * Existe para que la opcion no se ESCONDA en los pedidos que no se pueden
+ * editar: esconderla deja a quien la busca sin saber si no existe, si no tiene
+ * permiso o si el pedido no califica. Mostrarla apagada con el motivo contesta
+ * las tres, y de paso ofrece la salida real —levantar otro pedido—, que es lo
+ * que la persona iba a terminar haciendo de todos modos.
+ */
+export function motivoNoEditable(status: string | null | undefined): string | null {
+  if (puedeEditarPartidas(status)) return null
+  if (status === 'entregado') {
+    return 'Ya entregado: descontó inventario. Crea un pedido nuevo para agregar producto.'
+  }
+  if (status === 'cancelado') {
+    return 'Pedido cancelado: no va a salir. Crea un pedido nuevo si hace falta.'
+  }
+  return 'Este pedido no se puede editar.'
+}
+
+/** El POS con el cliente precargado: `?cliente=` lo lee al montar. */
+export const urlNuevoPedido = (clienteId: string | null | undefined): string =>
+  clienteId ? `/admin/pedidos/nuevo?cliente=${encodeURIComponent(clienteId)}` : '/admin/pedidos/nuevo'

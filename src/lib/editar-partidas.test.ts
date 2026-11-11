@@ -14,9 +14,11 @@ import {
   STATUS_NO_EDITABLES,
   claveLinea,
   descuentoMonto,
+  motivoNoEditable,
   puedeEditarPartidas,
   recalcularPartidas,
   sobrepagoDe,
+  urlNuevoPedido,
   type EntradaEdicion,
   type PartidaActual,
 } from './editar-partidas.ts'
@@ -292,4 +294,47 @@ test('descuentoMonto replica la formula de pedidos_saldo, redondeo incluido', ()
   assert.equal(descuentoMonto(1_000, 'monto', 150), 150)
   assert.equal(descuentoMonto(1_000, null, null), 0)
   assert.equal(descuentoMonto(1_000, 'porcentaje', null), 0)
+})
+
+// ── Por que no se puede editar ──────────────────────────────
+
+test('el motivo explica el status, en vez de esconder la opcion', () => {
+  // Esconderla deja a quien la busca sin saber si no existe, si no tiene
+  // permiso o si el pedido no califica.
+  assert.equal(motivoNoEditable('confirmado'), null, 'un pedido editable no lleva motivo')
+  assert.equal(motivoNoEditable('pendiente'), null)
+  assert.equal(motivoNoEditable('enviado'), null)
+
+  assert.match(String(motivoNoEditable('entregado')), /descontó inventario/)
+  assert.match(String(motivoNoEditable('entregado')), /pedido nuevo/)
+  assert.match(String(motivoNoEditable('cancelado')), /no va a salir/)
+
+  // Un status que nadie previo SI es editable: la regla es una lista de
+  // EXCLUSION, igual que la del comprometido. Lo unico que no se descontó ni
+  // se cancelo se puede corregir, y un status nuevo no deberia bloquear por
+  // existir.
+  assert.equal(motivoNoEditable('status_raro'), null)
+
+  // El motivo generico queda para un pedido sin status, que no deberia pasar
+  // pero no puede terminar en una opcion habilitada.
+  assert.match(String(motivoNoEditable(null)), /no se puede editar/)
+  assert.match(String(motivoNoEditable('')), /no se puede editar/)
+})
+
+test('el motivo y el permiso no se pueden contradecir', () => {
+  for (const status of ['pendiente', 'confirmado', 'enviado', 'entregado', 'cancelado', 'raro', null]) {
+    assert.equal(
+      motivoNoEditable(status) === null,
+      puedeEditarPartidas(status),
+      `${status}: uno dice que si y el otro que no`
+    )
+  }
+})
+
+test('urlNuevoPedido abre el POS con el cliente puesto', () => {
+  assert.equal(urlNuevoPedido('abc-123'), '/admin/pedidos/nuevo?cliente=abc-123')
+  // Sin cliente abre el POS vacio en vez de un "?cliente=null" que el POS
+  // buscaria en su catalogo y no encontraria.
+  assert.equal(urlNuevoPedido(null), '/admin/pedidos/nuevo')
+  assert.equal(urlNuevoPedido(''), '/admin/pedidos/nuevo')
 })

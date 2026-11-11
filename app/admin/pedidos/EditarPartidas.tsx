@@ -12,7 +12,18 @@ import {
   type Partida, type Producto,
   claveCelda, disponibleEn, etiquetaDe, moneda, precioDe, presentacionesVisibles, productoDeClave,
 } from './nuevo/pos-ui'
-import type { FilaPedido } from './pedidos-ui'
+/**
+ * Lo minimo que el modal necesita del pedido. `FilaPedido` lo cumple, y
+ * tambien la fila cruda de la pantalla /admin/pedidos/[id]/edit, que no pasa
+ * por `armarFilas`.
+ */
+export type PedidoEditable = {
+  id: string
+  folio: string
+  cliente: string
+  cliente_id: string | null
+  status: string
+}
 
 /**
  * Editar los productos de un pedido que ya existe.
@@ -39,7 +50,7 @@ import type { FilaPedido } from './pedidos-ui'
  */
 
 type Props = {
-  pedido: FilaPedido
+  pedido: PedidoEditable
   onCerrar: () => void
   onGuardado: (mensaje: string) => void
 }
