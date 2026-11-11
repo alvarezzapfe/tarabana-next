@@ -343,3 +343,31 @@ compararlas como instantes da un día de menos en la zona del negocio. Si
 alguna vez hacen falta como instante, hay que decidir la hora a propósito
 (mediodía México, por ejemplo) en vez de heredar la medianoche UTC. Mientras se
 traten como fecha y se lean cortando el string, el comportamiento es correcto.
+
+## `productos.updated_at` no se mantiene: no sirve para saber cuándo cambió un producto
+
+Verificado contra producción el 2026-11-10, al aplicar la lista de precios de
+noviembre. Un UPDATE de 38 columnas de precio **no movió `updated_at`** en
+ninguna de las 9 filas, y la columna coincide con `created_at` en 10 de los 11
+productos:
+
+```
+Brisa        created 2026-07-11T22:27:52   updated 2026-07-11T22:27:52
+Magma        created 2026-07-11T22:27:52   updated 2026-07-11T22:27:52
+Solarsteinn  created 2026-11-05T20:03:19   updated 2026-11-05T20:03:19
+```
+
+No hay trigger que la actualice, y ninguna de las rutas que escriben
+`productos` la setea a mano (`/api/admin/inventario/precios`,
+`[id]/stock`, `crear`, ni el update directo de la ficha). La única que difiere
+es Brasa, por una edición de agosto que sí la escribió.
+
+**Consecuencia:** `updated_at` es un dato muerto. No se puede usar para ordenar
+por "último cambio", ni para detectar qué productos se tocaron, ni como base de
+una caché. El único registro de cuándo y cómo cambió un precio o un stock es
+`audit_log` (`producto.precios`, `producto.stock`), que sí guarda el
+antes/después por columna.
+
+Si alguna vez hace falta de verdad, se arregla con un trigger `BEFORE UPDATE`
+que haga `new.updated_at := now()` — pero eso es una migración, y mientras no
+exista, no confiar en la columna.
