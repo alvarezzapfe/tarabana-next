@@ -338,3 +338,43 @@ test('urlNuevoPedido abre el POS con el cliente puesto', () => {
   assert.equal(urlNuevoPedido(null), '/admin/pedidos/nuevo')
   assert.equal(urlNuevoPedido(''), '/admin/pedidos/nuevo')
 })
+
+// ── Sobrepago con IVA ───────────────────────────────────────
+//
+// El saldo de la vista incluye el IVA. Si `sobrepagoDe` no lo contara, un
+// pedido con IVA pagado completo se veria sobrepagado por el 16% y la
+// pantalla pediria confirmar algo que no esta pasando.
+
+test('sobrepago: un pedido con IVA pagado completo no esta sobrepagado', () => {
+  // 1,000 de mercancia + 160 de IVA = 1,160, y eso pago.
+  assert.equal(
+    sobrepagoDe({ total: 1_000, incluye_iva: true, iva_tasa: 0.16, pagado: 1_160 }),
+    null
+  )
+})
+
+test('sobrepago: sin IVA, esos mismos 1,160 si sobran', () => {
+  const s = sobrepagoDe({ total: 1_000, pagado: 1_160 })
+  assert.deepEqual(s, { aCobrar: 1_000, pagado: 1_160, sobra: 160 })
+})
+
+test('sobrepago: el IVA va sobre la base, con descuento y envio', () => {
+  // 2,260 - 226 + 100 = 2,134; IVA 341.44; total 2,475.44.
+  const s = sobrepagoDe({
+    total: 2_260,
+    descuento_tipo: 'monto',
+    descuento_valor: 226,
+    costo_envio: 100,
+    incluye_iva: true,
+    iva_tasa: 0.16,
+    pagado: 2_500,
+  })
+  assert.equal(s!.aCobrar, 2_475.44)
+  assert.equal(s!.sobra, 24.56)
+})
+
+test('sobrepago: apagar el IVA de un pedido pagado lo deja sobrepagado', () => {
+  // Es el caso que la ruta de IVA tiene que avisar antes de guardar.
+  const s = sobrepagoDe({ total: 1_000, incluye_iva: false, iva_tasa: 0.16, pagado: 1_160 })
+  assert.equal(s!.sobra, 160)
+})

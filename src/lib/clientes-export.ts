@@ -13,7 +13,12 @@
  * de `metricas.ts`). Dos consecuencias que importan al leer el archivo:
  *
  *   * "Total facturado" es el NETO (`pagado + saldo`), no la suma de `total`,
- *     que es bruto antes de descuento y de envio.
+ *     que es bruto antes de descuento y de envio. Va CON IVA, igual que
+ *     "Cobrado" y "Saldo": este archivo es de cobranza —lo que el cliente
+ *     debe— y los tres numeros tienen que cuadrar entre si. La columna "IVA"
+ *     dice cuanto de ese total es impuesto, para quien quiera la venta sin
+ *     IVA. En el Inicio y en el reporte, en cambio, Facturado va SIN IVA;
+ *     ver las dos unidades en `metricas.ts`.
  *   * "# pedidos" NO cuenta cancelados, porque la vista los excluye. La
  *     columna "Pedidos" de la pantalla si los cuenta (consulta la tabla
  *     `pedidos`), asi que para un cliente con pedidos cancelados los dos
@@ -23,7 +28,7 @@ import {
   FMT_ENTERO, FMT_FECHA, FMT_PESOS, type Celda, type HojaDatos,
 } from './libro-xlsx.ts'
 import { giroLabel, nivelLabel, regimenLabel, tipoLabel, usoCfdiLabel } from './clientes.ts'
-import { cobradoDe, nombreLegible, netoTotal, porCobrarDe, type FilaSaldo } from './metricas.ts'
+import { cobradoDe, ivaTotal, nombreLegible, netoTotal, porCobrarDe, type FilaSaldo } from './metricas.ts'
 import { fechaMx } from './fechas.ts'
 import type { ClienteLista } from './clientes-lista.ts'
 import { COLUMNAS_CLIENTES, TITULOS_CLIENTES } from './clientes-columnas.ts'
@@ -77,14 +82,16 @@ export const NOMBRE_HOJA_CLIENTES = 'Clientes'
 
 export type MetricasCliente = {
   pedidos: number
+  /** Con IVA. La columna `iva` dice cuanto de esto lo es. */
   facturado: number
+  iva: number
   cobrado: number
   saldo: number
   /** 'YYYY-MM-DD' del pedido mas reciente, o null si no tiene ninguno. */
   ultimo: string | null
 }
 
-const VACIO: MetricasCliente = { pedidos: 0, facturado: 0, cobrado: 0, saldo: 0, ultimo: null }
+const VACIO: MetricasCliente = { pedidos: 0, facturado: 0, iva: 0, cobrado: 0, saldo: 0, ultimo: null }
 
 /**
  * Agrupa `pedidos_saldo` por cliente.
@@ -106,6 +113,7 @@ export function metricasPorCliente(filas: FilaSaldo[]): Map<string, MetricasClie
     salida.set(id, {
       pedidos: delCliente.length,
       facturado: netoTotal(delCliente),
+      iva: ivaTotal(delCliente),
       cobrado: cobradoDe(delCliente),
       saldo: porCobrarDe(delCliente),
       // Las fechas de la DB son 'YYYY-MM-DD', asi que el maximo como string
@@ -220,6 +228,7 @@ const VALORES: Record<string, (c: ClienteExport, m: MetricasCliente, vendedor: s
   'Fecha de alta':   c => fechaCelda(fechaMx(new Date(c.created_at))),
   '# pedidos':       (_c, m) => m.pedidos,
   'Total facturado': (_c, m) => m.facturado,
+  'IVA':             (_c, m) => m.iva,
   'Cobrado':         (_c, m) => m.cobrado,
   'Saldo':           (_c, m) => m.saldo,
   'Último pedido':   (_c, m) => fechaCelda(m.ultimo),

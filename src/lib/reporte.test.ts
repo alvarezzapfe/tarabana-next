@@ -19,7 +19,7 @@ const AHORA = new Date('2026-11-05T12:00:00-06:00')
 const PERIODO = rangoDePeriodo('mes', AHORA)
 
 const saldo = (over: Partial<FilaSaldo> = {}): FilaSaldo => ({
-  id: 'p1', cliente_id: 'c1', total: 1_000, pagado: 0, saldo: 1_000,
+  id: 'p1', cliente_id: 'c1', total: 1_000, pagado: 0, saldo: 1_000, iva_monto: 0,
   status: 'confirmado', estado_cobro: 'pendiente', dias_vencido: 0,
   fecha_pedido: '2026-11-02', fecha_vencimiento: '2026-12-02',
   created_at: '2026-11-02T00:00:00Z',
@@ -267,7 +267,11 @@ test('el resumen del Excel trae el periodo, la hora y los hallazgos', () => {
   const valor = (c: string) => hoja.filas.find(f => f.Concepto === c)?.Valor
   assert.equal(valor('Periodo'), '2026-11-01 a 2026-11-05')
   assert.equal(valor('Generado'), r.generado)
-  assert.equal(valor('Facturado'), 3_500)
+  assert.equal(valor('Facturado (sin IVA)'), 3_500)
+  // El IVA va como renglon propio, y aparece aunque sea 0: en una hoja de
+  // calculo un renglon ausente se lee como un olvido, no como un cero.
+  assert.equal(valor('IVA facturado'), 0)
+  assert.equal(valor('Total facturado (con IVA)'), 3_500)
   assert.equal(hoja.filas.filter(f => f.Concepto === 'Hallazgo').length, r.hallazgos.length)
 })
 

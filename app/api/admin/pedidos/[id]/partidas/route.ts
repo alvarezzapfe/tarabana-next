@@ -60,7 +60,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const [{ data: pedido }, { data: saldo }, { data: actualesRaw }] = await Promise.all([
     supabase
       .from('pedidos')
-      .select('id, status, cliente_id, descuento_tipo, descuento_valor, costo_envio, total')
+      .select('id, status, cliente_id, descuento_tipo, descuento_valor, costo_envio, total, incluye_iva, iva_tasa')
       .eq('id', id)
       .maybeSingle(),
     supabase.from('pedidos_saldo').select('pagado').eq('id', id).maybeSingle(),
@@ -172,6 +172,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     descuento_tipo: pedido.descuento_tipo,
     descuento_valor: pedido.descuento_valor,
     costo_envio: pedido.costo_envio,
+    // El IVA del pedido no cambia aqui, pero si entra en lo que debe: sin el,
+    // el aviso mentiria por el 16% en los pedidos facturados.
+    incluye_iva: pedido.incluye_iva,
+    iva_tasa: pedido.iva_tasa,
     pagado: Number(saldo?.pagado) || 0,
   })
   if (sobra && body.confirmarSobrepago !== true) {

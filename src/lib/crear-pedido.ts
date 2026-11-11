@@ -30,6 +30,7 @@ import { calcularPedido } from './calcular-pedido'
 import { STATUS_SIN_COMPROMISO, comprometidoDe, type OpcionesComprometido } from './stock-disponible'
 import { logAction } from './audit'
 import { enviarInvitacionCliente } from './invitar-cliente'
+import { cargarTasaIva } from './iva'
 
 /** Item tal como lo arma el admin: producto_id = "<uuid>-<unidad>". */
 export type ItemCrudo = {
@@ -60,6 +61,13 @@ export type DatosPedido = {
   descuento_tipo?: string | null
   descuento_valor?: number | null
   descuento_motivo?: string | null
+  /**
+   * Si el pedido se factura con IVA. Si no viene, manda `requiere_factura`
+   * del cliente. La TASA no se recibe nunca: la lee el servidor de
+   * `app_config`, porque dejar que el llamador proponga la tasa seria
+   * dejarle fijar el precio final.
+   */
+  incluye_iva?: boolean | null
 }
 
 export type ContextoPedido = {
@@ -243,10 +251,39 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
 
   // ── Precio segun el nivel DEL CLIENTE ─────────────────────
   const { data: clienteProfile } = await service
-    .from('profiles').select('nivel_precio').eq('id', datos.cliente_id).maybeSingle()
+    .from('profiles').select('nivel_precio, requiere_factura').eq('id', datos.cliente_id).maybeSingle()
   if (!clienteProfile) return malo('Cliente no encontrado')
   const sufijo = precioSufijo(clienteProfile.nivel_precio)
   const esMayorista = sufijo === 'taproom'
+
+  // ── IVA ───────────────────────────────────────────────────
+  //
+  // El default es el del cliente, y SALIRSE de ese default es lo que pide
+  // permiso de admin — no prender el IVA. Asi un vendedor puede seguir
+  // capturando pedidos de un cliente que factura (el default ya es true) sin
+  // poder cambiarle en 16% lo que paga, que es el mismo criterio del
+  // descuento.
+  const ivaPorCliente = !!clienteProfile.requiere_factura
+  const incluyeIva = datos.incluye_iva === undefined || datos.incluye_iva === null
+    ? ivaPorCliente
+    : !!datos.incluye_iva
+
+  if (incluyeIva !== ivaPorCliente && !canManageAsAdmin(role)) {
+    return malo(
+      ivaPorCliente
+        ? 'Este cliente factura con IVA; solo admin puede quitarlo'
+        : 'Solo admin y super admin pueden agregar IVA a un pedido',
+      403
+    )
+  }
+
+  // La tasa se COPIA al pedido: ver el encabezado de la migracion
+  // 20261111000000. Se lee con el service client porque `app_config` pide
+  // is_staff() y el vendedor no lo es.
+  const ivaTasa = await cargarTasaIva(service)
+  if (incluyeIva && ivaTasa <= 0) {
+    return malo('La tasa de IVA configurada es 0: revisa app_config.impuestos antes de facturar con IVA')
+  }
 
   const stockMap = ctx.stockMap ?? (await cargarStockMap(service))
   const comprometido = ctx.comprometido ?? (await cargarComprometido(service)).por
@@ -277,6 +314,8 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
     descuento_tipo: datos.descuento_tipo || null,
     descuento_valor: datos.descuento_tipo ? datos.descuento_valor : null,
     descuento_motivo: datos.descuento_tipo ? datos.descuento_motivo : null,
+    incluye_iva: incluyeIva,
+    iva_tasa: ivaTasa,
   }).select('id').single()
 
   if (error || !pedido) return malo(error?.message || 'No se pudo crear el pedido')

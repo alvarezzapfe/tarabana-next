@@ -25,8 +25,11 @@ function enPuntos(actual: number | null, previo: number | null): Variacion | nul
 }
 
 export default function SeccionResumen({ r }: { r: Reporte }) {
-  const kpis: { label: string; valor: string; v: Variacion | null; sufijo?: string }[] = [
-    { label: 'Facturado', valor: moneda(r.resumen.facturado), v: variacion(r.resumen.facturado, r.previo.facturado) },
+  const kpis: { label: string; valor: string; v: Variacion | null; sufijo?: string; nota?: string }[] = [
+    // Sin IVA, como todo lo analitico. El IVA entra como KPI propio y solo
+    // cuando lo hay, para que el reporte de un periodo sin pedidos
+    // facturados con IVA se vea exactamente como antes.
+    { label: 'Facturado', valor: moneda(r.resumen.facturado), v: variacion(r.resumen.facturado, r.previo.facturado), nota: 'sin IVA' },
     { label: 'Cobrado', valor: moneda(r.resumen.cobrado), v: variacion(r.resumen.cobrado, r.previo.cobrado) },
     {
       label: '% cobrado',
@@ -45,6 +48,15 @@ export default function SeccionResumen({ r }: { r: Reporte }) {
     { label: 'Ritmo anualizado', valor: moneda(r.ritmo), v: null },
   ]
 
+  if (r.resumen.iva > 0 || r.previo.iva > 0) {
+    kpis.splice(1, 0, {
+      label: 'IVA facturado',
+      valor: moneda(r.resumen.iva),
+      v: variacion(r.resumen.iva, r.previo.iva),
+      nota: 'aparte de Facturado',
+    })
+  }
+
   return (
     <section className="rep-sec">
       <h2 className="rep-sec-titulo"><span>1</span>Resumen</h2>
@@ -59,6 +71,7 @@ export default function SeccionResumen({ r }: { r: Reporte }) {
                 ? 'si el paso se mantiene'
                 : `${varTexto(k.v)}${k.v && k.sufijo ? k.sufijo : ''} vs anterior`}
             </small>
+            {k.nota && <small style={{ color: GRIS }}>{k.nota}</small>}
           </div>
         ))}
       </dl>
@@ -66,7 +79,8 @@ export default function SeccionResumen({ r }: { r: Reporte }) {
       <p className="rep-nota">
         El periodo anterior es {periodoLegible(r.anterior)}, de la misma duración. Cobrado va por fecha de
         pago; el resto, por fecha del pedido. «% cobrado» es la parte de lo facturado EN EL PERIODO que ya
-        entró, no el cociente de los dos KPIs.
+        entró, no el cociente de los dos KPIs. Las ventas van SIN IVA —el IVA no es ingreso, se cobra para
+        enterarlo— y la cobranza de abajo CON IVA, que es lo que el cliente debe.
       </p>
 
       <h3 className="rep-sub">Al día de hoy</h3>

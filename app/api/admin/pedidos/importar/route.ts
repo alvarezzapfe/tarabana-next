@@ -1,4 +1,5 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
+import { cargarTasaIva } from '../../../../../src/lib/iva'
 import { NextResponse } from 'next/server'
 import { canManageAsAdmin, canWrite, isVendedor } from '../../../../../src/lib/roles'
 import { logAction } from '../../../../../src/lib/audit'
@@ -82,10 +83,13 @@ export async function POST(request: Request) {
 
   // `hoyMx()` y no `new Date()`: la fecha de negocio es la de Mexico, y de
   // ella dependen el default de fecha_pedido y la validacion de "no futura".
+  // La tasa es solo para que la vista previa prometa el mismo total que va a
+  // cobrar la vista. La que se GUARDA la vuelve a leer `crearPedido`.
   const plan = construirPlan(lectura.filas, catalogo, {
     puedeDescuento,
     esVendedor,
     hoy: hoyMx(),
+    ivaTasa: await cargarTasaIva(service),
   })
 
   const avisos: string[] = [...plan.erroresGlobales]
@@ -160,6 +164,7 @@ export async function POST(request: Request) {
         descuento_tipo: pedido.descuento_tipo,
         descuento_valor: pedido.descuento_valor,
         descuento_motivo: pedido.descuento_motivo,
+        incluye_iva: pedido.incluye_iva,
       },
       {
         userId: user.id,

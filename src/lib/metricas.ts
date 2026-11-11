@@ -9,12 +9,29 @@
  * sobre la vista significaria "tiene algun pago" y contaria como cobrado
  * completo un pedido pagado a medias. Aqui siempre se suman montos.
  *
- * OJO con `total`: es el importe BRUTO, antes de descuento y de envio. La
- * vista viva calcula saldo = total - descuento + costo_envio - pagado
- * (verificado contra produccion, 15/15 filas; ver docs/SCHEMA_NOTES.md), asi
- * que el importe realmente facturado de un pedido es pagado + saldo, no
- * total. Usar `total` para montos sobreestima lo facturado por el descuento y
- * no cuadra con Cobrado ni con Por cobrar.
+ * OJO con `total`: es el importe BRUTO, antes de descuento, de envio y de
+ * IVA. La vista viva calcula saldo = total - descuento + costo_envio + IVA -
+ * pagado (ver docs/SCHEMA_NOTES.md), asi que el importe realmente facturado
+ * de un pedido es pagado + saldo, no total. Usar `total` para montos
+ * sobreestima lo facturado por el descuento y no cuadra con Cobrado ni con
+ * Por cobrar.
+ *
+ * ── Las dos unidades de este archivo ───────────────────────
+ *
+ * Desde que existe el switch de IVA hay DOS monedas y mezclarlas es el error
+ * facil, porque las dos se llaman "pesos":
+ *
+ *   VENTA, sin IVA (`ventaDe`, `ventaTotal`). Es la base analitica: Inicio,
+ *   reporte, tops, ticket promedio, crecimiento. Un pedido con IVA y uno sin
+ *   IVA por la misma mercancia tienen que pesar lo mismo en la grafica; si no,
+ *   prender el switch se veria como un 16% de crecimiento que nadie vendio.
+ *
+ *   COBRANZA, con IVA (`netoDe`, `cobradoDe`, `porCobrarDe`, `vencidoDe`,
+ *   `antiguedadCartera`). Es lo que el cliente DEBE, y el cliente debe el IVA.
+ *   Quitarlo aqui haria que un pedido pagado completo quedara con saldo.
+ *
+ * Cuando un numero divide uno entre otro —el % cobrado de una cohorte— los
+ * dos lados se expresan en la misma unidad; ver `cobradoSinIvaDe`.
  */
 
 import {
@@ -49,6 +66,15 @@ export type FilaSaldo = {
   total: number | null
   pagado: number | null
   saldo: number | null
+  /**
+   * IVA facturado del pedido. 0 en los que no lo llevan, que hoy son todos
+   * salvo los que alguien marque.
+   *
+   * Es obligatoria a proposito aunque casi siempre valga 0: si fuera opcional,
+   * una consulta que se olvidara de pedirla reportaria la venta CON IVA sin
+   * que nada fallara, y el numero se veria perfectamente normal.
+   */
+  iva_monto: number | null
   status: string
   estado_cobro: string
   dias_vencido: number | null
@@ -78,13 +104,54 @@ export type FilaSaldo = {
 const saldoPositivo = (f: FilaSaldo) => Math.max(0, f.saldo || 0)
 
 /**
- * Importe neto facturado de un pedido: lo ya cobrado mas lo que falta.
- * Es la unica base consistente con Cobrado y Por cobrar.
+ * Importe facturado de un pedido CON IVA: lo ya cobrado mas lo que falta.
+ * Es `total_con_envio`, y la unica base consistente con Cobrado y Por cobrar.
  */
 export const netoDe = (f: FilaSaldo) => (f.pagado || 0) + (f.saldo || 0)
 
 export function netoTotal(filas: FilaSaldo[]): number {
   return filas.reduce((s, f) => s + netoDe(f), 0)
+}
+
+/** El IVA facturado del pedido. 0 en los que no lo llevan. */
+export const ivaDeFila = (f: FilaSaldo) => f.iva_monto || 0
+
+export function ivaTotal(filas: FilaSaldo[]): number {
+  return filas.reduce((s, f) => s + ivaDeFila(f), 0)
+}
+
+/**
+ * La VENTA del pedido: lo facturado sin IVA. La base de todo lo analitico.
+ *
+ * El IVA no es ingreso de la cervecera, es dinero que se cobra para
+ * enterarlo. Contarlo como venta inflaria el ticket promedio, el top de
+ * clientes y el crecimiento de un mes contra otro segun cuantos pedidos se
+ * facturaron con IVA, que no dice nada del negocio.
+ */
+export const ventaDe = (f: FilaSaldo) => netoDe(f) - ivaDeFila(f)
+
+export function ventaTotal(filas: FilaSaldo[]): number {
+  return filas.reduce((s, f) => s + ventaDe(f), 0)
+}
+
+/**
+ * Lo cobrado de un pedido, expresado SIN IVA.
+ *
+ * Sirve para una sola cosa: dividir cobrado entre venta sin mezclar unidades.
+ * Si el numerador trajera IVA y el denominador no, un pedido con IVA pagado
+ * completo daria 116% cobrado.
+ *
+ * El reparto es proporcional —de cada peso que entra, la parte que
+ * corresponde a la mercancia— que es el mismo criterio con el que
+ * ./comisiones prorratea un pago parcial.
+ */
+export function cobradoSinIvaDe(f: FilaSaldo): number {
+  const pagado = f.pagado || 0
+  const neto = netoDe(f)
+  if (pagado === 0 || neto <= 0) return pagado
+  // A centavos: 580 * (1000 / 1160) da 499.99999999999994 en float, y ese
+  // numero se suma y se imprime como dinero.
+  return Math.round(pagado * (ventaDe(f) / neto) * 100) / 100
 }
 
 export function cobradoDe(filas: FilaSaldo[]): number {
@@ -184,14 +251,14 @@ export function porMes(filas: FilaSaldo[]): Map<string, FilaSaldo[]> {
 }
 
 /**
- * Serie de facturacion neta por mes, con los meses vacios en cero.
- * Neta, no bruta: ver la nota sobre `total` al inicio del archivo.
+ * Serie de VENTA por mes, con los meses vacios en cero.
+ * Neta y sin IVA: ver las dos unidades al inicio del archivo.
  */
 export function serieFacturada(filas: FilaSaldo[], n = 12, ahora = new Date()) {
   const mapa = porMes(filas)
   return ultimosMeses(n, ahora).map(m => ({
     mes: m.etiqueta,
-    total: netoTotal(mapa.get(m.clave) || []),
+    total: ventaTotal(mapa.get(m.clave) || []),
   }))
 }
 
@@ -425,7 +492,13 @@ export function nombreCliente(c: DatosCliente): { principal: string; secundario:
   return { principal, secundario: null }
 }
 
-/** Top clientes por facturacion neta, con su saldo y su peso en el total. */
+/**
+ * Top clientes por VENTA (sin IVA), con su saldo y su peso en el total.
+ *
+ * `facturado` va sin IVA y `saldo` con IVA a proposito: la primera columna
+ * ordena por quien compra mas y la segunda dice cuanto debe. Son las dos
+ * preguntas distintas de la misma tabla.
+ */
 export function topClientes(filas: FilaSaldo[], clientes: DatosCliente[], limite = 8): FilaCliente[] {
   const datos = new Map(clientes.map(c => [c.id, c]))
   const acum = new Map<string, { facturado: number; saldo: number }>()
@@ -433,7 +506,7 @@ export function topClientes(filas: FilaSaldo[], clientes: DatosCliente[], limite
   for (const f of filas) {
     if (!f.cliente_id) continue
     const a = acum.get(f.cliente_id) || { facturado: 0, saldo: 0 }
-    a.facturado += netoDe(f)
+    a.facturado += ventaDe(f)
     a.saldo += saldoPositivo(f)
     acum.set(f.cliente_id, a)
   }
@@ -823,8 +896,13 @@ export type DatosPeriodo = {
 }
 
 export type ResumenPeriodo = {
-  /** Neto facturado de los pedidos del periodo (fecha de pedido). */
+  /** VENTA del periodo (fecha de pedido): neto de descuento y SIN IVA. */
   facturado: number
+  /**
+   * IVA facturado en el periodo. Renglon aparte, no parte de `facturado`.
+   * 0 mientras nadie prenda el switch.
+   */
+  iva: number
   /** Lo que entro en el periodo (fecha de pago). NO es parte de `facturado`. */
   cobrado: number
   /**
@@ -849,11 +927,15 @@ const clientesDistintos = (filas: FilaSaldo[]): number =>
 
 export function resumenDePeriodo(datos: DatosPeriodo, r: Rango): ResumenPeriodo {
   const filas = filasEnRango(datos.saldos, r)
-  const facturado = netoTotal(filas)
+  const facturado = ventaTotal(filas)
+  // Los dos lados del cociente van sin IVA. `cobrado` de aqui arriba no:
+  // ese es dinero que entro y entro con IVA.
+  const cobradoCohorte = filas.reduce((t, f) => t + cobradoSinIvaDe(f), 0)
   return {
     facturado,
+    iva: ivaTotal(filas),
     cobrado: cobradoEnRango(datos.pagos, r),
-    pctCobrado: facturado > 0 ? (cobradoDe(filas) / facturado) * 100 : null,
+    pctCobrado: facturado > 0 ? (cobradoCohorte / facturado) * 100 : null,
     pedidos: filas.length,
     litros: litrosDeItems(itemsVendidosEn(datos.pedidos, r)),
     ticket: filas.length > 0 ? facturado / filas.length : null,
@@ -864,16 +946,22 @@ export function resumenDePeriodo(datos: DatosPeriodo, r: Rango): ResumenPeriodo 
 // ── Serie por bucket (la grafica y los sparklines) ──────────
 
 export type PuntoSerie = Bucket & {
-  /** Neto facturado de los pedidos del bucket. */
+  /** VENTA de los pedidos del bucket, sin IVA. */
   facturado: number
+  /** IVA de esos pedidos. Aparte, no sumado a `facturado`. */
+  iva: number
   /**
-   * De ese facturado, lo que ya entro — por cohorte del PEDIDO, no por fecha
-   * de pago. Es la mitad de abajo de la barra apilada.
+   * De esa venta, lo que ya entro — por cohorte del PEDIDO, no por fecha de
+   * pago, y prorrateado sin IVA para que divida contra `facturado`. Es la
+   * mitad de abajo de la barra apilada.
    */
   cobradoCohorte: number
   /** facturado - cobradoCohorte. Nunca negativo: un sobrepago no resta. */
   pendiente: number
-  /** Cobrado por FECHA DE PAGO: el dinero que entro dentro del bucket. */
+  /**
+   * Cobrado por FECHA DE PAGO: el dinero que entro dentro del bucket. CON
+   * IVA, porque es caja: es lo que llego al banco.
+   */
   cobrado: number
   litros: number
   pedidos: number
@@ -918,7 +1006,7 @@ function indiceBucket(buckets: Bucket[], fecha: string): number {
 export function serieDePeriodo(datos: DatosPeriodo, buckets: Bucket[]): PuntoSerie[] {
   const puntos: PuntoSerie[] = buckets.map(b => ({
     ...b,
-    facturado: 0, cobradoCohorte: 0, pendiente: 0, cobrado: 0,
+    facturado: 0, iva: 0, cobradoCohorte: 0, pendiente: 0, cobrado: 0,
     litros: 0, pedidos: 0, clientes: 0, ticket: 0, pct: null,
   }))
   const clientesPorBucket = buckets.map(() => new Set<string>())
@@ -926,8 +1014,11 @@ export function serieDePeriodo(datos: DatosPeriodo, buckets: Bucket[]): PuntoSer
   for (const f of datos.saldos) {
     const i = indiceBucket(buckets, f.fecha_pedido)
     if (i < 0) continue
-    puntos[i].facturado += netoDe(f)
-    puntos[i].cobradoCohorte += f.pagado || 0
+    puntos[i].facturado += ventaDe(f)
+    // Prorrateado sin IVA para que `pct` y `pendiente` no dividan peras
+    // entre manzanas: el facturado de arriba ya no trae IVA.
+    puntos[i].cobradoCohorte += cobradoSinIvaDe(f)
+    puntos[i].iva += ivaDeFila(f)
     puntos[i].pedidos += 1
     if (f.cliente_id) clientesPorBucket[i].add(f.cliente_id)
   }
@@ -1011,7 +1102,9 @@ export function partidasValuadas(
   datos: DatosPeriodo,
   r: Rango
 ): { partidas: PartidaValuada[]; sinReparto: number } {
-  const netoPorPedido = new Map(datos.saldos.map(f => [f.id, netoDe(f)]))
+  // Sin IVA: estas partidas alimentan las secciones de presentacion y estilo
+  // del reporte, que tienen que sumar lo mismo que el Facturado del resumen.
+  const netoPorPedido = new Map(datos.saldos.map(f => [f.id, ventaDe(f)]))
   const clientePorPedido = new Map(datos.saldos.map(f => [f.id, f.cliente_id]))
 
   const partidas: PartidaValuada[] = []

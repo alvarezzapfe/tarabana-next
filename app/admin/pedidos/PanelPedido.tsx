@@ -4,6 +4,8 @@ import { etiquetaFecha, hoyMx } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import { METODOS_PAGO } from '../../../src/lib/pagos'
 import AccionEditarProductos from './AccionEditarProductos'
+import SwitchIva from './SwitchIva'
+import { IVA_TASA_DEFAULT, etiquetaTasa } from '../../../src/lib/iva'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type FilaPedido, type PagoFila,
@@ -333,7 +335,7 @@ export default function PanelPedido(props: Props) {
         {/* ── Cuerpo ──────────────────────────────────────────── */}
         <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '16px 20px 28px' }}>
           {pestana === 'resumen' && (
-            <Resumen pedido={pedido} esVendedor={esVendedor} />
+            <Resumen pedido={pedido} esVendedor={esVendedor} canEdit={canEdit} onGuardado={onGuardado} />
           )}
           {pestana === 'pagos' && (
             <Pagos
@@ -420,7 +422,12 @@ function LineaTiempo({ pasos }: { pasos: ReturnType<typeof pasosDe> }) {
 
 // ── Resumen ───────────────────────────────────────────────────
 
-function Resumen({ pedido, esVendedor }: { pedido: FilaPedido; esVendedor: boolean }) {
+function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
+  pedido: FilaPedido
+  esVendedor: boolean
+  canEdit: boolean
+  onGuardado: (mensaje: string) => void
+}) {
   const campos: { label: string; valor: string | null }[] = [
     { label: 'Condiciones', valor: pedido.condiciones_pago ? pedido.condiciones_pago.replace('_', ' ') : null },
     { label: 'Vencimiento', valor: pedido.fecha_vencimiento ? etiquetaFecha(pedido.fecha_vencimiento) : null },
@@ -496,8 +503,25 @@ function Resumen({ pedido, esVendedor }: { pedido: FilaPedido; esVendedor: boole
             <Renglon etiqueta="Descuento" valor={`−${moneda(pedido.descuento)}`} color={ACENTO} />
           )}
           {pedido.costo_envio > 0 && <Renglon etiqueta="Envío" valor={moneda(pedido.costo_envio)} />}
+          {pedido.incluye_iva && (
+            <Renglon etiqueta={`IVA (${etiquetaTasa(pedido.iva_tasa || IVA_TASA_DEFAULT)})`} valor={moneda(pedido.iva)} />
+          )}
           <Renglon etiqueta="Total" valor={moneda(pedido.total)} fuerte />
         </div>
+
+        {/* El vendedor ve el renglon pero no el switch: cambiarlo mueve en
+            16% lo que paga el cliente, igual que un descuento. */}
+        {!esVendedor && (
+          <SwitchIva
+            pedidoId={pedido.id}
+            folio={pedido.folio}
+            status={pedido.status}
+            incluyeIva={pedido.incluye_iva}
+            ivaTasa={pedido.iva_tasa}
+            canEdit={canEdit}
+            onGuardado={onGuardado}
+          />
+        )}
       </div>
     </>
   )

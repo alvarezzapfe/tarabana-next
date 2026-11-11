@@ -371,3 +371,72 @@ antes/después por columna.
 Si alguna vez hace falta de verdad, se arregla con un trigger `BEFORE UPDATE`
 que haga `new.updated_at := now()` — pero eso es una migración, y mientras no
 exista, no confiar en la columna.
+
+## `pedidos_saldo` incluye IVA desde el 2026-11-11
+
+`pedidos.incluye_iva` y `pedidos.iva_tasa` (migración `20261111000000`)
+agregaron una tercera columna a la vista, `iva_monto`, y cambiaron lo que
+significan dos que ya existían:
+
+```
+base            = total - descuento_monto + costo_envio
+iva_monto       = round(base * iva_tasa, 2) si incluye_iva, si no 0
+total_con_envio = base + iva_monto        <- antes era solo `base`
+saldo           = total_con_envio - pagado
+```
+
+Dos consecuencias al leer datos:
+
+- **`total` sigue siendo bruto y SIN IVA.** El IVA nunca entra en
+  `pedido_items`: es un atributo del pedido y se suma una sola vez, al final.
+  `crearPedido` y `set_pedido_items` no lo conocen, y su comparación de totales
+  contra las partidas sigue cuadrando.
+- **Lo facturado de un pedido (`pagado + saldo`) ahora puede traer IVA.** Para
+  medir VENTA hay que restarle `iva_monto` — es lo que hace `ventaDe` en
+  `src/lib/metricas.ts`, que también explica por qué la cobranza sí lo deja.
+
+`iva_tasa` es una copia de `app_config.impuestos.iva_tasa` tomada al crear el
+pedido, no una lectura en vivo: un pedido cobrado y pagado al 16% no puede
+amanecer con saldo porque la tasa cambió.
+
+Los 15 pedidos vivos al momento de la migración quedaron en
+`incluye_iva = false`, así que ninguno movió su saldo; la propia migración lo
+verifica comparando contra una foto tomada antes de tocar nada.
+
+## El SQL Editor de Supabase NO garantiza que `begin/commit` sea atomico
+
+Lo demostro la migracion del IVA (`20261111000000`) el 2026-11-11. El archivo
+abria con `begin;`, cerraba con `commit;` y tomaba una foto de los saldos en
+una tabla temporal (`create temp table ... on commit drop`) para compararla al
+final y abortar si algun saldo se movia.
+
+Lo que paso al pegarlo en el SQL Editor:
+
+- El `begin` **no** protegio nada. Cada statement se confirmo por su cuenta.
+- La tabla temporal murio con el statement que la creo, no al final del
+  archivo.
+- El bloque de verificacion trono con `relation "_saldo_antes" does not
+  exist`, pero **todo lo de arriba ya estaba escrito**. No hubo rollback.
+
+El resultado fue correcto por suerte, no por diseno: se verifico a mano
+despues.
+
+### Que hacer en las migraciones nuevas
+
+- **No depender de que el archivo sea una sola transaccion.** Si una
+  verificacion tiene que poder abortar los cambios, el SQL Editor no es la
+  herramienta: hay que correr el archivo por un cliente que sostenga la
+  transaccion (`psql`, la CLI de Supabase).
+- **Nada de tablas temporales** para pasar datos entre statements del mismo
+  archivo. Una tabla normal, creada al inicio y borrada al final a mano. Si
+  vive en `public` —que PostgREST expone— prenderle RLS sin policies y
+  revocarle los grants, por si el script se interrumpe y sobrevive.
+- **Un guard sirve solo dentro del bloque que protege.** Un `do $$ ... raise
+  exception ... $$` suelto al principio del archivo no impide que lo de abajo
+  corra: hay que meter el guard y el DDL que protege en el MISMO `do`, con el
+  DDL por `execute`. Asi quedo el rollback del IVA
+  (`20261111000001_pedidos_iva_down.sql`), cuyo guard evita recrear la vista
+  sin `iva_monto` mientras haya pedidos que todavia declaran IVA.
+- Las verificaciones al final siguen valiendo la pena aunque no puedan
+  revertir: avisan. Pero hay que leerlas como una **alarma**, no como un
+  seguro, y confirmar a mano cuando una truene.

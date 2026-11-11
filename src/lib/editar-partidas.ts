@@ -24,6 +24,7 @@
  * Todo aqui es puro. Quien escribe es la ruta, via el RPC `set_pedido_items`.
  */
 import { precioLata, precioUnitario } from './calcular-pedido.ts'
+import { ivaDe } from './iva.ts'
 import { movimientosDeEntrega, type EstiloMix, type ItemEntrega } from './stock-entrega.ts'
 import { disponibleDe } from './stock-disponible.ts'
 import { ETIQUETA_COLUMNA } from './unidades.ts'
@@ -288,12 +289,20 @@ export function sobrepagoDe(entrada: {
   descuento_tipo?: string | null
   descuento_valor?: number | null
   costo_envio?: number | null
+  /**
+   * El IVA del pedido. Va aqui porque `pedidos_saldo` lo suma al saldo: sin
+   * el, un pedido con IVA pagado completo se veria como sobrepagado por el
+   * 16%, y la pantalla pediria confirmar un sobrepago que no existe.
+   */
+  incluye_iva?: boolean | null
+  iva_tasa?: number | null
   pagado: number
 }): Sobrepago | null {
-  const aCobrar =
+  const base =
     entrada.total -
     descuentoMonto(entrada.total, entrada.descuento_tipo, entrada.descuento_valor) +
     (Number(entrada.costo_envio) || 0)
+  const aCobrar = base + (entrada.incluye_iva ? ivaDe(base, Number(entrada.iva_tasa) || 0) : 0)
 
   const pagado = Number(entrada.pagado) || 0
   const sobra = Math.round((pagado - aCobrar) * 100) / 100

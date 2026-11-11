@@ -52,10 +52,10 @@ export async function cargarCatalogoImport(opciones: {
 
   const consultaClientes = esVendedor
     ? service.from('profiles')
-        .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
+        .select('id, full_name, email, razon_social, marca_negocio, nivel_precio, requiere_factura')
         .eq('vendedor_id', vendedorId!)
     : service.from('profiles')
-        .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
+        .select('id, full_name, email, razon_social, marca_negocio, nivel_precio, requiere_factura')
         .eq('role', 'comprador')
 
   const [{ data: productos }, { data: perfiles }] = await Promise.all([consultaProductos, consultaClientes])
@@ -66,6 +66,8 @@ export async function cargarCatalogoImport(opciones: {
     // El mismo nombre que ve en el resto del panel: nombre comercial primero.
     nombre: nombreLegible(p),
     nivel_precio: p.nivel_precio,
+    // Default del IVA cuando la columna del archivo viene vacia.
+    requiere_factura: !!p.requiere_factura,
   }))
 
   return {

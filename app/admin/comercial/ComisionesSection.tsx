@@ -90,7 +90,6 @@ export default async function ComisionesSection({
       tramos={datos.tramos}
       acento={acento}
       puedeEditar={puedeEditar}
-      ivaTasa={datos.ivaTasa}
       iepsTasa={datos.iepsTasa}
     />
   )

@@ -36,6 +36,7 @@ const saldo = (over: Partial<FilaSaldo> = {}): FilaSaldo => ({
   total: 1000,
   pagado: 400,
   saldo: 200,
+  iva_monto: 0,
   status: 'entregado',
   estado_cobro: 'parcial',
   dias_vencido: 0,
@@ -144,7 +145,7 @@ test('las filas sin cliente_id se ignoran en vez de agruparse juntas', () => {
 
 // ── Hoja "Clientes" ─────────────────────────────────────────
 
-test('un renglon por cliente, con las 35 columnas pedidas', () => {
+test('un renglon por cliente, con las 36 columnas pedidas', () => {
   const [hoja] = armarHojasClientes({
     clientes: [cliente(), cliente({ id: 'c2' })],
     saldos: [],
@@ -152,7 +153,7 @@ test('un renglon por cliente, con las 35 columnas pedidas', () => {
   })
   assert.equal(hoja.nombre, 'Clientes')
   assert.equal(hoja.filas.length, 2)
-  assert.equal(hoja.columnas.length, 35)
+  assert.equal(hoja.columnas.length, 36)
   assert.equal(hoja.columnas.length, new Set(hoja.columnas).size, 'hay encabezados repetidos')
   assert.equal(hoja.anchos!.length, hoja.columnas.length)
 })
@@ -190,6 +191,7 @@ test('cada celda corresponde a su encabezado', () => {
   assert.equal(f['Límite de crédito'], 25000)
   assert.equal(f['# pedidos'], 1)
   assert.equal(f['Total facturado'], 600)
+  assert.equal(f['IVA'], 0)
   assert.equal(f['Cobrado'], 400)
   assert.equal(f['Saldo'], 200)
   assert.equal(f['Notas'], 'Pide factura el mismo dia')
@@ -346,4 +348,25 @@ test('el nombre del archivo lleva la fecha de Mexico', () => {
     nombreArchivoClientes(new Date('2026-11-10T02:00:00Z')),
     'clientes-tarabana-2026-11-09.xlsx'
   )
+})
+
+test('IVA: el archivo de clientes cuadra consigo mismo', () => {
+  // Es de cobranza: facturado, cobrado y saldo van CON IVA y tienen que
+  // sumar entre si. La columna IVA dice cuanto de ese total es impuesto,
+  // para quien quiera la venta sin el.
+  const [hoja] = armarHojasClientes({
+    clientes: [cliente()],
+    // Mercancia 1,000 + IVA 160 = 1,160; pagados 500, saldo 660.
+    saldos: [saldo({ total: 1_000, iva_monto: 160, pagado: 500, saldo: 660 })],
+    vendedores: new Map(),
+  })
+  const f = hoja.filas[0]
+
+  assert.equal(f['Total facturado'], 1_160)
+  assert.equal(f['IVA'], 160)
+  assert.equal(f['Cobrado'], 500)
+  assert.equal(f['Saldo'], 660)
+  assert.equal(Number(f['Cobrado']) + Number(f['Saldo']), f['Total facturado'])
+  // Y la venta sin IVA se saca restando, que es para lo que esta la columna.
+  assert.equal(Number(f['Total facturado']) - Number(f['IVA']), 1_000)
 })

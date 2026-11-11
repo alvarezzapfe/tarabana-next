@@ -16,7 +16,7 @@ import {
 } from './leer-xlsx.ts'
 import {
   COLUMNAS_ADMIN, COLUMNAS_BASE, LIMITE_PARTIDAS, LIMITE_PEDIDOS, PRESENTACIONES,
-  construirPlan, itemsParaCrear, norm, parseCantidad, parseFecha,
+  construirPlan, itemsParaCrear, norm, parseCantidad, parseFecha, parseSiNo,
   type Catalogo,
 } from './pedidos-importar.ts'
 import { combinacionesDisponibles, construirPlantilla } from './plantilla-pedidos.ts'
@@ -44,7 +44,8 @@ const CATALOGO: Catalogo = {
   productos: [producto('p-magma', 'Magma'), producto('p-brisa', 'Brisa'), producto('p-silice', 'Sílice')],
   clientes: [
     { id: 'c-1', email: 'uno@cliente.mx', nombre: 'Cliente Uno', nivel_precio: 'publico' },
-    { id: 'c-2', email: 'dos@cliente.mx', nombre: 'Cliente Dos', nivel_precio: 'taproom' },
+    // Dos factura: es el default del IVA cuando la columna viene vacia.
+    { id: 'c-2', email: 'dos@cliente.mx', nombre: 'Cliente Dos', nivel_precio: 'taproom', requiere_factura: true },
   ],
 }
 
@@ -562,8 +563,13 @@ test('plantilla: capturada y vuelta a leer, llega completa al validador', async 
   assert.equal(ped.referencia, 'OC-100')
   assert.equal(ped.cliente_id, 'c-2')
   assert.equal(ped.condiciones_pago, '30_dias')
-  // Cliente 2 es mayorista: 12 latas a $45.
-  assert.equal(ped.total, 12 * 45)
+  // Cliente 2 es mayorista: 12 latas a $45 = 540.
+  assert.equal(ped.subtotal, 12 * 45)
+  // Y factura, asi que el default del IVA se aplica sin capturar nada en la
+  // columna: 540 + 86.40.
+  assert.equal(ped.incluye_iva, true)
+  assert.equal(ped.ivaMonto, 86.4)
+  assert.equal(ped.total, 626.4)
 })
 
 test('plantilla de no-admin: no trae las columnas de descuento ni envio', async () => {
@@ -705,4 +711,98 @@ test('el folio de factura es de admin: sin permiso no se guarda', () => {
   // No es un error de captura — la columna no existe en su plantilla —, pero
   // tampoco se guarda a escondidas.
   assert.equal(p.pedidos[0].folio_factura, null)
+})
+
+// ── IVA ─────────────────────────────────────────────────────
+
+test('parseSiNo entiende lo que de verdad llega de un Excel', () => {
+  for (const si of ['Si', 'SÍ', 'sí', 's', 'X', 'TRUE', '1', ' si ']) {
+    assert.equal(parseSiNo(si), true, si)
+  }
+  for (const no of ['No', 'NO', 'n', 'false', '0']) {
+    assert.equal(parseSiNo(no), false, no)
+  }
+  // Un "tal vez" es un error, no un false en silencio.
+  assert.equal(parseSiNo('tal vez'), null)
+  assert.equal(parseSiNo(''), null)
+})
+
+test('IVA: vacio toma el default del cliente', () => {
+  const sinFactura = plan(filas({ referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10' }))
+  assert.equal(sinFactura.pedidos[0].incluye_iva, false)
+  assert.equal(sinFactura.pedidos[0].ivaMonto, 0)
+
+  const conFactura = plan(filas({ referencia: 'B', cliente: 'dos@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10' }))
+  assert.equal(conFactura.pedidos[0].incluye_iva, true)
+})
+
+test('IVA: la columna manda sobre el default del cliente', () => {
+  const p = plan(filas({
+    referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
+    cantidad: '10', incluye_iva: 'Si',
+  })).pedidos[0]
+
+  assert.equal(p.incluye_iva, true)
+  // 10 latas a 50 = 500; IVA 80; total 580.
+  assert.equal(p.subtotal, 500)
+  assert.equal(p.ivaMonto, 80)
+  assert.equal(p.total, 580)
+})
+
+test('IVA: "No" se lo quita a un cliente que factura', () => {
+  const p = plan(filas({
+    referencia: 'B', cliente: 'dos@cliente.mx', producto: 'Magma', presentacion: 'Lata',
+    cantidad: '10', incluye_iva: 'No',
+  })).pedidos[0]
+  assert.equal(p.incluye_iva, false)
+  assert.equal(p.ivaMonto, 0)
+})
+
+test('IVA: va despues del descuento y sobre el envio', () => {
+  const p = plan(filas({
+    referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
+    cantidad: '10', incluye_iva: 'Si',
+    descuento_tipo: 'monto', descuento_valor: '100', descuento_motivo: 'Volumen',
+    costo_envio: '50',
+  })).pedidos[0]
+
+  // 500 - 100 + 50 = 450 de base; IVA 72; total 522.
+  assert.equal(p.descuentoMonto, 100)
+  assert.equal(p.ivaMonto, 72)
+  assert.equal(p.total, 522)
+})
+
+test('IVA: dos renglones con valores distintos es un error', () => {
+  const p = plan(filas(
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', incluye_iva: 'Si' },
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Brisa', presentacion: 'Lata', cantidad: '5', incluye_iva: 'No' },
+  )).pedidos[0]
+
+  assert.equal(p.valido, false)
+  assert.match(p.errores.map(e => e.mensaje).join(' '), /incluye_iva distintos/)
+})
+
+test('IVA: un valor que no se entiende se rechaza', () => {
+  const p = plan(filas({
+    referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
+    cantidad: '10', incluye_iva: 'tal vez',
+  })).pedidos[0]
+  assert.equal(p.valido, false)
+  assert.match(p.errores.map(e => e.mensaje).join(' '), /incluye_iva "tal vez" no valido/)
+})
+
+test('IVA: quien no puede descuentos tampoco lo captura', () => {
+  const p = construirPlan(
+    filas({ referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', incluye_iva: 'Si' }),
+    CATALOGO,
+    { puedeDescuento: false, esVendedor: true, hoy: HOY }
+  ).pedidos[0]
+
+  assert.equal(p.valido, false)
+  assert.match(p.errores.map(e => e.mensaje).join(' '), /solo admin y super admin pueden cambiar el IVA/)
+})
+
+test('IVA: la plantilla de admin trae la columna, la del vendedor no', () => {
+  assert.ok((COLUMNAS_ADMIN as readonly string[]).includes('incluye_iva'))
+  assert.ok(!(COLUMNAS_BASE as readonly string[]).includes('incluye_iva'))
 })

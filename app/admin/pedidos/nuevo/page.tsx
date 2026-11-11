@@ -17,6 +17,7 @@ import {
   celdaVale, disponibleEn, productoDeClave, tabular, vistaCelda,
 } from './pos-ui'
 import { comprometidoDeJSON } from '../../../../src/lib/stock-disponible'
+import { IVA_TASA_DEFAULT, tasaIvaDeConfig } from '../../../../src/lib/iva'
 
 /**
  * Captura de pedidos, estilo punto de venta.
@@ -106,6 +107,15 @@ export default function NuevoPedidoPage() {
 
   const [descuento, setDescuento] = useState<Descuento>({ tipo: '', valor: '', motivo: '' })
   const [costoEnvio, setCostoEnvio] = useState('')
+  /**
+   * null = "lo que diga el cliente". Asi el default por `requiere_factura`
+   * se aplica solo, tambien cuando el cliente llega por ?cliente= antes de
+   * que carguen los perfiles, sin necesidad de un efecto que reescriba el
+   * estado detras del usuario. En cuanto alguien toca el switch pasa a ser
+   * true/false explicito y ya manda sobre el default.
+   */
+  const [ivaManual, setIvaManual] = useState<boolean | null>(null)
+  const [ivaTasa, setIvaTasa] = useState(IVA_TASA_DEFAULT)
 
   const [drawerMix, setDrawerMix] = useState(false)
   const [carritoMovil, setCarritoMovil] = useState(false)
@@ -118,7 +128,7 @@ export default function NuevoPedidoPage() {
     const cargar = async () => {
       const [{ data: perfiles }, { data: prods }, { data: vend }, config, apartado] = await Promise.all([
         supabase.from('profiles')
-          .select('id, full_name, email, razon_social, marca_negocio, nivel_precio')
+          .select('id, full_name, email, razon_social, marca_negocio, nivel_precio, requiere_factura')
           .eq('role', 'comprador').order('full_name'),
         supabase.from('productos').select('*').eq('activo', true).order('nombre'),
         supabase.from('vendedores').select('id, nombre').eq('activo', true).order('nombre'),
@@ -136,6 +146,7 @@ export default function NuevoPedidoPage() {
         nombre: nombreLegible(p),
         email: p.email,
         nivel_precio: p.nivel_precio,
+        requiere_factura: !!p.requiere_factura,
       })))
       setProductos((prods || []) as Producto[])
       setVendedores(vend || [])
@@ -165,6 +176,11 @@ export default function NuevoPedidoPage() {
 
       const dias = (config as { negocio?: { dias_credito_default?: number } })?.negocio?.dias_credito_default
       setCondiciones(dias === 15 ? '15_dias' : dias === 30 ? '30_dias' : 'contado')
+
+      // Solo para MOSTRAR el renglon. La tasa que se guarda en el pedido la
+      // lee el servidor al crearlo: /api/admin/config pide isStaff, asi que
+      // al vendedor le responde 403 y aqui se queda el default.
+      setIvaTasa(tasaIvaDeConfig((config as { impuestos?: unknown })?.impuestos))
     }
     cargar()
   }, [supabase])
@@ -172,6 +188,7 @@ export default function NuevoPedidoPage() {
   // ── Derivados ─────────────────────────────────────────────
   const cliente = clientes.find(c => c.id === clienteId) || null
   const sufijo = precioSufijo(cliente?.nivel_precio)
+  const incluyeIva = ivaManual ?? !!cliente?.requiere_factura
   const presentaciones = useMemo(() => presentacionesVisibles(productos), [productos])
   const porId = useMemo(() => new Map(productos.map(p => [p.id, p])), [productos])
 
@@ -463,6 +480,10 @@ export default function NuevoPedidoPage() {
         descuento_tipo: puedeDescuento && descuento.tipo ? descuento.tipo : null,
         descuento_valor: puedeDescuento && descuento.tipo ? descVal : null,
         descuento_motivo: puedeDescuento && descuento.tipo ? descuento.motivo : null,
+        // La TASA no viaja: la lee el servidor de app_config. Que el
+        // navegador pudiera proponer la tasa de IVA seria dejarle fijar el
+        // precio final.
+        incluye_iva: incluyeIva,
       }),
     })
 
@@ -489,6 +510,10 @@ export default function NuevoPedidoPage() {
       onDescuento={setDescuento}
       costoEnvio={costoEnvio}
       onCostoEnvio={setCostoEnvio}
+      incluyeIva={incluyeIva}
+      onIncluyeIva={setIvaManual}
+      ivaTasa={ivaTasa}
+      puedeIva={puedeDescuento}
       bloqueos={bloqueos}
       enviando={enviando}
       onConfirmar={confirmar}
@@ -527,7 +552,12 @@ export default function NuevoPedidoPage() {
               clientes={clientes}
               recientes={recientes}
               valor={clienteId}
-              onElegir={setClienteId}
+              onElegir={id => {
+                setClienteId(id)
+                // Cada cliente trae su propio default; lo que se eligio para
+                // el anterior no tiene por que seguir puesto.
+                setIvaManual(null)
+              }}
             />
             {cliente && (
               <button

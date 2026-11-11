@@ -181,6 +181,7 @@ la acción tenga éxito.
 |---|---|---|
 | `pedido.status` | pedidos | `/api/admin/pedidos/[id]/status` |
 | `pedido.entregado_sin_stock` | pedidos | `/api/admin/pedidos/[id]/status` — **solo super_admin**, motivo obligatorio. Marca entregado SIN descontar inventario, para pedidos ya entregados cuyo stock se ajustó a mano. El motivo queda en `detalle`. |
+| `pedido.iva` | pedidos | `/api/admin/pedidos/[id]/iva` — prende o apaga el IVA. Quedarse en el `requiere_factura` del cliente es de oficina; salirse de ese default pide admin. Guarda antes/después de `incluye_iva` e `iva_tasa`, y el sobrepago si se confirmó uno. |
 | `pedido.pago` | pedidos | `/api/admin/pedidos/[id]/pago` |
 | `pedido.eliminar` | pedidos | `/api/admin/pedidos/[id]/eliminar` |
 | `pedido.crear` | pedidos | `/api/admin/pedidos/crear` |

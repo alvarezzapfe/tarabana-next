@@ -39,6 +39,8 @@ type PedidoPlan = {
   descuento_tipo: string | null
   descuento_valor: number | null
   descuentoMonto: number
+  incluye_iva: boolean
+  ivaMonto: number
   partidas: Partida[]
   subtotal: number
   total: number
@@ -286,6 +288,13 @@ export default function ImportarExcel({ onClose, puedeDescuento }: Props) {
                       <span style={{ fontSize: 11.5, color: GRIS_SUAVE, whiteSpace: 'nowrap' }}>
                         {p.partidas.length} {p.partidas.length === 1 ? 'partida' : 'partidas'}
                       </span>
+                      {/* Sin esto, un total 16% mayor que el de las partidas
+                          se ve como un error de precios. */}
+                      {p.incluye_iva && (
+                        <span style={{ fontSize: 11, color: GRIS_SUAVE, whiteSpace: 'nowrap' }} title={`Incluye ${moneda(p.ivaMonto)} de IVA`}>
+                          + IVA
+                        </span>
+                      )}
                       <span style={{ ...tabular, fontSize: 13, fontWeight: 700, color: p.valido ? TINTA : GRIS_SUAVE, minWidth: 80, textAlign: 'right' }}>
                         {p.valido ? moneda(p.total) : '—'}
                       </span>
