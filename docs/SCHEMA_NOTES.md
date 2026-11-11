@@ -479,3 +479,40 @@ Cuatro cosas que importan al leer o tocar esto:
   PUBLIC, PostgREST la publicaba como RPC y cualquier `anon` podía sondear
   pedidos ajenos saltándose RLS. Regla general: una función DEFINER que
   devuelva algo distinto de `trigger` necesita su `revoke`.
+
+## `pedidos.ajuste`: el renglón que cuadra contra la OC (2026-11-13)
+
+`20261113000000_pedido_ajuste.sql` agregó `pedidos.ajuste numeric(12,2)` y
+`pedidos.ajuste_motivo`, con un constraint que exige motivo cuando el ajuste no
+es cero. `pedidos_saldo` ganó la columna `ajuste` (la 26) y cambió dos
+fórmulas:
+
+```
+total_con_envio = total - descuento_monto + costo_envio + iva_monto + ajuste
+saldo           = total_con_envio - pagado
+base_gravable   = SIN CAMBIO
+```
+
+Cuatro cosas que importan al leer o tocar esto:
+
+- **El ajuste NO causa IVA.** Queda fuera de `base_gravable` a propósito. Para
+  cuadrar centavos es correcto; en un ajuste grande significa cobrar o rebajar
+  sin impuesto, que fiscalmente no es un descuento. De ahí que el motivo sea
+  obligatorio y que arriba del 5% la aplicación pida confirmación.
+
+- **El ajuste NO genera comisión, y la fórmula no lo menciona.** El prorrateo
+  `cobrado × (total − descuento) / total_con_envio` ya lo excluye porque el
+  ajuste está en el denominador y no en el numerador. Medido: con ajuste +500,
+  −300 y sin ajuste, los tres dan la misma base. No hay que "agregarle" nada a
+  comisiones; hay que no romper esa propiedad.
+
+- **Para medir VENTA hay que restar el ajuste además del IVA.** Es lo que hace
+  `ventaDe` en `src/lib/metricas.ts`. Dejarlo dentro haría que un mes donde se
+  cuadraron muchas OC pareciera un mes de más o menos ventas según el signo de
+  los ajustes. La cobranza sí lo cobra.
+
+- **`total_con_envio` ya no se escribe tres veces en la vista.** La definición
+  tiene cinco niveles anidados y cada uno calcula una sola cosa (base gravable,
+  IVA, total, saldo); el select de afuera es pura proyección. Si alguien
+  "simplifica" eso a un nivel, la suma del total vuelve a quedar repetida
+  cuatro veces y una discrepancia entre copias es invisible al revisar.
