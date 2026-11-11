@@ -132,6 +132,11 @@ export function baseGravableDe(entrada: EntradaBase): number {
 
 export type EntradaDesglose = EntradaBase & {
   tasa?: number | null
+  /**
+   * El ajuste para cuadrar contra la OC del cliente (ver ./ajuste). Se suma
+   * al final y NO causa IVA: entra despues de la base gravable, a proposito.
+   */
+  ajuste?: number | null
 }
 
 export type Desglose = {
@@ -141,21 +146,27 @@ export type Desglose = {
   /** Lo que de verdad causa IVA, ya prorrateado el descuento. */
   baseGravable: number
   iva: number
+  ajuste: number
   /** Lo que se le cobra al cliente. Es `total_con_envio` de la vista. */
   total: number
 }
 
 /**
- * Los seis renglones del documento, en el mismo orden en que se muestran.
+ * Los siete renglones del documento, en el mismo orden en que se muestran:
+ * Subtotal, Descuento, Envio, Base gravable, IVA, Ajuste, Total.
  *
  * `total` NO sale de la base gravable: sale del subtotal completo. Son dos
  * cosas distintas y confundirlas es el error facil — un pedido con una sola
  * partida gravada de cinco tiene una base chica y un total grande.
+ *
+ * El ajuste entra DESPUES del IVA, que es lo que lo vuelve un ajuste y no un
+ * descuento: no mueve la base gravable ni el impuesto.
  */
 export function desglosar(entrada: EntradaDesglose): Desglose {
   const subtotal = numero(entrada.subtotal)
   const descuento = numero(entrada.descuento)
   const envio = numero(entrada.envio)
+  const ajuste = numero(entrada.ajuste)
   const baseGravable = baseGravableDe(entrada)
   const iva = ivaDe(baseGravable, numero(entrada.tasa, IVA_TASA_DEFAULT))
 
@@ -165,7 +176,8 @@ export function desglosar(entrada: EntradaDesglose): Desglose {
     envio,
     baseGravable,
     iva,
-    total: subtotal - descuento + envio + iva,
+    ajuste,
+    total: subtotal - descuento + envio + iva + ajuste,
   }
 }
 

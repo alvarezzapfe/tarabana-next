@@ -15,7 +15,7 @@ import { nombreLegible } from '../../../src/lib/metricas'
 
 export {
   ACENTO, ROJO, TINTA, TINTA_MEDIA, GRIS, GRIS_SUAVE, BORDE, PISTA,
-  card, tabular, moneda,
+  card, tabular, moneda, monedaExacta, monedaFirmada,
 } from '../dash-ui'
 
 // ── Catalogos de estado ─────────────────────────────────────

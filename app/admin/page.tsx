@@ -17,7 +17,7 @@ export default async function AdminDashboard() {
     const [{ data: misSaldos }, { count: misClientes }, { data: miVendedorId }, datos] = await Promise.all([
       supabase
         .from('pedidos_saldo')
-        .select('id, cliente_id, total, pagado, saldo, iva_monto, status, estado_cobro, dias_vencido, fecha_pedido, created_at'),
+        .select('id, cliente_id, total, pagado, saldo, iva_monto, ajuste, status, estado_cobro, dias_vencido, fecha_pedido, created_at'),
       supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'comprador'),
       // Su propia ficha por RPC y no con un select: `vendedores` pide
       // is_staff() para leer y el vendedor no lo es. `mi_vendedor_id()` es
@@ -56,7 +56,7 @@ export default async function AdminDashboard() {
     // saldo, estado_cobro y dias_vencido calculados en SQL.
     supabase
       .from('pedidos_saldo')
-      .select('id, cliente_id, total, pagado, saldo, iva_monto, status, estado_cobro, dias_vencido, fecha_pedido, created_at'),
+      .select('id, cliente_id, total, pagado, saldo, iva_monto, ajuste, status, estado_cobro, dias_vencido, fecha_pedido, created_at'),
     // Las columnas van literales y no armadas con COLUMNAS_STOCK porque un
     // select dinamico impide que Supabase infiera el tipo del resultado.
     // La conversion a litros si vive en un solo lugar: src/lib/unidades.ts.

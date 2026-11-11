@@ -53,6 +53,29 @@ export const tabular = { fontVariantNumeric: 'tabular-nums' } as const
 /** Pesos redondeados. En los paneles no se muestran centavos. */
 export const moneda = (n: number) => `$${Math.round(n).toLocaleString('es-MX')}`
 
+/**
+ * Pesos CON centavos, para el desglose de un pedido.
+ *
+ * `moneda` redondea a pesos, que esta bien en KPIs y tablas —ahi los centavos
+ * son ruido— y mal donde el usuario tiene que cuadrar contra una orden de
+ * compra: un ajuste de 27 centavos se veria como "$0", y capturar el total de
+ * la OC mirando un numero redondeado produce un ajuste equivocado.
+ */
+export const monedaExacta = (n: number) =>
+  `$${n.toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+/**
+ * Con el signo adelante del peso: `+$27.00`, `−$500.00`.
+ *
+ * Es para el ajuste, el unico monto del desglose que puede ir en los dos
+ * sentidos. `monedaExacta(-27)` daria "$-27.00", que se lee como un error de
+ * formato; y sin el `+` explicito, un ajuste positivo no se distingue de
+ * cualquier otro renglon. El menos es U+2212, el mismo que usa el renglon de
+ * descuento.
+ */
+export const monedaFirmada = (n: number) =>
+  `${n < 0 ? '−' : '+'}${monedaExacta(Math.abs(n))}`
+
 /** Pesos compactos para ejes: $12k, $1.2M. */
 export function monedaCorta(n: number): string {
   const abs = Math.abs(n)

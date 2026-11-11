@@ -26,9 +26,10 @@
  *   IVA por la misma mercancia tienen que pesar lo mismo en la grafica; si no,
  *   prender el switch se veria como un 16% de crecimiento que nadie vendio.
  *
- *   COBRANZA, con IVA (`netoDe`, `cobradoDe`, `porCobrarDe`, `vencidoDe`,
- *   `antiguedadCartera`). Es lo que el cliente DEBE, y el cliente debe el IVA.
- *   Quitarlo aqui haria que un pedido pagado completo quedara con saldo.
+ *   COBRANZA, con IVA y con ajuste (`netoDe`, `cobradoDe`, `porCobrarDe`,
+ *   `vencidoDe`, `antiguedadCartera`). Es lo que el cliente DEBE, y el cliente
+ *   debe el IVA y el ajuste que se le cuadro. Quitarlos aqui haria que un
+ *   pedido pagado completo quedara con saldo.
  *
  * Cuando un numero divide uno entre otro —el % cobrado de una cohorte— los
  * dos lados se expresan en la misma unidad; ver `cobradoSinIvaDe`.
@@ -75,6 +76,12 @@ export type FilaSaldo = {
    * que nada fallara, y el numero se veria perfectamente normal.
    */
   iva_monto: number | null
+  /**
+   * El ajuste para cuadrar contra la OC del cliente. Obligatoria por lo mismo
+   * que `iva_monto`: opcional, una consulta que la olvidara reportaria la
+   * venta CON ajuste y el numero se veria normal.
+   */
+  ajuste: number | null
   status: string
   estado_cobro: string
   dias_vencido: number | null
@@ -120,22 +127,35 @@ export function ivaTotal(filas: FilaSaldo[]): number {
   return filas.reduce((s, f) => s + ivaDeFila(f), 0)
 }
 
+/** El ajuste del pedido. 0 en los que no lo tienen. */
+export const ajusteDeFila = (f: FilaSaldo) => f.ajuste || 0
+
+export function ajusteTotal(filas: FilaSaldo[]): number {
+  return filas.reduce((s, f) => s + ajusteDeFila(f), 0)
+}
+
 /**
- * La VENTA del pedido: lo facturado sin IVA. La base de todo lo analitico.
+ * La VENTA del pedido: lo facturado sin IVA y sin ajuste. La base de todo lo
+ * analitico.
  *
  * El IVA no es ingreso de la cervecera, es dinero que se cobra para
  * enterarlo. Contarlo como venta inflaria el ticket promedio, el top de
  * clientes y el crecimiento de un mes contra otro segun cuantos pedidos se
  * facturaron con IVA, que no dice nada del negocio.
+ *
+ * El ajuste tampoco es venta: es la diferencia que se concedio o se cobro
+ * para cuadrar contra la orden de compra del cliente. Dejarlo dentro haria que
+ * un mes donde se cuadraron muchas OC pareciera un mes de mas o menos ventas
+ * segun el signo de los ajustes. Va como renglon aparte (`ajusteTotal`).
  */
-export const ventaDe = (f: FilaSaldo) => netoDe(f) - ivaDeFila(f)
+export const ventaDe = (f: FilaSaldo) => netoDe(f) - ivaDeFila(f) - ajusteDeFila(f)
 
 export function ventaTotal(filas: FilaSaldo[]): number {
   return filas.reduce((s, f) => s + ventaDe(f), 0)
 }
 
 /**
- * Lo cobrado de un pedido, expresado SIN IVA.
+ * Lo cobrado de un pedido, expresado como VENTA (sin IVA ni ajuste).
  *
  * Sirve para una sola cosa: dividir cobrado entre venta sin mezclar unidades.
  * Si el numerador trajera IVA y el denominador no, un pedido con IVA pagado
@@ -903,6 +923,11 @@ export type ResumenPeriodo = {
    * 0 mientras nadie prenda el switch.
    */
   iva: number
+  /**
+   * Ajustes del periodo, netos: los positivos menos los negativos. Renglon
+   * aparte, tampoco parte de `facturado`.
+   */
+  ajuste: number
   /** Lo que entro en el periodo (fecha de pago). NO es parte de `facturado`. */
   cobrado: number
   /**
@@ -934,6 +959,7 @@ export function resumenDePeriodo(datos: DatosPeriodo, r: Rango): ResumenPeriodo 
   return {
     facturado,
     iva: ivaTotal(filas),
+    ajuste: ajusteTotal(filas),
     cobrado: cobradoEnRango(datos.pagos, r),
     pctCobrado: facturado > 0 ? (cobradoCohorte / facturado) * 100 : null,
     pedidos: filas.length,
@@ -946,10 +972,12 @@ export function resumenDePeriodo(datos: DatosPeriodo, r: Rango): ResumenPeriodo 
 // ── Serie por bucket (la grafica y los sparklines) ──────────
 
 export type PuntoSerie = Bucket & {
-  /** VENTA de los pedidos del bucket, sin IVA. */
+  /** VENTA de los pedidos del bucket, sin IVA ni ajuste. */
   facturado: number
   /** IVA de esos pedidos. Aparte, no sumado a `facturado`. */
   iva: number
+  /** Ajustes de esos pedidos, netos. Aparte tambien. */
+  ajuste: number
   /**
    * De esa venta, lo que ya entro — por cohorte del PEDIDO, no por fecha de
    * pago, y prorrateado sin IVA para que divida contra `facturado`. Es la
@@ -1006,7 +1034,7 @@ function indiceBucket(buckets: Bucket[], fecha: string): number {
 export function serieDePeriodo(datos: DatosPeriodo, buckets: Bucket[]): PuntoSerie[] {
   const puntos: PuntoSerie[] = buckets.map(b => ({
     ...b,
-    facturado: 0, iva: 0, cobradoCohorte: 0, pendiente: 0, cobrado: 0,
+    facturado: 0, iva: 0, ajuste: 0, cobradoCohorte: 0, pendiente: 0, cobrado: 0,
     litros: 0, pedidos: 0, clientes: 0, ticket: 0, pct: null,
   }))
   const clientesPorBucket = buckets.map(() => new Set<string>())
@@ -1019,6 +1047,7 @@ export function serieDePeriodo(datos: DatosPeriodo, buckets: Bucket[]): PuntoSer
     // entre manzanas: el facturado de arriba ya no trae IVA.
     puntos[i].cobradoCohorte += cobradoSinIvaDe(f)
     puntos[i].iva += ivaDeFila(f)
+    puntos[i].ajuste += ajusteDeFila(f)
     puntos[i].pedidos += 1
     if (f.cliente_id) clientesPorBucket[i].add(f.cliente_id)
   }

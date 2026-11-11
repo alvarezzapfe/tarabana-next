@@ -310,6 +310,12 @@ export function sobrepagoDe(entrada: {
   gravable?: number | null
   envio_incluye_iva?: boolean | null
   iva_tasa?: number | null
+  /**
+   * El ajuste de la OC (ver ./ajuste). Va aqui porque la vista lo suma al
+   * saldo: sin el, meterle un ajuste negativo a un pedido ya cobrado no
+   * avisaria del sobrepago que deja.
+   */
+  ajuste?: number | null
   pagado: number
 }): Sobrepago | null {
   const descuento = descuentoMonto(entrada.total, entrada.descuento_tipo, entrada.descuento_valor)
@@ -322,7 +328,10 @@ export function sobrepagoDe(entrada: {
     envio,
     envioConIva: entrada.envio_incluye_iva,
   })
-  const aCobrar = entrada.total - descuento + envio + ivaDe(base, Number(entrada.iva_tasa) || 0)
+  const aCobrar =
+    entrada.total - descuento + envio
+    + ivaDe(base, Number(entrada.iva_tasa) || 0)
+    + (Number(entrada.ajuste) || 0)
 
   const pagado = Number(entrada.pagado) || 0
   const sobra = Math.round((pagado - aCobrar) * 100) / 100

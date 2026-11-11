@@ -37,6 +37,7 @@ const saldo = (over: Partial<FilaSaldo> = {}): FilaSaldo => ({
   pagado: 400,
   saldo: 200,
   iva_monto: 0,
+  ajuste: 0,
   status: 'entregado',
   estado_cobro: 'parcial',
   dias_vencido: 0,

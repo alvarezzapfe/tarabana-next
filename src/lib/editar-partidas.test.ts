@@ -405,3 +405,29 @@ test('sobrepago: desgravar un pedido cobrado lo deja sobrepagado', () => {
   const s = sobrepagoDe({ total: 1_000, gravable: 0, iva_tasa: 0.16, pagado: 1_160 })
   assert.equal(s!.sobra, 160)
 })
+
+// ── Sobrepago con ajuste ────────────────────────────────────
+//
+// La vista suma el ajuste al saldo, asi que `sobrepagoDe` tiene que contarlo:
+// sin eso, meterle un ajuste negativo a un pedido ya cobrado no avisaria.
+
+test('sobrepago: un ajuste negativo deja sobrepagado un pedido cobrado', () => {
+  // Mercancia 1,000 cobrada completa; se ajusta -200 para cuadrar la OC.
+  const s = sobrepagoDe({ total: 1_000, gravable: 0, ajuste: -200, pagado: 1_000 })
+  assert.equal(s!.aCobrar, 800)
+  assert.equal(s!.sobra, 200)
+})
+
+test('sobrepago: un ajuste positivo lo quita', () => {
+  // Estaba sobrepagado por 100; el ajuste sube el total y ya no sobra.
+  assert.equal(sobrepagoDe({ total: 1_000, ajuste: 100, pagado: 1_100 }), null)
+})
+
+test('sobrepago: el ajuste se suma DESPUES del IVA', () => {
+  // 1,000 gravados: IVA 160. Ajuste de 0.27 para cuadrar la OC en 1,160.27.
+  const s = sobrepagoDe({
+    total: 1_000, gravable: 1_000, iva_tasa: 0.16, ajuste: 0.27, pagado: 1_200,
+  })
+  assert.equal(s!.aCobrar, 1_160.27)
+  assert.equal(s!.sobra, 39.73)
+})

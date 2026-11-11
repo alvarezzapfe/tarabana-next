@@ -44,6 +44,7 @@ import {
   netoDe,
   ivaTotal,
   cobradoSinIvaDe,
+  ajusteTotal,
   porCobrarDe,
   serieFacturada,
   DIAS_ANO,
@@ -84,6 +85,7 @@ function fila(over: Partial<FilaSaldo> = {}): FilaSaldo {
     pagado: 0,
     saldo: 1_000,
     iva_monto: 0,
+    ajuste: 0,
     status: 'confirmado',
     estado_cobro: 'pendiente',
     dias_vencido: 0,
@@ -1317,8 +1319,8 @@ const entradaHallazgos = (over: Partial<Parameters<typeof hallazgos>[0]> = {}) =
 
 test('hallazgos: la variacion de facturado se dice con su direccion', () => {
   const h = hallazgos(entradaHallazgos({
-    resumen: { facturado: 1_500, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_500, clientes: 1 },
-    previo: { facturado: 1_000, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_000, clientes: 1 },
+    resumen: { facturado: 1_500, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_500, clientes: 1 },
+    previo: { facturado: 1_000, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_000, clientes: 1 },
   }))
   const f = h.find(x => x.clave === 'facturado')!
   assert.match(f.texto, /subió 50%/)
@@ -1328,8 +1330,8 @@ test('hallazgos: la variacion de facturado se dice con su direccion', () => {
 
 test('hallazgos: sin periodo anterior lo dice, no inventa un porcentaje', () => {
   const h = hallazgos(entradaHallazgos({
-    resumen: { facturado: 1_500, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_500, clientes: 1 },
-    previo: { facturado: 0, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 0, litros: 0, ticket: null, clientes: 0 },
+    resumen: { facturado: 1_500, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_500, clientes: 1 },
+    previo: { facturado: 0, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 0, litros: 0, ticket: null, clientes: 0 },
   }))
   const f = h.find(x => x.clave === 'facturado')!
   assert.match(f.texto, /no tuvo ventas/)
@@ -1357,7 +1359,7 @@ test('hallazgos: el producto mas vendido va en litros y con su peso', () => {
   // lista: esa llega recortada a los primeros N y el porcentaje saldria
   // inflado justo cuando hay muchos productos.
   const h = hallazgos(entradaHallazgos({
-    resumen: { facturado: 0, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 2, litros: 200, ticket: null, clientes: 1 },
+    resumen: { facturado: 0, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 2, litros: 200, ticket: null, clientes: 1 },
     productos: [{ nombre: 'Oleaje', litros: 75 }, { nombre: 'Caliza', litros: 25 }],
   }))
   const p = h.find(x => x.clave === 'producto')!
@@ -1378,8 +1380,8 @@ test('hallazgos: sin datos no inventa ninguno, y nunca pasa de cuatro', () => {
   assert.deepEqual(hallazgos(entradaHallazgos()), [])
 
   const todos = hallazgos(entradaHallazgos({
-    resumen: { facturado: 1_500, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 75, ticket: 1_500, clientes: 1 },
-    previo: { facturado: 1_000, iva: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_000, clientes: 1 },
+    resumen: { facturado: 1_500, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 75, ticket: 1_500, clientes: 1 },
+    previo: { facturado: 1_000, iva: 0, ajuste: 0, cobrado: 0, pctCobrado: null, pedidos: 1, litros: 0, ticket: 1_000, clientes: 1 },
     cobranza: [cobro()],
     productos: [{ nombre: 'Oleaje', litros: 75 }],
     porCobrar: 1_000,
@@ -1524,4 +1526,66 @@ test('IVA: la serie por bucket separa venta de IVA', () => {
   assert.equal(p.cobradoCohorte, 500)
   assert.equal(p.pendiente, 500)
   assert.equal(p.pct, 50)
+})
+
+// ── Ajuste ──────────────────────────────────────────────────
+//
+// El ajuste cuadra contra la OC del cliente: no es venta. Va como renglon
+// aparte, igual que el IVA, y por la misma razon — dejarlo dentro haria que un
+// mes donde se cuadraron muchas OC pareciera un mes de mas o menos ventas
+// segun el signo de los ajustes.
+
+const conAjuste = (monto: number, over: Partial<FilaSaldo> = {}) =>
+  fila({ total: 1_000, iva_monto: 0, ajuste: monto, pagado: 0, saldo: 1_000 + monto, ...over })
+
+test('ajuste: la venta no lo cuenta, el neto si', () => {
+  const f = conAjuste(200)
+  assert.equal(netoDe(f), 1_200)
+  assert.equal(ventaDe(f), 1_000)
+  assert.equal(ajusteTotal([f]), 200)
+})
+
+test('ajuste: un ajuste negativo tampoco baja la venta', () => {
+  const f = conAjuste(-200)
+  assert.equal(netoDe(f), 800)
+  assert.equal(ventaDe(f), 1_000)
+  assert.equal(ajusteTotal([f]), -200)
+})
+
+test('ajuste: la cobranza SI lo cobra', () => {
+  // Es lo que el cliente debe, cuadrado contra su OC.
+  assert.equal(porCobrarDe([conAjuste(200)]), 1_200)
+  assert.equal(porCobrarDe([conAjuste(-200)]), 800)
+})
+
+test('ajuste: con IVA, los dos salen de la venta', () => {
+  // Mercancia 1,000, IVA 160, ajuste 0.27: el cliente debe 1,160.27 y la
+  // venta sigue siendo 1,000.
+  const f = fila({ total: 1_000, iva_monto: 160, ajuste: 0.27, pagado: 0, saldo: 1_160.27 })
+  assert.equal(netoDe(f), 1_160.27)
+  assert.equal(ventaDe(f), 1_000)
+})
+
+test('ajuste: los ajustes se netean entre si en el total del periodo', () => {
+  assert.equal(ajusteTotal([conAjuste(300), conAjuste(-100)]), 200)
+  assert.equal(ajusteTotal([]), 0)
+})
+
+test('ajuste: el resumen lo pone como renglon aparte', () => {
+  const r = resumenDePeriodo(
+    { saldos: [conAjuste(250, { fecha_pedido: '2026-11-02' })], pagos: [], pedidos: [] },
+    rangoDePeriodo('mes', AHORA)
+  )
+  assert.equal(r.facturado, 1_000)
+  assert.equal(r.ajuste, 250)
+  assert.equal(r.iva, 0)
+  // El ticket promedio tampoco se infla.
+  assert.equal(r.ticket, 1_000)
+})
+
+test('ajuste: el % cobrado no pasa del 100% por un ajuste', () => {
+  // Pagado completo con ajuste: el cobrado prorrateado se expresa como venta.
+  const f = conAjuste(200, { pagado: 1_200, saldo: 0 })
+  assert.equal(cobradoSinIvaDe(f), 1_000)
+  assert.equal((cobradoSinIvaDe(f) / ventaDe(f)) * 100, 100)
 })
