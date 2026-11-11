@@ -5,10 +5,24 @@ import { useRouter } from 'next/navigation'
 import EditarPartidas from '../../EditarPartidas'
 import { BotonEditarProductos } from '../../AccionEditarProductos'
 import { folioDe } from '../../pedidos-ui'
+import SwitchIva from '../../SwitchIva'
 
 const statusConfig: Record<string, string> = {
   pendiente: 'Pendiente', confirmado: 'Confirmado', enviado: 'En camino',
   entregado: 'Entregado', cancelado: 'Cancelado',
+}
+
+/**
+ * Encabezado de seccion.
+ *
+ * Fuera del componente a proposito: declarado adentro, React lo ve como un
+ * tipo distinto en cada render y remonta el nodo — el mismo problema que la
+ * lista de precios tuvo con sus celdas, donde costaba el foco del input.
+ */
+function Section({ title }: { title: string }) {
+  return (
+    <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '24px 0 12px', paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>{title}</p>
+  )
 }
 
 export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: any) {
@@ -69,9 +83,6 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
 
   const inputStyle = { width: '100%', padding: '10px 13px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 8, color: '#1a1a1a', fontSize: 14, boxSizing: 'border-box' as const, outline: 'none', fontFamily: 'system-ui' }
   const labelStyle = { color: '#6b7280', fontSize: 13, display: 'block' as const, marginBottom: 5, textTransform: 'uppercase' as const, letterSpacing: '0.07em' }
-  const Section = ({ title }: { title: string }) => (
-    <p style={{ color: '#E8531D', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: '24px 0 12px', paddingBottom: 6, borderBottom: '1px solid #e5e7eb' }}>{title}</p>
-  )
 
   return (
     <div style={{ maxWidth: 800, fontFamily: 'system-ui, sans-serif' }}>
@@ -183,6 +194,23 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
           </div>
         </div>
       )}
+
+      {/* IVA.
+
+          Se guarda SOLO, sin esperar al boton de abajo, porque va por su
+          propia ruta: cambiar el IVA puede dejar el pedido sobrepagado y eso
+          se pregunta antes de escribir. Meterlo en el PATCH general
+          obligaria a repetir ahi esa confirmacion y el audit_log. */}
+      <Section title="IVA" />
+      <SwitchIva
+        pedidoId={pedido.id}
+        folio={folioDe(pedido.id)}
+        status={pedido.status}
+        incluyeIva={!!pedido.incluye_iva}
+        ivaTasa={pedido.iva_tasa}
+        canEdit
+        onGuardado={() => router.refresh()}
+      />
 
       <Section title="Fechas" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 4 }}>
