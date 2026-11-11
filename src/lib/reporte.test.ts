@@ -19,7 +19,7 @@ const AHORA = new Date('2026-11-05T12:00:00-06:00')
 const PERIODO = rangoDePeriodo('mes', AHORA)
 
 const saldo = (over: Partial<FilaSaldo> = {}): FilaSaldo => ({
-  id: 'p1', cliente_id: 'c1', total: 1_000, pagado: 0, saldo: 1_000,
+  id: 'p1', cliente_id: 'c1', total: 1_000, pagado: 0, saldo: 1_000, iva_monto: 0,
   status: 'confirmado', estado_cobro: 'pendiente', dias_vencido: 0,
   fecha_pedido: '2026-11-02', fecha_vencimiento: '2026-12-02',
   created_at: '2026-11-02T00:00:00Z',

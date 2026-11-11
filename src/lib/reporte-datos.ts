@@ -30,7 +30,7 @@ export async function cargarDatosReporte(supabase: SupabaseClient): Promise<Dato
     // calcula contra CURRENT_DATE.
     supabase
       .from('pedidos_saldo')
-      .select('id, cliente_id, total, pagado, saldo, status, estado_cobro, dias_vencido, fecha_pedido, fecha_vencimiento, created_at'),
+      .select('id, cliente_id, total, pagado, saldo, iva_monto, status, estado_cobro, dias_vencido, fecha_pedido, fecha_vencimiento, created_at'),
 
     // `precio_unitario` y `metadata` ademas de cantidad y unidad: el primero
     // es la base con la que se reparte el neto del pedido entre sus partidas

@@ -159,6 +159,10 @@ export default function DashboardClient({ saldos, productos, clientes, pedidosIt
       {
         label: 'Facturado',
         valor: moneda(resumen.facturado),
+        // Sin IVA, para que un pedido facturado con IVA y uno sin el pesen lo
+        // mismo. El IVA va como nota y solo cuando hay: mientras nadie prenda
+        // el switch, el KPI se ve igual que siempre.
+        detalle: resumen.iva > 0 ? `sin IVA · ${moneda(resumen.iva)} de IVA` : undefined,
         variacion: variacion(resumen.facturado, previo.facturado),
         sparkline: serieKpi.map(p => p.facturado),
       },
