@@ -402,3 +402,41 @@ amanecer con saldo porque la tasa cambió.
 Los 15 pedidos vivos al momento de la migración quedaron en
 `incluye_iva = false`, así que ninguno movió su saldo; la propia migración lo
 verifica comparando contra una foto tomada antes de tocar nada.
+
+## El SQL Editor de Supabase NO garantiza que `begin/commit` sea atomico
+
+Lo demostro la migracion del IVA (`20261111000000`) el 2026-11-11. El archivo
+abria con `begin;`, cerraba con `commit;` y tomaba una foto de los saldos en
+una tabla temporal (`create temp table ... on commit drop`) para compararla al
+final y abortar si algun saldo se movia.
+
+Lo que paso al pegarlo en el SQL Editor:
+
+- El `begin` **no** protegio nada. Cada statement se confirmo por su cuenta.
+- La tabla temporal murio con el statement que la creo, no al final del
+  archivo.
+- El bloque de verificacion trono con `relation "_saldo_antes" does not
+  exist`, pero **todo lo de arriba ya estaba escrito**. No hubo rollback.
+
+El resultado fue correcto por suerte, no por diseno: se verifico a mano
+despues.
+
+### Que hacer en las migraciones nuevas
+
+- **No depender de que el archivo sea una sola transaccion.** Si una
+  verificacion tiene que poder abortar los cambios, el SQL Editor no es la
+  herramienta: hay que correr el archivo por un cliente que sostenga la
+  transaccion (`psql`, la CLI de Supabase).
+- **Nada de tablas temporales** para pasar datos entre statements del mismo
+  archivo. Una tabla normal, creada al inicio y borrada al final a mano. Si
+  vive en `public` —que PostgREST expone— prenderle RLS sin policies y
+  revocarle los grants, por si el script se interrumpe y sobrevive.
+- **Un guard sirve solo dentro del bloque que protege.** Un `do $$ ... raise
+  exception ... $$` suelto al principio del archivo no impide que lo de abajo
+  corra: hay que meter el guard y el DDL que protege en el MISMO `do`, con el
+  DDL por `execute`. Asi quedo el rollback del IVA
+  (`20261111000001_pedidos_iva_down.sql`), cuyo guard evita recrear la vista
+  sin `iva_monto` mientras haya pedidos que todavia declaran IVA.
+- Las verificaciones al final siguen valiendo la pena aunque no puedan
+  revertir: avisan. Pero hay que leerlas como una **alarma**, no como un
+  seguro, y confirmar a mano cuando una truene.

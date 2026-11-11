@@ -2,6 +2,24 @@
 -- IVA por pedido: pedidos.incluye_iva / iva_tasa y pedidos_saldo
 -- ============================================================
 --
+-- APLICADA el 2026-11-11, con un tropiezo que vale la pena dejar escrito.
+--
+-- La version original tomaba la foto de los saldos en una TABLA TEMPORAL
+-- (`create temp table ... on commit drop`). El SQL Editor de Supabase no
+-- corre el archivo como una sola transaccion: el `begin` no lo protegio, cada
+-- statement se confirmo por su cuenta, y la temporal murio con el suyo. Al
+-- llegar al bloque de verificacion la tabla ya no existia y ese bloque trono
+-- — pero todo lo de arriba YA estaba escrito, asi que no hubo rollback.
+--
+-- El resultado se verifico a mano contra produccion y quedo correcto: vista
+-- con las 24 columnas en orden, security_invoker = on, dos constraints, 0
+-- pedidos con IVA y 0 iva_monto distinto de cero.
+--
+-- La foto ahora va en una tabla NORMAL que el propio script borra al final,
+-- asi que la verificacion funciona aunque cada statement se confirme solo.
+-- La leccion general esta en docs/SCHEMA_NOTES.md: una migracion no puede
+-- depender de que begin/commit sea atomico en el SQL Editor.
+--
 -- Los precios de lista son SIN IVA. El IEPS si va incluido en el precio y se
 -- queda como esta. Lo que falta es poder marcar un pedido como facturado con
 -- IVA y que el saldo lo cobre.
@@ -83,14 +101,28 @@ begin;
 
 -- ── 0. Foto de los saldos de HOY ────────────────────────────
 --
--- Se toma antes de tocar nada y se compara al final, dentro de la misma
--- transaccion. Es el check que de verdad importa de esta migracion: que
--- agregar IVA no haya movido ni un centavo de lo ya facturado. Si cambia
--- aunque sea una fila, la migracion aborta y no queda nada escrito.
+-- Se toma antes de tocar nada y se compara al final. Es el check que de
+-- verdad importa de esta migracion: que agregar IVA no haya movido ni un
+-- centavo de lo ya facturado.
+--
+-- Tabla NORMAL y no temporal. Una temporal vive mientras viva su sesion y su
+-- transaccion, y el SQL Editor de Supabase confirma statement por statement:
+-- la foto se borraba antes de poder compararla. Esta se borra al final del
+-- script, a mano.
+--
+-- Con RLS prendida y sin policies, y los grants revocados: si el script se
+-- interrumpe y la tabla sobrevive, `public` es un esquema que PostgREST
+-- expone, y los saldos de todos los clientes no pueden quedar colgados ahi
+-- al alcance de cualquier `authenticated`.
 
-create temp table _saldo_antes on commit drop as
+drop table if exists public._iva_saldo_antes;
+
+create table public._iva_saldo_antes as
 select id, total_con_envio, pagado, saldo, estado_cobro, dias_vencido
   from public.pedidos_saldo;
+
+alter table public._iva_saldo_antes enable row level security;
+revoke all on public._iva_saldo_antes from anon, authenticated;
 
 
 -- ── 1. Columnas ─────────────────────────────────────────────
@@ -338,9 +370,9 @@ begin
   end if;
 
   -- 5d. Ni un centavo movido. Se compara contra la foto de arriba.
-  select count(*) into v_total from _saldo_antes;
+  select count(*) into v_total from public._iva_saldo_antes;
   select count(*) into v_movidos
-    from _saldo_antes a
+    from public._iva_saldo_antes a
     join public.pedidos_saldo d on d.id = a.id
    where (a.total_con_envio, a.pagado, a.saldo, a.estado_cobro, a.dias_vencido)
       is distinct from
@@ -359,5 +391,9 @@ begin
 
   raise notice 'IVA listo: pedidos.incluye_iva/iva_tasa creadas, pedidos_saldo con 24 columnas, % pedidos intactos.', v_total;
 end $$;
+
+-- La foto ya cumplio. Se borra explicitamente y no por fin de transaccion,
+-- que es justamente lo que no se puede dar por hecho aqui.
+drop table public._iva_saldo_antes;
 
 commit;
