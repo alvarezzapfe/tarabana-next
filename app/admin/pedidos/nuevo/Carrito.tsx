@@ -4,7 +4,8 @@ import {
   type Partida, estadoIva, gravableDe, litrosDePartida, litrosTotalesDe, moneda, tabular,
 } from './pos-ui'
 import { formatLitros } from '../../../../src/lib/unidades'
-import { desglosar, etiquetaTasa } from '../../../../src/lib/iva'
+import { desglosar, etiquetaTasa, ivaDe } from '../../../../src/lib/iva'
+import ChipIva from './ChipIva'
 
 /**
  * Carrito de la captura.
@@ -98,6 +99,15 @@ export default function Carrito(props: Props) {
   const estado = estadoIva(partidas)
   const litros = litrosTotalesDe(partidas)
 
+  // Los anchos viven en constantes porque el encabezado y los renglones
+  // tienen que quedar alineados: si se escriben dos veces, la columna "IVA"
+  // deja de caer sobre los chips en cuanto alguien toca uno de los dos.
+  const ANCHO_CANT = 42
+  const ANCHO_IVA = 66
+  const ANCHO_IMPORTE = 74
+  const ANCHO_QUITAR = 22
+  const HUECO = 6
+
   const input: React.CSSProperties = {
     width: '100%', padding: '7px 9px', background: '#fff',
     border: `1px solid ${BORDE}`, borderRadius: 7, color: TINTA,
@@ -119,12 +129,63 @@ export default function Carrito(props: Props) {
           </span>
         </div>
 
+        {/* ── IVA en todo ───────────────────────────────────
+            Arriba de la lista y no abajo: es el control que manda sobre todos
+            los de abajo, y debajo de la lista se leia como un total mas. */}
+        {partidas.length > 0 && (
+          <div
+            style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              padding: '7px 9px', marginBottom: 8,
+              background: '#fafafa', border: `1px solid ${BORDE}`, borderRadius: 8,
+            }}
+          >
+            <span style={{ color: TINTA_MEDIA, fontSize: 12, fontWeight: 600 }}>IVA en todo</span>
+            {estado === 'mezcla' && (
+              <span style={{ color: GRIS_SUAVE, fontSize: 10.5 }}>
+                {partidas.filter(p => p.incluyeIva).length} de {partidas.length}
+              </span>
+            )}
+            <span style={{ marginLeft: 'auto' }}>
+              <ChipIva
+                puesto={estado === 'todas'}
+                indeterminado={estado === 'mezcla'}
+                tasa={ivaTasa}
+                deshabilitado={!puedeIva}
+                onCambio={onIvaTodas}
+                etiquetaApagado="Sin IVA"
+                titulo={
+                  estado === 'mezcla'
+                    ? 'Unas partidas van gravadas y otras no. Prender cobra IVA en todas.'
+                    : estado === 'todas' ? 'Quitar el IVA de todas' : 'Cobrar IVA en todas'
+                }
+              />
+            </span>
+          </div>
+        )}
+
         {partidas.length === 0 ? (
           <p style={{ margin: 0, padding: '18px 0', textAlign: 'center', color: GRIS_SUAVE, fontSize: 12.5 }}>
             Captura cantidades en la matriz.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column' }}>
+            {/* Encabezado: lo unico que pide es que "IVA" caiga sobre los
+                chips. Sin el, la columna de chips no se lee como columna. */}
+            <div
+              style={{
+                display: 'flex', alignItems: 'center', gap: HUECO, paddingBottom: 5,
+                color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 600,
+                textTransform: 'uppercase', letterSpacing: '0.06em',
+              }}
+            >
+              <span style={{ flex: 1, minWidth: 0 }}>Producto</span>
+              <span style={{ width: ANCHO_CANT, textAlign: 'center', flexShrink: 0 }}>Cant.</span>
+              <span style={{ width: ANCHO_IVA, textAlign: 'center', flexShrink: 0 }}>IVA</span>
+              <span style={{ width: ANCHO_IMPORTE, textAlign: 'right', flexShrink: 0 }}>Importe</span>
+              <span style={{ width: ANCHO_QUITAR, flexShrink: 0 }} />
+            </div>
+
             {partidas.map(p => {
               const disponible = stockPorClave[p.producto_id]
               // El mix no tiene una columna de stock propia: se valida por
@@ -134,23 +195,10 @@ export default function Carrito(props: Props) {
                 <div
                   key={p.producto_id}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 8,
+                    display: 'flex', alignItems: 'center', gap: HUECO,
                     padding: '8px 0', borderTop: `1px solid ${PISTA}`,
                   }}
                 >
-                  {/* La casilla va PRIMERO y pegada al nombre: la pregunta
-                      "esta partida lleva IVA" se contesta leyendo el renglon,
-                      no buscando una columna al otro lado. */}
-                  <input
-                    type="checkbox"
-                    checked={!!p.incluyeIva}
-                    disabled={!puedeIva}
-                    onChange={e => onIvaPartida(p, e.target.checked)}
-                    title={puedeIva ? 'Cobrar IVA en esta partida' : 'Solo admin cambia el IVA'}
-                    aria-label={`IVA en ${p.nombre}`}
-                    style={{ width: 14, height: 14, accentColor: ACENTO, margin: 0, flexShrink: 0, cursor: puedeIva ? 'pointer' : 'default' }}
-                  />
-
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <span
                       title={p.nombre}
@@ -177,21 +225,48 @@ export default function Carrito(props: Props) {
                       onCantidad(p, limpio === '' ? 0 : Number(limpio))
                     }}
                     style={{
-                      ...input, width: 46, flexShrink: 0, textAlign: 'center',
+                      ...input, width: ANCHO_CANT, flexShrink: 0, textAlign: 'center',
                       borderColor: excede ? ROJO : BORDE, color: excede ? ROJO : TINTA,
                       fontWeight: 600,
                     }}
                   />
 
-                  <span style={{ ...tabular, width: 72, textAlign: 'right', color: TINTA, fontSize: 12.5, fontWeight: 600, flexShrink: 0 }}>
-                    {moneda(p.precio * p.cantidad)}
+                  {/* El chip va a la derecha de la cantidad, en su columna:
+                      "esta partida lleva IVA" se contesta leyendo el renglon
+                      de izquierda a derecha, como se lee el importe. */}
+                  <span style={{ width: ANCHO_IVA, display: 'flex', justifyContent: 'center', flexShrink: 0 }}>
+                    <ChipIva
+                      puesto={!!p.incluyeIva}
+                      tasa={ivaTasa}
+                      deshabilitado={!puedeIva}
+                      onCambio={valor => onIvaPartida(p, valor)}
+                      titulo={
+                        puedeIva
+                          ? (p.incluyeIva ? `Quitar el IVA de ${p.nombre}` : `Cobrar IVA en ${p.nombre}`)
+                          : 'Solo admin cambia el IVA'
+                      }
+                    />
+                  </span>
+
+                  <span style={{ width: ANCHO_IMPORTE, textAlign: 'right', flexShrink: 0 }}>
+                    <span style={{ ...tabular, display: 'block', color: TINTA, fontSize: 12.5, fontWeight: 600 }}>
+                      {moneda(p.precio * p.cantidad)}
+                    </span>
+                    {/* El IVA de ESTE renglon. Sin esto, el total de abajo
+                        trae un impuesto que no se puede rastrear a ninguna
+                        linea — y con mezcla es justo lo que uno quiere ver. */}
+                    {p.incluyeIva && (
+                      <span style={{ ...tabular, display: 'block', color: ACENTO, fontSize: 10, fontWeight: 600 }}>
+                        + {moneda(ivaDe(p.precio * p.cantidad, ivaTasa))} IVA
+                      </span>
+                    )}
                   </span>
 
                   <button
                     type="button"
                     onClick={() => onQuitar(p)}
                     title="Quitar"
-                    style={{ flexShrink: 0, width: 22, height: 22, padding: 0, background: 'none', border: 'none', color: GRIS_SUAVE, fontSize: 15, cursor: 'pointer', lineHeight: 1 }}
+                    style={{ flexShrink: 0, width: ANCHO_QUITAR, height: 22, padding: 0, background: 'none', border: 'none', color: GRIS_SUAVE, fontSize: 15, cursor: 'pointer', lineHeight: 1 }}
                   >
                     ×
                   </button>
@@ -241,6 +316,20 @@ export default function Carrito(props: Props) {
                 placeholder="0"
                 style={input}
               />
+              {/* El mismo chip, pegado al campo que grava: el flete decide
+                  aparte de la mercancia, y un pedido puede llevar producto
+                  gravado con flete exento. */}
+              {envio > 0 && (
+                <span style={{ display: 'block', marginTop: 5 }}>
+                  <ChipIva
+                    puesto={envioConIva}
+                    tasa={ivaTasa}
+                    deshabilitado={!puedeIva}
+                    onCambio={onEnvioConIva}
+                    titulo={envioConIva ? 'Quitar el IVA del envío' : 'Cobrar IVA en el envío'}
+                  />
+                </span>
+              )}
             </div>
           </div>
 
@@ -258,54 +347,13 @@ export default function Carrito(props: Props) {
         </div>
       )}
 
-      {/* ── IVA ───────────────────────────────────────────── */}
-      {partidas.length > 0 && (
-        <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: puedeIva ? 'pointer' : 'default' }}>
-            {/* `indeterminate` no es un atributo de React: se pone sobre el
-                nodo. Sin esto, una mezcla se pintaria como "ninguna" y el
-                primer clic prenderia lo que ya estaba prendido. */}
-            <input
-              type="checkbox"
-              checked={estado === 'todas'}
-              ref={el => { if (el) el.indeterminate = estado === 'mezcla' }}
-              disabled={!puedeIva}
-              onChange={e => onIvaTodas(e.target.checked)}
-              style={{ width: 15, height: 15, accentColor: ACENTO, cursor: puedeIva ? 'pointer' : 'default', margin: 0 }}
-            />
-            <span style={{ color: puedeIva ? TINTA : GRIS, fontSize: 12.5, fontWeight: 600 }}>
-              IVA en todo ({etiquetaTasa(ivaTasa)})
-            </span>
-            {estado === 'mezcla' && (
-              <span style={{ marginLeft: 'auto', color: GRIS_SUAVE, fontSize: 10.5 }}>
-                {partidas.filter(p => p.incluyeIva).length} de {partidas.length}
-              </span>
-            )}
-          </label>
-
-          {envio > 0 && (
-            <label style={{ display: 'flex', alignItems: 'center', gap: 9, cursor: puedeIva ? 'pointer' : 'default' }}>
-              <input
-                type="checkbox"
-                checked={envioConIva}
-                disabled={!puedeIva}
-                onChange={e => onEnvioConIva(e.target.checked)}
-                style={{ width: 15, height: 15, accentColor: ACENTO, cursor: puedeIva ? 'pointer' : 'default', margin: 0 }}
-              />
-              <span style={{ color: puedeIva ? TINTA_MEDIA : GRIS, fontSize: 12.5 }}>
-                IVA en el envío
-              </span>
-            </label>
-          )}
-
-          <p style={{ margin: 0, color: GRIS_SUAVE, fontSize: 11 }}>
-            Los precios de lista son sin IVA. Cada partida decide por su cuenta.
-          </p>
-        </div>
-      )}
-
       {/* ── Totales ───────────────────────────────────────── */}
       <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
+        {partidas.length > 0 && (
+          <p style={{ margin: '0 0 3px', color: GRIS_SUAVE, fontSize: 10.5 }}>
+            Los precios de lista son sin IVA.
+          </p>
+        )}
         <Renglon label="Subtotal" valor={moneda(subtotal)} />
         {descuentoMonto > 0 && (
           <Renglon

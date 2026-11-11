@@ -359,7 +359,7 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 320px', gap: 14, alignItems: 'start' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) 356px', gap: 14, alignItems: 'start' }}>
               <div style={{ minWidth: 0, maxHeight: '58vh', overflowY: 'auto' }}>
                 <MatrizProductos
                   productos={productos}

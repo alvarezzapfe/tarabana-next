@@ -50,7 +50,7 @@ const CONDICIONES = [
 const norm = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 
 const CSS = `
-  .pos-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 342px; align-items: start; }
+  .pos-grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr) 376px; align-items: start; }
   .pos-carrito { position: sticky; top: 16px; }
   .pos-movil { display: none; }
   .pos-barra-movil { display: none; }
