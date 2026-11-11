@@ -93,8 +93,9 @@ pedido_items.incluye_iva   boolean not null default false
 pedidos.envio_incluye_iva  boolean not null default false
 ```
 
-La vista, con `base_gravable` e `iva_monto` al final (columnas 25 y 26; las 24
-actuales intactas en su nombre, tipo y orden):
+La vista pasa de 24 a **25 columnas**: `iva_monto` ya existía (la 24) y solo
+cambia de fórmula; la nueva es `base_gravable`, apendizada en la 25. Las 24
+actuales conservan nombre, tipo y orden:
 
 ```
 gravable   = Σ (cantidad × precio_unitario) de las partidas con incluye_iva
@@ -126,8 +127,8 @@ statement. Entonces:
   del mismo bloque que protege.
 - Lo que se verifica: 0 partidas gravadas tras el backfill → `iva_monto = 0` en
   las 15 filas; `total_con_envio = total − descuento_monto + costo_envio`
-  (idéntico a hoy); **`pagado` sin cambios** ← el que atrapa el fan-out; 26
-  columnas en orden; `security_invoker = on`; sin `current_date`.
+  (idéntico a hoy); **`pagado` contra una suma independiente sacada de
+  `pagos`** ← el que atrapa el fan-out; 25 columnas en orden; `security_invoker = on`; sin `current_date`.
 - El `_down` sigue el patrón nuevo: un solo `do $$` con el guard y el DDL por
   `EXECUTE`.
 
