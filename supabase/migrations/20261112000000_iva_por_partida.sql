@@ -161,7 +161,23 @@ set search_path = public as $$
 $$;
 
 comment on function public.pedido_todas_las_partidas_con_iva(uuid) is
-  'SECURITY DEFINER: la usan los triggers del resumen de IVA, y el vendedor no puede leer ni escribir pedidos ajenos. Solo lee pedido_items del pedido que se le pasa.';
+  'SECURITY DEFINER: la usan los triggers del resumen de IVA, y el vendedor no puede leer ni escribir pedidos ajenos. Solo lee pedido_items del pedido que se le pasa. EXECUTE revocado: no es una API.';
+
+-- Una funcion SECURITY DEFINER que devuelve un escalar y conserva el EXECUTE
+-- por default de PUBLIC queda PUBLICADA como RPC por PostgREST. Esta en
+-- particular contesta "este pedido lleva IVA en todas sus partidas" saltandose
+-- RLS, asi que cualquier anon podria sondear pedidos ajenos de uno en uno.
+--
+-- Se revoca. Los triggers no la llaman por privilegio del que invoca sino
+-- dentro de funciones que tambien son DEFINER, asi que siguen funcionando.
+--
+-- Las otras dos funciones de este bloque devuelven `trigger`, y PostgREST no
+-- publica ese tipo de retorno: no necesitan revoke.
+--
+-- (Esto lo detecto y lo corrio a mano el dueno del proyecto despues de aplicar
+-- la migracion; queda aqui para que una base nueva nazca igual.)
+revoke execute on function public.pedido_todas_las_partidas_con_iva(uuid)
+  from public, anon, authenticated;
 
 -- Cambio en las PARTIDAS -> recalcular el resumen del pedido.
 create or replace function public.trg_sync_incluye_iva_items()
@@ -639,6 +655,14 @@ begin
     raise exception using
       message = format('Las funciones del resumen no quedaron en SECURITY DEFINER (%s de 3).', v_n),
       hint    = 'Sin eso, el trigger corre bajo RLS y para un vendedor afecta cero filas en silencio.';
+  end if;
+
+  -- 8j. La funcion del resumen NO es una API.
+  if has_function_privilege('anon', 'public.pedido_todas_las_partidas_con_iva(uuid)', 'execute')
+     or has_function_privilege('authenticated', 'public.pedido_todas_las_partidas_con_iva(uuid)', 'execute') then
+    raise exception using
+      message = 'pedido_todas_las_partidas_con_iva sigue ejecutable por anon/authenticated.',
+      hint    = 'Es SECURITY DEFINER y PostgREST la publicaria como RPC: revoca el execute.';
   end if;
 
   raise notice 'IVA por partida listo: pedidos_saldo con 25 columnas, pagado intacto, resumen coherente.';
