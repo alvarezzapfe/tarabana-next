@@ -162,7 +162,7 @@ test('la escalera se ordena sola: no depende del orden en que lleguen las filas'
 
 // ── Impuestos y prorrateo ───────────────────────────────────
 
-test('los impuestos salen de la base: cobrado / 1.16 / 1.265', () => {
+test('el IEPS sale de la base: cobrado / 1.265', () => {
   const r = calcularComision({
     pagos: [pago('g1', 'p1', 1_000)],
     pedidos: [pedido('p1', 1_000)],
@@ -170,14 +170,17 @@ test('los impuestos salen de la base: cobrado / 1.16 / 1.265', () => {
     periodo: PERIODO,
   })
 
-  // Toma las tasas por default sin que se las pasen.
+  // Toma las tasas por default sin que se las pasen. La de IVA se asienta
+  // en el resultado aunque no divida: es el dato de que tasa estaba vigente.
   assert.equal(r.ivaTasa, IVA_TASA_DEFAULT)
   assert.equal(r.iepsTasa, IEPS_TASA_DEFAULT)
-  // 1,000 / (1.16 * 1.265) = 1,000 / 1.4674 = 681.4774 -> 681.48
-  assert.equal(r.base, 681.48)
+  // Solo IEPS: 1,000 / 1.265 = 790.5138 -> 790.51. El IVA no divide porque
+  // este pedido no lo lleva (total_con_envio = total), y si lo llevara se lo
+  // quitaria el prorrateo.
+  assert.equal(r.base, 790.51)
   assert.equal(r.cobrado, 1_000)
-  // Primer tramo: 681.48 * 5% = 34.07 (34.074)
-  assert.equal(r.comision, 34.07)
+  // Primer tramo: 790.51 * 5% = 39.53 (39.5255)
+  assert.equal(r.comision, 39.53)
 })
 
 test('pago parcial: comisiona lo cobrado, no lo vendido', () => {
@@ -188,8 +191,9 @@ test('pago parcial: comisiona lo cobrado, no lo vendido', () => {
     periodo: PERIODO,
   })
 
-  // 400 / 1.4674 = 272.59. El resto del pedido no comisiona hasta que se cobre.
-  assert.equal(r.base, 272.59)
+  // 400 / 1.265 = 316.2055 -> 316.21. El resto del pedido no comisiona
+  // hasta que se cobre.
+  assert.equal(r.base, 316.21)
   assert.equal(r.cobrado, 400)
 })
 
@@ -205,8 +209,8 @@ test('pedido con envio: el envio no comisiona', () => {
 
   assert.equal(r.cobrado, 1_400)
   // factor = 1,400 / 1,500 = 0.93333
-  // 1,400 * 0.93333 / 1.4674 = 1,306.67 / 1.4674 = 890.46
-  assert.equal(r.base, 890.46)
+  // 1,400 * 0.93333 / 1.265 = 1,306.67 / 1.265 = 1,032.94
+  assert.equal(r.base, 1_032.94)
   // Un solo renglon: los dos pagos son del mismo pedido.
   assert.equal(r.detalle.length, 1)
   assert.equal(r.detalle[0].cobrado, 1_400)
@@ -223,8 +227,8 @@ test('pedido con descuento: no se descuenta dos veces', () => {
     periodo: PERIODO,
   })
 
-  // 2,034 / 1.4674 = 1,386.13
-  assert.equal(r.base, 1_386.13)
+  // 2,034 / 1.265 = 1,607.9051 -> 1,607.91
+  assert.equal(r.base, 1_607.91)
 })
 
 test('descuento y envio juntos', () => {
@@ -238,13 +242,74 @@ test('descuento y envio juntos', () => {
   })
 
   // factor = (2,260 - 226) / 2,134 = 2,034 / 2,134 = 0.953139
-  // 1,067 * 0.953139 / 1.4674 = 1,017.0 / 1.4674 = 693.06
-  assert.equal(r.base, 693.06)
+  // 1,067 * 0.953139 / 1.265 = 1,017.0 / 1.265 = 803.95
+  assert.equal(r.base, 803.95)
 })
 
 test('las tasas en 0 dejan la base igual a lo cobrado', () => {
   const r = sinImpuestos({ pagos: [pago('g1', 'p1', 1_000)], pedidos: [pedido('p1', 1_000)], tramos: ESCALERA })
   assert.equal(r.base, 1_000)
+})
+
+// ── IVA ─────────────────────────────────────────────────────
+//
+// El IVA no tiene divisor: lo saca el prorrateo, porque vive en
+// `total_con_envio` y no en `total`. Estos tres casos fijan esa propiedad.
+
+test('IVA: el mismo pedido comisiona igual con y sin IVA', () => {
+  // La misma mercancia de 1,000, cobrada completa. Sin IVA el cliente paga
+  // 1,000; con IVA al 16% paga 1,160. Lo que comisiona es la mercancia, asi
+  // que la base tiene que ser identica: el IVA no es venta del vendedor.
+  const base = (p: Parameters<typeof calcularComision>[0]) => calcularComision(p).base
+
+  const sinIva = base({
+    pagos: [pago('g1', 'p1', 1_000)],
+    pedidos: [pedido('p1', 1_000)],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+  const conIva = base({
+    pagos: [pago('g1', 'p1', 1_160)],
+    pedidos: [pedido('p1', 1_000, { total_con_envio: 1_160 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+
+  assert.equal(sinIva, 790.51)
+  assert.equal(conIva, 790.51)
+})
+
+test('IVA: cambiar ivaTasa no mueve la base', () => {
+  // `ivaTasa` solo se asienta en el corte. Si volviera a dividir, estas dos
+  // llamadas darian numeros distintos y un pedido sin IVA perderia 16%.
+  const entrada = {
+    pagos: [pago('g1', 'p1', 1_160)],
+    pedidos: [pedido('p1', 1_000, { total_con_envio: 1_160 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  }
+  const alDieciseis = calcularComision({ ...entrada, ivaTasa: 0.16, iepsTasa: IEPS_TASA_DEFAULT })
+  const enCero = calcularComision({ ...entrada, ivaTasa: 0, iepsTasa: IEPS_TASA_DEFAULT })
+
+  assert.equal(alDieciseis.base, enCero.base)
+  // Y la tasa sigue viajando en el resultado para el acta del corte.
+  assert.equal(alDieciseis.ivaTasa, 0.16)
+})
+
+test('IVA con descuento y envio: la base es la mercancia neta', () => {
+  // total 2,260, descuento 226, envio 100 -> base gravable 2,134,
+  // IVA 341.44, total_con_envio 2,475.44. Pago completo.
+  const r = calcularComision({
+    pagos: [pago('g1', 'p1', 2_475.44)],
+    pedidos: [pedido('p1', 2_260, { descuento_monto: 226, total_con_envio: 2_475.44 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+
+  // factor = 2,034 / 2,475.44; 2,475.44 * factor = 2,034 (la mercancia neta,
+  // sin envio y sin IVA). 2,034 / 1.265 = 1,607.91 — el mismo numero que el
+  // pedido sin IVA de arriba, que es justo lo que debe pasar.
+  assert.equal(r.base, 1_607.91)
 })
 
 // ── Lo que no cuenta ────────────────────────────────────────

@@ -12,16 +12,23 @@
  *    50k-100k al 8% paga 50k*5% + 10k*8% = 3,300, no 60k*8% = 4,800.
  *
  * 2. La base es lo COBRADO, no lo vendido, y es NETA: sin envio, sin
- *    descuento y sin impuestos. Un pago parcial entra prorrateado:
+ *    descuento, sin IVA y sin IEPS. Un pago parcial entra prorrateado:
  *
- *      base = monto * (total - descuento_monto) / total_con_envio
- *                   / (1 + iva) / (1 + ieps)
+ *      base = monto * (total - descuento_monto) / total_con_envio / (1 + ieps)
  *
- *    El factor saca el envio (que no es venta y no comisiona) y el descuento
- *    ya viene restado del numerador. `descuento_monto` y `total_con_envio` se
- *    toman tal como los da la vista `pedidos_saldo`: reimplementar aqui el
- *    `round(total * pct / 100, 2)` del descuento porcentual da diferencias de
- *    centavos contra lo que la DB considera cobrado (ver docs/SCHEMA_NOTES.md).
+ *    El prorrateo hace DOS cosas de un golpe, y por eso no hay divisor de
+ *    IVA. `total_con_envio` incluye el envio y, desde que existe el switch de
+ *    IVA, tambien el IVA; `total - descuento_monto` no incluye ninguno de los
+ *    dos. Asi que ese cociente ya saca el envio Y el IVA, en la proporcion
+ *    exacta y con la tasa que ese pedido guardo en `iva_tasa`. Dividir ademas
+ *    entre (1 + iva) lo quitaria DOS VECES, y en un pedido sin IVA quitaria
+ *    un impuesto que nunca se cobro. El IEPS si necesita su divisor: va
+ *    adentro del precio de lista y no aparece en ninguna columna.
+ *
+ *    `descuento_monto` y `total_con_envio` se toman tal como los da la vista
+ *    `pedidos_saldo`: reimplementar aqui el `round(total * pct / 100, 2)` del
+ *    descuento porcentual da diferencias de centavos contra lo que la DB
+ *    considera cobrado (ver docs/SCHEMA_NOTES.md).
  *
  * 3. Periodo mensual por FECHA DE PAGO. `pagos.fecha_pago` es `date` en
  *    produccion, asi que el mes se saca del string ('2026-08-07' -> '2026-08')
@@ -33,17 +40,28 @@
  *    vista `pedidos_saldo` ya los excluye, asi que su pago se queda sin
  *    pedido y se descarta) ni la parte sobrepagada de un pedido.
  *
- * ── Los precios traen los impuestos adentro ────────────────
+ * ── Que impuesto vive donde ───────────────────────────────
  *
- * Ninguna tabla desglosa impuestos: `calcular-pedido.ts` arma
- * total = SUM(cantidad * precio_unitario), el documento imprime
- * Subtotal/Descuento/Envio/TOTAL sin renglon de impuestos, y
- * `requiere_factura` no cambia el monto. Lo unico explicito del repo es el
- * catalogo de WhatsApp: "Precios mayorista, IVA incluido". Decision del
- * negocio: los precios traen IVA (16%) e IEPS de cerveza (26.5%), y la base
- * de comision es neta de los dos. Las tasas viven en `app_config.impuestos`
- * y se copian dentro de cada corte para que un mes cerrado no cambie si
- * despues se ajustan.
+ * El IEPS de cerveza (26.5%) va ADENTRO del precio de lista y no aparece en
+ * ninguna columna: la unica forma de sacarlo es dividir, y por eso tiene
+ * divisor aqui.
+ *
+ * El IVA (16%) NO va en el precio de lista. Desde el switch "Incluir IVA"
+ * (migracion 20261111000000) es una columna del pedido —`incluye_iva`,
+ * `iva_tasa`— y la vista lo suma a `total_con_envio`. Ahi deja de necesitar
+ * divisor: el prorrateo de la regla 2 ya lo saca.
+ *
+ * Esto CAMBIO: antes se dividia entre (1 + iva) sobre el supuesto de que el
+ * precio traia IVA adentro, asi que a todos los pedidos —ninguno facturado
+ * con IVA— se les bajaba la base un 16% de mas. Se corrigio el 2026-11-11,
+ * cuando el cambio todavia valia $0.00: no habia ningun pedido con vendedor
+ * asignado, `comision_tramos` estaba vacia y no habia ni un corte cerrado,
+ * asi que ningun mes abierto movio su base. Ver docs/plan-iva.md.
+ *
+ * Las dos tasas viven en `app_config.impuestos` y se copian dentro de cada
+ * corte para que un mes cerrado no cambie si despues se ajustan. La de IVA se
+ * sigue guardando aunque ya no divida: es el dato de que tasa estaba vigente
+ * cuando se cerro el mes.
  */
 
 import { periodoMx } from './fechas.ts'
@@ -104,6 +122,10 @@ export type EntradaComision = {
   tramos: Tramo[]
   /** Mes a calcular, 'YYYY-MM'. */
   periodo: string
+  /**
+   * Tasa de IVA vigente. NO entra en la aritmetica —el prorrateo ya saca el
+   * IVA— y solo se arrastra para asentarla en el corte.
+   */
   ivaTasa?: number
   iepsTasa?: number
 }
@@ -149,7 +171,9 @@ export type ResultadoComision = {
   sinEsquema: boolean
   /** La base rebaso el ultimo tramo y ese tramo es cerrado: lo de arriba no comisiona. */
   topado: boolean
+  /** Tasa de IVA vigente, para el acta del corte. No divide la base. */
   ivaTasa: number
+  /** Tasa de IEPS con la que se desinflo la base. */
   iepsTasa: number
 }
 
@@ -258,10 +282,15 @@ export function calcularComision(entrada: EntradaComision): ResultadoComision {
 
   const porId = new Map(pedidos.map(p => [p.id, p]))
 
-  // (1 + tasa) como fraccion exacta, para dividir sin pasar por float.
-  const divisorImpuestos =
-    (ESCALA_TASA + escalar(ivaTasa, ESCALA_TASA)) * (ESCALA_TASA + escalar(iepsTasa, ESCALA_TASA))
-  const escalaImpuestos = ESCALA_TASA * ESCALA_TASA
+  // (1 + ieps) como fraccion exacta, para dividir sin pasar por float.
+  //
+  // Solo IEPS. El IVA no lleva divisor porque el prorrateo por
+  // `total_con_envio` ya lo saca (ver la regla 2 del encabezado); dividir
+  // tambien entre (1 + iva) se lo quitaria dos veces a un pedido con IVA y le
+  // quitaria un impuesto inexistente a uno sin IVA. `ivaTasa` se sigue
+  // recibiendo y devolviendo para dejarla asentada en el corte.
+  const divisorImpuestos = ESCALA_TASA + escalar(iepsTasa, ESCALA_TASA)
+  const escalaImpuestos = ESCALA_TASA
 
   // Orden cronologico estable: el tope de sobrepago se consume en el orden en
   // que se cobro, asi que el excedente cae en el pago mas reciente y no en el
@@ -312,8 +341,10 @@ export function calcularComision(entrada: EntradaComision): ResultadoComision {
   for (const [pedidoId, cobrado] of cobradoPorPedido) {
     const pedido = porId.get(pedidoId)!
     const conEnvio = aCentavos(pedido.total_con_envio)
-    // Fuera el envio. El descuento ya viene restado del numerador, y los dos
-    // montos salen de pedidos_saldo para no reimplementar su redondeo.
+    // Fuera el envio y fuera el IVA: los dos estan en `total_con_envio` y
+    // ninguno en `mercancia`, asi que la division los saca juntos. El
+    // descuento ya viene restado del numerador, y los dos montos salen de
+    // pedidos_saldo para no reimplementar su redondeo.
     const mercancia = aCentavos(pedido.total) - aCentavos(pedido.descuento_monto)
 
     const base = conEnvio > 0n

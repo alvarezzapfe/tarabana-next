@@ -50,7 +50,6 @@ type Props = {
   tramos: TramoFila[]
   acento: string
   puedeEditar: boolean
-  ivaTasa: number
   iepsTasa: number
 }
 
@@ -67,7 +66,7 @@ const td = { padding: '12px', fontSize: 13, color: '#374151', borderTop: '1px so
 const num = { ...td, textAlign: 'right' as const, fontVariantNumeric: 'tabular-nums' as const }
 
 export default function ComisionesClient(props: Props) {
-  const { periodo, esMesEnCurso, filas, tramos, acento, puedeEditar, ivaTasa, iepsTasa } = props
+  const { periodo, esMesEnCurso, filas, tramos, acento, puedeEditar, iepsTasa } = props
   const router = useRouter()
 
   const [esquema, setEsquema] = useState<string>('global')
@@ -174,7 +173,7 @@ export default function ComisionesClient(props: Props) {
             {etiquetaPeriodo(periodo)}
           </h2>
           <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9ca3af' }}>
-            Por fecha de pago · base neta de IVA {pct(ivaTasa * 100)} e IEPS {pct(iepsTasa * 100)}
+            Por fecha de pago · base sin envío, sin IVA y neta de IEPS {pct(iepsTasa * 100)}
           </p>
         </div>
         {esMesEnCurso && (
