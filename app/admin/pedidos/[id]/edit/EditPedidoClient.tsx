@@ -7,6 +7,7 @@ import { BotonEditarProductos } from '../../AccionEditarProductos'
 import { folioDe } from '../../pedidos-ui'
 import SwitchIva from '../../SwitchIva'
 import CampoAjuste from '../../CampoAjuste'
+import { guardarAjuste } from '../../guardar-ajuste'
 
 const statusConfig: Record<string, string> = {
   pendiente: 'Pendiente', confirmado: 'Confirmado', enviado: 'En camino',
@@ -49,14 +50,41 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin, pue
   const [fechaPedido, setFechaPedido] = useState(
     pedido.fecha_pedido ? String(pedido.fecha_pedido).slice(0, 10) : ''
   )
+  // El ajuste vive aqui y no dentro del bloque porque lo guarda el boton
+  // Guardar de esta pagina. Tenerlo adentro con su propio boton fue el bug:
+  // se capturaba el ajuste, se picaba el Guardar grande —que llama a
+  // /actualizar, ruta que no sabe nada del ajuste— y se perdia con un 200.
+  const [ajusteValor, setAjusteValor] = useState(pedido.ajuste ? String(pedido.ajuste) : '')
+  const [ajusteMotivo, setAjusteMotivo] = useState(pedido.ajuste_motivo || '')
+  const [errorGuardar, setErrorGuardar] = useState('')
   const [ordenCompra, setOrdenCompra] = useState(pedido.orden_compra || '')
   const [folioFactura, setFolioFactura] = useState(pedido.folio_factura || '')
 
   const handleSave = async () => {
     setSaving(true)
-    if (descuentoTipo && !descuentoMotivo.trim()) { alert('El motivo del descuento es obligatorio'); setSaving(false); return }
+    setErrorGuardar('')
+    // Los errores salen EN PANTALLA y no en un alert: un alert se cierra y no
+    // deja rastro de que fue lo que no se guardo.
+    if (descuentoTipo && !descuentoMotivo.trim()) {
+      setErrorGuardar('El motivo del descuento es obligatorio.'); setSaving(false); return
+    }
     const descVal = parseFloat(descuentoValor) || 0
-    if (descuentoTipo === 'porcentaje' && (descVal < 0 || descVal > 100)) { alert('El porcentaje debe estar entre 0 y 100'); setSaving(false); return }
+    if (descuentoTipo === 'porcentaje' && (descVal < 0 || descVal > 100)) {
+      setErrorGuardar('El porcentaje del descuento debe estar entre 0 y 100.'); setSaving(false); return
+    }
+
+    // ── El ajuste va PRIMERO, por su propia ruta ────────────
+    //
+    // Es la que valida el motivo, el 5%, el sobrepago y el total negativo, y
+    // la que deja audit_log. Si falla se aborta aqui: guardar lo demas y
+    // tirar el ajuste es exactamente el bug que esto arregla.
+    const ajusteNum = Number(ajusteValor.replace(/[^\d.-]/g, '')) || 0
+    const ajusteActual = Number(pedido.ajuste || 0)
+    const motivoActual = (pedido.ajuste_motivo || '').trim()
+    if (puedeAjustar && (ajusteNum !== ajusteActual || ajusteMotivo.trim() !== motivoActual)) {
+      const r = await guardarAjuste(pedido.id, ajusteNum, ajusteMotivo.trim())
+      if (!r.ok) { setErrorGuardar(r.error); setSaving(false); return }
+    }
 
     const res = await fetch(`/api/admin/pedidos/${pedido.id}/actualizar`, {
       method: 'PATCH',
@@ -77,7 +105,12 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin, pue
       }),
     })
 
-    if (!res.ok) { const d = await res.json().catch(() => ({})); alert('Error: ' + (d.error || 'Error al guardar')); setSaving(false); return }
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}))
+      setErrorGuardar(d.error || `No se pudo guardar el pedido (HTTP ${res.status}).`)
+      setSaving(false)
+      return
+    }
     router.push('/admin/pedidos')
     router.refresh()
   }
@@ -237,6 +270,13 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin, pue
             totalAntes={Number(totalAntesDeAjuste)}
             canEdit
             onGuardado={() => router.refresh()}
+            // Sin boton propio: lo guarda el Guardar de esta pagina, que es
+            // el que el usuario pica. Dos botones costaron un ajuste perdido.
+            conBoton={false}
+            valor={ajusteValor}
+            onValor={setAjusteValor}
+            motivoTexto={ajusteMotivo}
+            onMotivoTexto={setAjusteMotivo}
           />
         </>
       )}
@@ -278,6 +318,21 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin, pue
             style={{ ...inputStyle, resize: 'none' as const }} />
         </div>
       </div>
+
+      {/* El error del servidor, EN PANTALLA y pegado al boton que lo produjo.
+          Antes esto era un alert: se cerraba y no quedaba rastro de que fue lo
+          que no se guardo. */}
+      {errorGuardar && (
+        <div
+          role="alert"
+          style={{
+            marginBottom: 12, padding: '10px 13px', background: '#fef2f2',
+            border: '1px solid #fecaca', borderRadius: 8, color: '#b91c1c', fontSize: 13.5,
+          }}
+        >
+          {errorGuardar}
+        </div>
+      )}
 
       {/* Acciones */}
       <div style={{ display: 'flex', gap: 10 }}>

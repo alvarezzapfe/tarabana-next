@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { TOLERANCIA_AJUSTE, ajusteParaCuadrar, excedeTolerancia, motivoRechazo } from '../../../src/lib/ajuste'
 import { motivoNoEditable } from '../../../src/lib/editar-partidas'
 import { ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA, monedaExacta, monedaFirmada, tabular } from './pedidos-ui'
+import { guardarAjuste } from './guardar-ajuste'
 
 /**
  * El ajuste del pedido, con el atajo para cuadrar contra la orden de compra.
@@ -22,11 +23,27 @@ import { ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA, moned
  * Las mismas reglas que la ruta, con las mismas funciones (`motivoRechazo`,
  * `excedeTolerancia`): que el servidor sea la autoridad no significa que el
  * usuario tenga que descubrir el error despues de picar Guardar.
+ *
+ * ── Dos modos, y por que ───────────────────────────────────
+ *
+ * En el panel lateral el bloque trae su propio boton y se guarda solo, como
+ * el switch de IVA: ahi no hay un "Guardar" global que compita.
+ *
+ * En /admin/pedidos/[id]/edit si lo hay, y tener dos botones costo un ajuste
+ * perdido en localhost: se capturo con "Cuadrar contra OC", se pico el Guardar
+ * grande de la pagina —que llama a /actualizar, ruta que no sabe nada del
+ * ajuste— y devolvio 200 tirando el ajuste sin un solo error. Ahi el bloque va
+ * con `conBoton={false}` y lo guarda la pagina, por la misma ruta.
+ *
+ * Cuando hay cambios sin guardar, el bloque lo DICE. Un campo con un valor que
+ * no esta en la base es la forma mas barata de perder dinero.
  */
 export default function CampoAjuste({
   pedidoId, folio, status, ajuste, motivo, totalAntes, canEdit, onGuardado,
+  conBoton = true, valor: valorControlado, onValor, motivoTexto, onMotivoTexto,
 }: {
   pedidoId: string
+  /** Para el mensaje: "Ajuste guardado en #0E1B76". */
   folio: string
   status: string
   /** El ajuste guardado. */
@@ -36,12 +53,27 @@ export default function CampoAjuste({
   totalAntes: number
   canEdit: boolean
   onGuardado: (mensaje: string) => void
+  /**
+   * false cuando la pantalla tiene su propio "Guardar" y lo guarda ella. Ahi
+   * el estado vive arriba, porque la pagina necesita leerlo al guardar.
+   */
+  conBoton?: boolean
+  valor?: string
+  onValor?: (v: string) => void
+  motivoTexto?: string
+  onMotivoTexto?: (v: string) => void
 }) {
-  const [valor, setValor] = useState(ajuste ? String(ajuste) : '')
-  const [texto, setTexto] = useState(motivo || '')
+  const [valorLocal, setValorLocal] = useState(ajuste ? String(ajuste) : '')
+  const [textoLocal, setTextoLocal] = useState(motivo || '')
   const [oc, setOc] = useState('')
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
+
+  // Controlado por la pagina o por si mismo, segun el modo.
+  const valor = valorControlado ?? valorLocal
+  const setValor = onValor ?? setValorLocal
+  const texto = motivoTexto ?? textoLocal
+  const setTexto = onMotivoTexto ?? setTextoLocal
 
   const noEditable = motivoNoEditable(status)
   const bloqueado = !canEdit || !!noEditable || guardando
@@ -68,51 +100,16 @@ export default function CampoAjuste({
     setError(calculado === 0 ? 'El pedido ya cuadra con esa orden de compra.' : '')
   }
 
-  const guardar = async (confirmaciones: { confirmarAjuste?: boolean; confirmarSobrepago?: boolean } = {}) => {
+  const guardar = async () => {
     setGuardando(true)
     setError('')
-    const res = await fetch(`/api/admin/pedidos/${pedidoId}/ajuste`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ajuste: nuevo, ajuste_motivo: texto.trim(), ...confirmaciones }),
-    })
+    const r = await guardarAjuste(pedidoId, nuevo, texto.trim())
     setGuardando(false)
-
-    if (res.ok) {
-      const d = await res.json().catch(() => ({}))
-      if (!d.sinCambio) onGuardado(`Ajuste guardado en ${folio}.`)
+    if (r.ok) {
+      if (!r.sinCambio) onGuardado(`Ajuste guardado en ${folio}.`)
       return
     }
-
-    const d = await res.json().catch(() => ({}))
-
-    // Los dos 409 se preguntan, no se deciden solos. Es el mismo trato que da
-    // la pantalla de editar productos.
-    if (res.status === 409 && d.requiereConfirmacion) {
-      if (d.sobrepago) {
-        const ok = window.confirm(
-          `${d.error}\n\n` +
-          `A cobrar: ${monedaExacta(d.sobrepago.aCobrar)}\n` +
-          `Ya pagado: ${monedaExacta(d.sobrepago.pagado)}\n` +
-          `Sobra: ${monedaExacta(d.sobrepago.sobra)}\n\n` +
-          '¿Guardar de todos modos?'
-        )
-        if (ok) await guardar({ ...confirmaciones, confirmarSobrepago: true })
-        return
-      }
-      if (d.tolerancia) {
-        const ok = window.confirm(
-          `${d.error}\n\n` +
-          `Ajuste: ${monedaFirmada(d.tolerancia.ajuste)}\n` +
-          `Total antes del ajuste: ${monedaExacta(d.tolerancia.totalAntes)}\n\n` +
-          '¿Es correcto?'
-        )
-        if (ok) await guardar({ ...confirmaciones, confirmarAjuste: true })
-        return
-      }
-    }
-
-    setError(d.error || 'No se pudo guardar el ajuste.')
+    setError(r.error)
   }
 
   const campo: React.CSSProperties = {
@@ -202,20 +199,33 @@ export default function CampoAjuste({
       {noEditable && <p style={{ margin: 0, color: GRIS, fontSize: 11 }}>{noEditable}</p>}
       {error && <p style={{ margin: 0, color: ROJO, fontSize: 11.5 }}>{error}</p>}
 
-      <button
-        type="button"
-        onClick={() => guardar()}
-        disabled={bloqueado || !!rechazo || !cambio}
-        style={{
-          alignSelf: 'flex-start', padding: '7px 13px', borderRadius: 7, border: 'none',
-          background: bloqueado || !!rechazo || !cambio ? '#e5e7eb' : ACENTO,
-          color: bloqueado || !!rechazo || !cambio ? GRIS_SUAVE : '#fff',
-          fontSize: 12.5, fontWeight: 600,
-          cursor: bloqueado || !!rechazo || !cambio ? 'default' : 'pointer',
-        }}
-      >
-        {guardando ? 'Guardando…' : 'Guardar ajuste'}
-      </button>
+      {/* Un campo con un valor que no esta en la base es la forma mas barata
+          de perder dinero: si hay cambios pendientes, el bloque lo dice, y en
+          el modo controlado dice tambien QUIEN lo va a guardar. */}
+      {cambio && !rechazo && (
+        <p style={{ margin: 0, color: ACENTO, fontSize: 11, fontWeight: 600 }}>
+          {conBoton
+            ? 'Sin guardar — pica «Guardar ajuste».'
+            : 'Sin guardar — se guarda con el botón «Guardar» de abajo.'}
+        </p>
+      )}
+
+      {conBoton && (
+        <button
+          type="button"
+          onClick={() => guardar()}
+          disabled={bloqueado || !!rechazo || !cambio}
+          style={{
+            alignSelf: 'flex-start', padding: '7px 13px', borderRadius: 7, border: 'none',
+            background: bloqueado || !!rechazo || !cambio ? '#e5e7eb' : ACENTO,
+            color: bloqueado || !!rechazo || !cambio ? GRIS_SUAVE : '#fff',
+            fontSize: 12.5, fontWeight: 600,
+            cursor: bloqueado || !!rechazo || !cambio ? 'default' : 'pointer',
+          }}
+        >
+          {guardando ? 'Guardando…' : 'Guardar ajuste'}
+        </button>
+      )}
     </div>
   )
 }
