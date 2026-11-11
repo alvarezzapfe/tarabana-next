@@ -289,3 +289,45 @@ test('el comprometido sobrevive el viaje a JSON', () => {
   assert.deepEqual([...vuelta.entries()], [...por.entries()])
   assert.equal(comprometidoDeJSON(null).size, 0, 'una respuesta vacia no debe reventar')
 })
+
+// ── Excluir un pedido del conteo ────────────────────────────
+
+test('un pedido no se bloquea a si mismo al editarse', () => {
+  // Al revisar si un cambio cabe, lo que ESE pedido ya tenia apartado tiene
+  // que volver a estar disponible: si no, un pedido de 10 cajas no se podria
+  // editar a 11 aunque hubiera 40 libres.
+  const pedidos = [
+    ped({ id: 'el-que-se-edita', status: 'confirmado', cantidad: 10 }),
+    ped({ id: 'otro', status: 'confirmado', cantidad: 6 }),
+  ]
+
+  const todo = comprometidoDe(pedidos).por
+  const sinEl = comprometidoDe(pedidos, { excepto: 'el-que-se-edita' }).por
+
+  assert.equal(todo.get(claveStock(CALIZA, 'stock_caja24')), 16)
+  assert.equal(sinEl.get(claveStock(CALIZA, 'stock_caja24')), 6, 'no se devolvieron sus propias cajas')
+
+  const PROD = prod(CALIZA, { stock_caja24: 20 })
+  assert.equal(disponibilidadDe(PROD, 'stock_caja24', todo).disponible, 4)
+  assert.equal(disponibilidadDe(PROD, 'stock_caja24', sinEl).disponible, 14, '10 suyas + 4 libres')
+})
+
+test('excluir un pedido que no existe no cambia nada', () => {
+  const pedidos = [ped({ id: 'p1', cantidad: 5 })]
+  assert.deepEqual(
+    [...comprometidoDe(pedidos, { excepto: 'fantasma' }).por.entries()],
+    [...comprometidoDe(pedidos).por.entries()]
+  )
+})
+
+test('la exclusion tambien saca sus partidas sin clasificar', () => {
+  // Si no, el aviso de Inventario seguiria contando una partida del pedido
+  // que se esta editando como si todavia estuviera apartada.
+  const pedidos: PedidoAbierto[] = [{
+    id: 'el-que-se-edita',
+    status: 'confirmado',
+    pedido_items: [{ producto_id: BRISA, unidad: null, cantidad: 1, nombre: 'Brisa' }],
+  }]
+  assert.equal(comprometidoDe(pedidos).sinClasificar.length, 1)
+  assert.equal(comprometidoDe(pedidos, { excepto: 'el-que-se-edita' }).sinClasificar.length, 0)
+})

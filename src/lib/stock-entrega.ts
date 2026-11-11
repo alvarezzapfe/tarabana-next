@@ -18,7 +18,7 @@
  *     calcula el nuevo stock desde el mismo valor original y la segunda
  *     escritura borra la primera, asi que solo se descuenta una.
  */
-import { columnaStockDe, type ColumnaStock } from './unidades.ts'
+import { ETIQUETA_COLUMNA, columnaStockDe, type ColumnaStock } from './unidades.ts'
 
 /** Un estilo dentro de una caja mixta. */
 export type EstiloMix = {
@@ -55,16 +55,6 @@ export type ErrorEntrega = { error: string }
  * de 24. Se conserva el comportamiento, solo deja de ser un numero magico.
  */
 export const LATAS_POR_ESTILO_DEFAULT = 6
-
-const ETIQUETAS: Record<string, string> = {
-  lata: 'latas sueltas',
-  caja12: 'cajas de 12',
-  caja24: 'cajas de 24',
-  barril_pet: 'barriles 20L PET',
-  barril_acero: 'barriles 20L acero',
-  barril10_pet: 'barriles 10L PET',
-  barril10_acero: 'barriles 10L acero',
-}
 
 /**
  * Los movimientos de stock de una entrega, ya consolidados.
@@ -112,7 +102,7 @@ export function movimientosDeEntrega(items: ItemEntrega[]): Movimiento[] | Error
 
     // A proposito NO se toca `stock_latas` aqui aunque la presentacion sea
     // una caja. Ver la nota de arriba: las latas sueltas son otro inventario.
-    sumar(item.producto_id, columna, cantidad, ETIQUETAS[item.unidad!] || String(item.unidad))
+    sumar(item.producto_id, columna, cantidad, ETIQUETA_COLUMNA[columna])
   }
 
   return [...acum.values()]

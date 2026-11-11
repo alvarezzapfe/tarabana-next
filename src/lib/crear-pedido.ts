@@ -27,7 +27,7 @@ import { canManageAsAdmin, canWrite, isVendedor } from './roles'
 import { hoyMx } from './fechas'
 import { precioSufijo } from './clientes'
 import { calcularPedido } from './calcular-pedido'
-import { STATUS_SIN_COMPROMISO, comprometidoDe } from './stock-disponible'
+import { STATUS_SIN_COMPROMISO, comprometidoDe, type OpcionesComprometido } from './stock-disponible'
 import { logAction } from './audit'
 import { enviarInvitacionCliente } from './invitar-cliente'
 
@@ -122,7 +122,10 @@ export async function cargarStockMap(service: SupabaseClient) {
  * descarta; si se equivocara de menos, contariamos corto, asi que la lista
  * sale de la misma constante.
  */
-export async function cargarComprometido(service: SupabaseClient) {
+export async function cargarComprometido(
+  service: SupabaseClient,
+  opciones: OpcionesComprometido = {}
+) {
   const { data: pedidos } = await service
     .from('pedidos')
     .select('id, status, pedido_items(producto_id, unidad, cantidad, metadata, productos(nombre))')
@@ -139,7 +142,8 @@ export async function cargarComprometido(service: SupabaseClient) {
         metadata: it.metadata,
         nombre: Array.isArray(it.productos) ? it.productos[0]?.nombre : it.productos?.nombre,
       })) ?? [],
-    }))
+    })),
+    opciones
   )
 }
 

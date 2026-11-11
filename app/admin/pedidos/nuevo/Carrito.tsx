@@ -39,6 +39,12 @@ type Props = {
   enviando: boolean
   onConfirmar: () => void
   error?: string
+  /**
+   * Texto del boton. Por default el de crear un pedido; la pantalla de editar
+   * partidas lo cambia, porque ahi no se esta creando nada.
+   */
+  etiquetaConfirmar?: string
+  etiquetaEnviando?: string
 }
 
 export default function Carrito(props: Props) {
@@ -46,6 +52,7 @@ export default function Carrito(props: Props) {
     partidas, stockPorClave, onCantidad, onQuitar,
     puedeDescuento, descuento, onDescuento, costoEnvio, onCostoEnvio,
     bloqueos, enviando, onConfirmar, error,
+    etiquetaConfirmar = 'Confirmar pedido', etiquetaEnviando = 'Creando…',
   } = props
 
   const subtotal = partidas.reduce((s, p) => s + p.precio * p.cantidad, 0)
@@ -239,7 +246,7 @@ export default function Carrito(props: Props) {
             opacity: enviando ? 0.6 : 1,
           }}
         >
-          {enviando ? 'Creando…' : 'Confirmar pedido'}
+          {enviando ? etiquetaEnviando : etiquetaConfirmar}
         </button>
 
         {/* El motivo escrito, no solo el boton apagado. */}

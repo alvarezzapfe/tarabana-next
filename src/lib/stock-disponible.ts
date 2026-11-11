@@ -89,11 +89,24 @@ export type Comprometido = {
  * aqui: una sola fila mala dejaria toda la matriz del POS sin numeros. Partida
  * por partida, el fallo queda aislado y se reporta en `sinClasificar`.
  */
-export function comprometidoDe(pedidos: PedidoAbierto[]): Comprometido {
+export type OpcionesComprometido = {
+  /**
+   * Pedido a dejar FUERA del conteo.
+   *
+   * Lo usa la edicion de partidas: al revisar si un cambio cabe en el
+   * inventario, lo que ese mismo pedido ya tenia apartado tiene que volver a
+   * estar disponible. Sin esto, un pedido de 10 cajas no se podria editar a 11
+   * aunque hubiera 40 libres, porque sus propias 10 lo bloquearian.
+   */
+  excepto?: string
+}
+
+export function comprometidoDe(pedidos: PedidoAbierto[], opciones: OpcionesComprometido = {}): Comprometido {
   const por = new Map<string, number>()
   const sinClasificar: PartidaSinClasificar[] = []
 
   for (const pedido of pedidos) {
+    if (opciones.excepto && pedido.id === opciones.excepto) continue
     if (!comprometePedido(pedido.status)) continue
 
     for (const item of pedido.pedido_items || []) {
