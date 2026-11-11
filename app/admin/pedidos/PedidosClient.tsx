@@ -8,6 +8,7 @@ import FiltrosPedidos from './FiltrosPedidos'
 import TablaPedidos from './TablaPedidos'
 import DrawerPago from './DrawerPago'
 import PanelPedido from './PanelPedido'
+import EditarPartidas from './EditarPartidas'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type ColumnaOpcional, type FilaPedido, type Filtros, type Orden,
@@ -146,6 +147,8 @@ export default function PedidosClient(props: Props) {
   const [statusPedido, setStatusPedido] = useState<FilaPedido | null>(null)
   /** Pedido al que se le va a marcar entrega sin tocar inventario. */
   const [sinStock, setSinStock] = useState<FilaPedido | null>(null)
+  /** Pedido cuyas partidas se estan editando. */
+  const [editandoPartidas, setEditandoPartidas] = useState<FilaPedido | null>(null)
   const [motivoSinStock, setMotivoSinStock] = useState('')
   const [importar, setImportar] = useState(false)
   const [trabajando, setTrabajando] = useState('')
@@ -662,6 +665,14 @@ export default function PedidosClient(props: Props) {
         />
       )}
 
+      {editandoPartidas && (
+        <EditarPartidas
+          pedido={editandoPartidas}
+          onCerrar={() => setEditandoPartidas(null)}
+          onGuardado={msg => { setAviso(msg); refrescar() }}
+        />
+      )}
+
       {statusPedido && (
         <div
           onClick={() => setStatusPedido(null)}
@@ -785,12 +796,13 @@ export default function PedidosClient(props: Props) {
           puedeDescuento={puedeDescuento}
           esVendedor={esVendedor}
           nombrePor={nombrePor}
-          tapado={!!pagoDe || !!statusPedido || !!sinStock || importar}
+          tapado={!!pagoDe || !!statusPedido || !!sinStock || !!editandoPartidas || importar}
           onCerrar={cerrarPanel}
           onPago={setPagoDe}
           onStatus={setStatusPedido}
           esSuperAdmin={esSuperAdmin}
           onEntregarSinStock={f => { setMotivoSinStock(''); setSinStock(f) }}
+          onEditarPartidas={setEditandoPartidas}
           onCancelarPago={cancelarPago}
           onEliminar={eliminar}
           onGuardado={msg => { setAviso(msg); refrescar() }}

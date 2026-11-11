@@ -23,8 +23,13 @@ import { comprometidoAJSON } from '../../../../../src/lib/stock-disponible'
  * `sinClasificar` va como CONTEO y no como detalle por la misma razon: el
  * detalle (que pedido, de que cliente) lo arma Inventario del lado del
  * servidor, donde quien lo ve ya es staff.
+ *
+ * `?excepto=<pedido_id>` deja ese pedido fuera del conteo. Lo usa la edicion
+ * de partidas: lo que el pedido que se esta editando ya tenia apartado tiene
+ * que volver a estar disponible para el, o no se podria subir de 10 a 11
+ * cajas aunque hubiera 40 sueltas.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -36,7 +41,8 @@ export async function GET() {
     return NextResponse.json({ error: 'Sin permiso' }, { status: 403 })
   }
 
-  const { por, sinClasificar } = await cargarComprometido(createServiceClient())
+  const excepto = new URL(request.url).searchParams.get('excepto') || undefined
+  const { por, sinClasificar } = await cargarComprometido(createServiceClient(), { excepto })
 
   return NextResponse.json(
     { comprometido: comprometidoAJSON(por), sinClasificar: sinClasificar.length },

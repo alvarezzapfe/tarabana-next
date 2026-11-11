@@ -30,6 +30,23 @@ export const LITROS_POR_UNIDAD = {
   stock_barril10_acero: LITROS_BARRIL_10,
 } as const
 
+/**
+ * Como se nombra cada columna en un mensaje para una persona.
+ *
+ * Vive aqui, junto a las columnas, porque la usan dos cosas distintas —el
+ * descuento al entregar y la validacion al editar partidas— y dos mapas
+ * diciendo lo mismo se desincronizan al agregar una presentacion.
+ */
+export const ETIQUETA_COLUMNA = {
+  stock_latas: 'latas sueltas',
+  stock_caja12: 'cajas de 12',
+  stock_caja24: 'cajas de 24',
+  stock_barril_pet: 'barriles 20L PET',
+  stock_barril_acero: 'barriles 20L acero',
+  stock_barril10_pet: 'barriles 10L PET',
+  stock_barril10_acero: 'barriles 10L acero',
+} as const satisfies Record<keyof typeof LITROS_POR_UNIDAD, string>
+
 export type ColumnaStock = keyof typeof LITROS_POR_UNIDAD
 
 export const COLUMNAS_STOCK = Object.keys(LITROS_POR_UNIDAD) as ColumnaStock[]

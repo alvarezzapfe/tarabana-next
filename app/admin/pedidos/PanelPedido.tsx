@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { etiquetaFecha, hoyMx } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import { METODOS_PAGO } from '../../../src/lib/pagos'
+import { puedeEditarPartidas } from '../../../src/lib/editar-partidas'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type FilaPedido, type PagoFila,
@@ -68,6 +69,8 @@ type Props = {
   /** Solo super admin ve la opcion de entregar sin descontar inventario. */
   esSuperAdmin: boolean
   onEntregarSinStock: (f: FilaPedido) => void
+  /** Editar las partidas. No se ofrece en un pedido entregado o cancelado. */
+  onEditarPartidas: (f: FilaPedido) => void
   onCancelarPago: (f: FilaPedido, pagoId: string) => void
   onEliminar: (f: FilaPedido) => void
   /** Guardado el envio: el padre refresca y avisa. */
@@ -77,7 +80,7 @@ type Props = {
 export default function PanelPedido(props: Props) {
   const {
     pedido, canEdit, puedeDescuento, esVendedor, nombrePor, tapado, esSuperAdmin,
-    onCerrar, onPago, onStatus, onEntregarSinStock, onCancelarPago, onEliminar, onGuardado,
+    onCerrar, onPago, onStatus, onEntregarSinStock, onEditarPartidas, onCancelarPago, onEliminar, onGuardado,
   } = props
 
   const [pestana, setPestana] = useState<Pestana>('resumen')
@@ -257,6 +260,18 @@ export default function PanelPedido(props: Props) {
                     }}
                   >
                     <a href={`/admin/pedidos/${pedido.id}/edit`} style={itemMenu}>Editar pedido</a>
+                    {/* Las PARTIDAS, que el formulario de arriba no toca. No
+                        se ofrece en un entregado (ya desconto inventario) ni
+                        en un cancelado; la ruta y el RPC lo rechazan igual. */}
+                    {canEdit && !esVendedor && puedeEditarPartidas(pedido.status) && (
+                      <button
+                        type="button"
+                        onClick={() => { setMenu(false); onEditarPartidas(pedido) }}
+                        style={itemMenu}
+                      >
+                        Editar productos
+                      </button>
+                    )}
                     {/* Para los pedidos que ya se entregaron en la realidad y
                         cuyo inventario se ajusto a mano: marcarlos por el
                         camino normal lo descontaria por segunda vez. Solo
