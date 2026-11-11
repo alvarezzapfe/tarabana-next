@@ -519,6 +519,8 @@ export const totalesDe = (filas: FilaPedido[]) => ({
   pedidos: filas.length,
   litros: filas.reduce((s, f) => s + f.litros, 0),
   total: filas.reduce((s, f) => s + f.total, 0),
+  /** Cuanto de ese total es IVA. 0 mientras ningun pedido lo lleve. */
+  iva: filas.reduce((s, f) => s + f.iva, 0),
   cobrado: filas.reduce((s, f) => s + f.cobrado, 0),
   saldo: filas.reduce((s, f) => s + f.saldo, 0),
 })

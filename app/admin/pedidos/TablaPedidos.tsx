@@ -299,6 +299,13 @@ export default function TablaPedidos(props: Props) {
 
                 <td style={{ ...td, ...tabular, textAlign: 'right', color: TINTA, fontWeight: 600 }}>
                   {moneda(f.total)}
+                  {/* El total es con IVA. Sin esta linea, dos pedidos de la
+                      misma mercancia se ven como precios distintos. */}
+                  {f.incluye_iva && (
+                    <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }} title={`Incluye ${moneda(f.iva)} de IVA`}>
+                      IVA incl.
+                    </span>
+                  )}
                 </td>
 
                 <td style={{ ...td, ...tabular, textAlign: 'right', color: f.cobrado > 0 ? '#047857' : GRIS_SUAVE }}>
@@ -414,6 +421,12 @@ export default function TablaPedidos(props: Props) {
                   }}
                 >
                   {v?.texto}
+                  {/* Cuanto del total del filtro es IVA, cuando hay. */}
+                  {c.key === 'total' && totales.iva > 0 && (
+                    <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}>
+                      {moneda(totales.iva)} de IVA
+                    </span>
+                  )}
                 </td>
               )
             })}

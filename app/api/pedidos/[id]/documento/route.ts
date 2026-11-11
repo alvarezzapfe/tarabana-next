@@ -1,4 +1,5 @@
 import { createServerSupabaseClient, createServiceClient } from '../../../../../src/lib/supabase-server'
+import { IVA_TASA_DEFAULT, etiquetaTasa } from '../../../../../src/lib/iva'
 import { NextResponse } from 'next/server'
 import { canWrite, isVendedor } from '../../../../../src/lib/roles'
 import { Document, Packer, Paragraph, Table, TableRow, TableCell, TextRun, WidthType, AlignmentType, BorderStyle, HeadingLevel, ImageRun } from 'docx'
@@ -162,18 +163,41 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows: [headerRow, ...productRows] }))
   children.push(new Paragraph({ text: '', spacing: { after: 200 } }))
 
-  // Desglose
-  const descMonto = pedido.descuento_tipo === 'porcentaje' ? Math.round((pedido.total || 0) * (pedido.descuento_valor || 0) / 100) : (pedido.descuento_valor || 0)
+  // ── Desglose ──────────────────────────────────────────────
+  //
+  // Los montos salen de `pedidos_saldo` y no se recalculan aqui. Este
+  // documento es lo que ve el cliente, asi que tiene que decir exactamente lo
+  // que el sistema le va a cobrar: la vista redondea el descuento porcentual
+  // con round(total * pct / 100, 2) y el IVA con round(base * tasa, 2), y
+  // reimplementarlo da diferencias de centavos contra el saldo que despues se
+  // persigue en cobranza.
+  //
+  // El calculo local queda solo de respaldo para un pedido CANCELADO, que la
+  // vista excluye y por eso llega sin fila.
+  const descLocal = pedido.descuento_tipo === 'porcentaje'
+    ? Math.round((pedido.total || 0) * (pedido.descuento_valor || 0)) / 100
+    : (pedido.descuento_valor || 0)
+  const descMonto = saldo ? Number(saldo.descuento_monto) || 0 : descLocal
+  const ivaMonto = saldo ? Number(saldo.iva_monto) || 0 : 0
+  const totalCobrar = saldo
+    ? Number(saldo.total_con_envio) || 0
+    : (pedido.total || 0) - descLocal + (pedido.costo_envio || 0)
+
   const desgloseRows: [string, string, boolean?][] = [
     ['Subtotal', fmt(pedido.total || 0)],
   ]
-  if (pedido.descuento_valor > 0) {
+  if (descMonto > 0) {
     desgloseRows.push([`Descuento${pedido.descuento_motivo ? ' (' + pedido.descuento_motivo + ')' : ''}`, '-' + fmt(descMonto)])
   }
   if (pedido.costo_envio > 0) {
     desgloseRows.push([`Envio${pedido.paqueteria ? ' (' + pedido.paqueteria + ')' : ''}${pedido.guia_envio ? ' Guia: ' + pedido.guia_envio : ''}`, fmt(pedido.costo_envio)])
   }
-  desgloseRows.push(['TOTAL', fmt((pedido.total || 0) - descMonto + (pedido.costo_envio || 0)), true])
+  // El renglon de IVA solo cuando lo hay: los precios de lista son sin IVA y
+  // un "IVA $0.00" en un pedido que no lo lleva invita a preguntar por que.
+  if (pedido.incluye_iva && ivaMonto > 0) {
+    desgloseRows.push([`IVA (${etiquetaTasa(Number(pedido.iva_tasa) || IVA_TASA_DEFAULT)})`, fmt(ivaMonto)])
+  }
+  desgloseRows.push(['TOTAL', fmt(totalCobrar), true])
   desgloseRows.push(['Pagado', fmt(saldo?.pagado || 0)])
   desgloseRows.push(['Saldo pendiente', fmt(saldo?.saldo || 0), true])
 

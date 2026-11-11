@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect } from 'react'
 import { createClient } from '../../../../src/lib/supabase'
+import { IVA_TASA_DEFAULT, desglosar, etiquetaTasa } from '../../../../src/lib/iva'
 
 const statusConfig: Record<string, { label: string, color: string, bg: string }> = {
   pendiente:  { label: 'Pendiente',  color: '#f59e0b', bg: '#fef9c3' },
@@ -29,12 +30,26 @@ export default function MisPedidosPage() {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) return
-      const { data } = await supabase
-        .from('pedidos')
-        .select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
-        .eq('cliente_id', user.id)
-        .order('fecha_pedido', { ascending: false })
-      setPedidos(data || [])
+      // La vista va aparte de la tabla porque es la que CALCULA lo que se
+      // cobra —descuento redondeado, IVA, total— y esta pantalla antes lo
+      // recalculaba a mano de tres formas distintas: el total de arriba
+      // ignoraba el descuento y el de abajo lo redondeaba a pesos enteros.
+      // `pedidos_saldo` tiene security_invoker, asi que el cliente ve solo
+      // sus pedidos, igual que en la consulta de al lado.
+      const [{ data }, { data: saldos }] = await Promise.all([
+        supabase
+          .from('pedidos')
+          .select('*, pedido_items(cantidad, precio_unitario, unidad, metadata, productos(nombre, estilo, imagen_url))')
+          .eq('cliente_id', user.id)
+          .order('fecha_pedido', { ascending: false }),
+        supabase
+          .from('pedidos_saldo')
+          .select('id, descuento_monto, iva_monto, total_con_envio')
+          .eq('cliente_id', user.id),
+      ])
+
+      const porId = new Map((saldos || []).map(s => [s.id, s]))
+      setPedidos((data || []).map(p => ({ ...p, saldo: porId.get(p.id) || null })))
       setLoading(false)
     }
     load()
@@ -67,6 +82,28 @@ export default function MisPedidosPage() {
             // reconoce como el dia en que lo pidio.
             const fecha = new Date(`${String(p.fecha_pedido).slice(0, 10)}T12:00:00`)
 
+            // Los montos de la vista, que son los que se cobran. El desglose
+            // local queda de respaldo para un pedido CANCELADO, que la vista
+            // excluye.
+            const d = p.saldo
+              ? {
+                  subtotal: p.total || 0,
+                  descuento: Number(p.saldo.descuento_monto) || 0,
+                  envio: p.costo_envio || 0,
+                  iva: Number(p.saldo.iva_monto) || 0,
+                  total: Number(p.saldo.total_con_envio) || 0,
+                }
+              : desglosar({
+                  subtotal: p.total || 0,
+                  descuento: p.descuento_tipo === 'porcentaje'
+                    ? Math.round((p.total || 0) * (p.descuento_valor || 0)) / 100
+                    : (p.descuento_valor || 0),
+                  envio: p.costo_envio || 0,
+                  incluyeIva: p.incluye_iva,
+                  tasa: p.iva_tasa,
+                })
+            const pesos = (n: number) => n.toLocaleString('es-MX', { minimumFractionDigits: 2 })
+
             return (
               <div key={p.id} style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 14, overflow: 'hidden', boxShadow: '0 1px 8px rgba(0,0,0,0.04)', transition: 'all 0.2s' }}>
                 {/* Header del pedido */}
@@ -90,7 +127,7 @@ export default function MisPedidosPage() {
                     </div>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-                    <p style={{ margin: 0, color: '#E8531D', fontSize: 18, fontWeight: 800 }}>${((p.total || 0) + (p.costo_envio || 0)).toLocaleString('es-MX', { minimumFractionDigits: 0 })}</p>
+                    <p style={{ margin: 0, color: '#E8531D', fontSize: 18, fontWeight: 800 }}>${d.total.toLocaleString('es-MX', { minimumFractionDigits: 0 })}</p>
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ccc" strokeWidth="2" style={{ transform: isExpanded ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
                       <path d="M6 9l6 6 6-6"/>
                     </svg>
@@ -167,18 +204,23 @@ export default function MisPedidosPage() {
                         </a>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        {(p.costo_envio > 0 || p.descuento_valor > 0) && (
+                        {(d.envio > 0 || d.descuento > 0 || d.iva > 0) && (
                           <>
-                            <p style={{ margin: 0, color: '#9ca3af', fontSize: 12 }}>Subtotal: ${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
-                            {p.descuento_valor > 0 && (
+                            <p style={{ margin: 0, color: '#9ca3af', fontSize: 12 }}>Subtotal: ${pesos(d.subtotal)}</p>
+                            {d.descuento > 0 && (
                               <p style={{ margin: '1px 0 0', color: '#10b981', fontSize: 12 }}>
-                                Descuento{p.descuento_tipo === 'porcentaje' ? ` (${p.descuento_valor}%)` : ''}: -${(p.descuento_tipo === 'porcentaje' ? Math.round(p.total * p.descuento_valor / 100) : p.descuento_valor).toLocaleString('es-MX', { minimumFractionDigits: 2 })}
+                                Descuento{p.descuento_tipo === 'porcentaje' ? ` (${p.descuento_valor}%)` : ''}: -${pesos(d.descuento)}
                               </p>
                             )}
-                            {p.costo_envio > 0 && <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>Envio: ${(p.costo_envio || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>}
+                            {d.envio > 0 && <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>Envio: ${pesos(d.envio)}</p>}
+                            {d.iva > 0 && (
+                              <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>
+                                IVA ({etiquetaTasa(Number(p.iva_tasa) || IVA_TASA_DEFAULT)}): ${pesos(d.iva)}
+                              </p>
+                            )}
                           </>
                         )}
-                        <p style={{ margin: '2px 0 0', color: '#E8531D', fontSize: 20, fontWeight: 800 }}>${((p.total || 0) - (p.descuento_tipo === 'porcentaje' ? Math.round(p.total * (p.descuento_valor || 0) / 100) : (p.descuento_valor || 0)) + (p.costo_envio || 0)).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</p>
+                        <p style={{ margin: '2px 0 0', color: '#E8531D', fontSize: 20, fontWeight: 800 }}>${pesos(d.total)}</p>
                       </div>
                     </div>
                   </div>
