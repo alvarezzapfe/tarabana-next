@@ -26,6 +26,7 @@
  */
 import { precioUnitario } from './calcular-pedido.ts'
 import { columnaStockDe } from './unidades.ts'
+import { IVA_TASA_DEFAULT, ivaDe } from './iva.ts'
 
 /** Tope de pedidos por archivo: acota el bucle de creacion. */
 export const LIMITE_PEDIDOS = 200
@@ -40,6 +41,7 @@ export const COLUMNAS_BASE = [
 /** Solo se generan y se leen si quien sube es admin o super admin. */
 export const COLUMNAS_ADMIN = [
   'costo_envio', 'descuento_tipo', 'descuento_valor', 'descuento_motivo', 'folio_factura',
+  'incluye_iva',
 ] as const
 
 /**
@@ -74,6 +76,8 @@ export type ClienteCatalogo = {
   email: string | null
   nombre: string
   nivel_precio: string | null
+  /** Default del IVA cuando la columna del archivo viene vacia. */
+  requiere_factura?: boolean | null
 }
 
 export type Catalogo = {
@@ -82,8 +86,14 @@ export type Catalogo = {
 }
 
 export type OpcionesImport = {
-  /** Puede capturar costo de envio, descuento y folio de factura. */
+  /** Puede capturar costo de envio, descuento, folio de factura e IVA. */
   puedeDescuento: boolean
+  /**
+   * Tasa vigente, para que la vista previa muestre el mismo total que va a
+   * cobrar la vista. La que se guarda la vuelve a leer `crearPedido` del
+   * servidor.
+   */
+  ivaTasa?: number
   /**
    * Un vendedor captura siempre con la fecha de hoy: mover un pedido a un mes
    * anterior le cambiaria el periodo de comision, que pudo quedar cerrado.
@@ -122,10 +132,14 @@ export type PedidoPlan = {
   descuento_tipo: string | null
   descuento_valor: number | null
   descuento_motivo: string | null
+  /** Si se va a facturar con IVA. Sale de la columna o del cliente. */
+  incluye_iva: boolean
+  /** El IVA en pesos, ya incluido en `total`. */
+  ivaMonto: number
   partidas: PartidaPlan[]
   /** Suma de las partidas, antes de descuento y envio. */
   subtotal: number
-  /** Lo que se va a cobrar: subtotal - descuento + envio. */
+  /** Lo que se va a cobrar: subtotal - descuento + envio + IVA. */
   total: number
   descuentoMonto: number
   errores: ErrorFila[]
@@ -195,6 +209,20 @@ export function parseFecha(texto: string): string | null {
     if (m < 1 || m > 12 || d < 1 || d > 31) return null
     return `${a}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`
   }
+  return null
+}
+
+/**
+ * "Si"/"No" de una celda. null si no se entiende.
+ *
+ * Acepta lo que de verdad llega de un Excel: con y sin acento, en mayusculas,
+ * "x" de marca, y los 1/0 y TRUE/FALSE que deja una formula. No adivina nada
+ * mas: un "tal vez" es un error, no un false silencioso.
+ */
+export function parseSiNo(texto: string): boolean | null {
+  const t = norm(texto)
+  if (['si', 'sí', 's', 'x', 'true', 'verdadero', '1'].includes(t)) return true
+  if (['no', 'n', 'false', 'falso', '0'].includes(t)) return false
   return null
 }
 
@@ -338,6 +366,32 @@ export function construirPlan(
     const folioFactura = opciones.puedeDescuento
       ? filasDelPedido.map(f => (f.valores.folio_factura || '').trim()).find(Boolean) || null
       : null
+
+    // ── IVA ─────────────────────────────────────────────────
+    //
+    // Vacio = lo que el cliente tenga configurado. Asi el caso normal —cada
+    // cliente factura como siempre— no pide capturar nada, y la columna solo
+    // sirve para la excepcion.
+    //
+    // Si quien sube no puede capturar descuentos tampoco puede capturar IVA
+    // (misma regla que en el POS: cambia en 16% lo que paga el cliente), y
+    // entonces manda el default del cliente. `crearPedido` vuelve a imponer
+    // esa regla del lado del servidor.
+    let incluyeIva = !!cliente?.requiere_factura
+    const textosIva = [...new Set(filasDelPedido.map(f => norm(f.valores.incluye_iva || '')).filter(Boolean))]
+    if (textosIva.length && !opciones.puedeDescuento) {
+      errores.push({
+        fila: null,
+        mensaje: 'Capturaste la columna incluye_iva, y solo admin y super admin pueden cambiar el IVA de un pedido. Déjala vacía para usar lo que el cliente tenga configurado.',
+      })
+    } else if (textosIva.length > 1) {
+      errores.push({ fila: null, mensaje: `La referencia "${referencia}" tiene valores de incluye_iva distintos (${textosIva.join(', ')}).` })
+    } else if (textosIva.length === 1) {
+      const v = parseSiNo(textosIva[0])
+      if (v === null) {
+        errores.push({ fila: numerosFila[0], mensaje: `Valor de incluye_iva "${textosIva[0]}" no valido. Usa "Si" o "No".` })
+      } else incluyeIva = v
+    }
 
     // ── Fecha del pedido ────────────────────────────────────
     const textosFecha = [...new Set(filasDelPedido.map(f => (f.valores.fecha_pedido || '').trim()).filter(Boolean))]
@@ -604,6 +658,12 @@ export function construirPlan(
       }
     }
 
+    // La vista previa tiene que prometer el mismo total que va a cobrar la
+    // vista `pedidos_saldo`, asi que el IVA se calcula con `ivaDe`, que
+    // replica su redondeo.
+    const base = Math.max(0, subtotal - descuentoMonto) + costoEnvio
+    const ivaMonto = incluyeIva ? ivaDe(base, opciones.ivaTasa ?? IVA_TASA_DEFAULT) : 0
+
     pedidos.push({
       referencia,
       cliente_id: cliente?.id ?? null,
@@ -622,7 +682,9 @@ export function construirPlan(
       partidas,
       subtotal,
       descuentoMonto,
-      total: Math.max(0, subtotal - descuentoMonto) + costoEnvio,
+      incluye_iva: incluyeIva,
+      ivaMonto,
+      total: base + ivaMonto,
       errores,
       valido,
       filas: numerosFila,
@@ -638,6 +700,7 @@ export function construirPlan(
       condiciones_pago: 'contado', fecha_pedido: opciones.hoy, fecha_entrega: null,
       orden_compra: null, folio_factura: null, notas: null, costo_envio: 0,
       descuento_tipo: null, descuento_valor: null, descuento_motivo: null,
+      incluye_iva: false, ivaMonto: 0,
       partidas: [], subtotal: 0, descuentoMonto: 0, total: 0,
       errores: sinReferencia, valido: false,
       filas: sinReferencia.map(e => e.fila!).filter(Boolean),

@@ -47,6 +47,10 @@ const ENCABEZADOS_ADMIN: Encabezado[] = [
   { clave: 'descuento_valor', titulo: 'descuento_valor', ancho: 16 },
   { clave: 'descuento_motivo', titulo: 'descuento_motivo', ancho: 26 },
   { clave: 'folio_factura', titulo: 'folio_factura', ancho: 16 },
+  {
+    clave: 'incluye_iva', titulo: 'incluye_iva', ancho: 13,
+    nota: 'Si / No. Vacio = como factura ese cliente.',
+  },
 ]
 
 export type OpcionesPlantilla = {
@@ -106,6 +110,7 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
     { header: 'condiciones', width: 16 },
     { header: 'descuento', width: 14 },
     { header: 'clientes', width: 34 },
+    { header: 'si_no', width: 10 },
   ]
   const nombresProducto = [...productos].map(p => p.nombre).sort((a, b) => a.localeCompare(b, 'es'))
   const correos = clientes.map(c => c.email).filter((e): e is string => !!e).sort()
@@ -117,6 +122,7 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
       CONDICIONES_PAGO[i]?.label ?? null,
       ['porcentaje', 'monto'][i] ?? null,
       correos[i] ?? null,
+      ['Si', 'No'][i] ?? null,
     ])
   }
 
@@ -191,6 +197,13 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
         type: 'list', allowBlank: true, formulae: [rango('D', 2)],
         showErrorMessage: true, errorTitle: 'Tipo invalido', error: 'Usa "porcentaje" o "monto".',
       }
+      // Vacio es una respuesta valida —"como factura ese cliente"— asi que
+      // allowBlank y nada de default escrito en la celda: llenarla con "No"
+      // convertiria el silencio en una instruccion.
+      captura.getCell(r, col('incluye_iva')).dataValidation = {
+        type: 'list', allowBlank: true, formulae: [rango('F', 2)],
+        showErrorMessage: true, errorTitle: 'Valor invalido', error: 'Usa "Si" o "No", o dejala vacia.',
+      }
     }
   }
 
@@ -235,6 +248,10 @@ export async function construirPlantilla(opciones: OpcionesPlantilla): Promise<U
     linea('descuento_valor', 'El numero del descuento. Si el tipo es porcentaje, de 0 a 100.')
     linea('descuento_motivo', 'Obligatorio si hay descuento.')
     linea('folio_factura', 'Opcional. El folio de la factura emitida.')
+    linea(
+      'incluye_iva',
+      'Si o No. Vacio = como factura ese cliente. Los precios de lista son SIN IVA.'
+    )
   }
   inst.addRow([])
 
