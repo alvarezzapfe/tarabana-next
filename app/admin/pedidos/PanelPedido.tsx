@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { etiquetaFecha, hoyMx } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import { METODOS_PAGO } from '../../../src/lib/pagos'
-import { puedeEditarPartidas } from '../../../src/lib/editar-partidas'
+import AccionEditarProductos from './AccionEditarProductos'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type FilaPedido, type PagoFila,
@@ -260,17 +260,16 @@ export default function PanelPedido(props: Props) {
                     }}
                   >
                     <a href={`/admin/pedidos/${pedido.id}/edit`} style={itemMenu}>Editar pedido</a>
-                    {/* Las PARTIDAS, que el formulario de arriba no toca. No
-                        se ofrece en un entregado (ya desconto inventario) ni
-                        en un cancelado; la ruta y el RPC lo rechazan igual. */}
-                    {canEdit && !esVendedor && puedeEditarPartidas(pedido.status) && (
-                      <button
-                        type="button"
-                        onClick={() => { setMenu(false); onEditarPartidas(pedido) }}
-                        style={itemMenu}
-                      >
-                        Editar productos
-                      </button>
+                    {/* Las PARTIDAS, que el formulario de arriba no toca. En
+                        un entregado o cancelado NO se esconde: sale apagada
+                        con el motivo y con la salida real. */}
+                    {canEdit && !esVendedor && (
+                      <AccionEditarProductos
+                        pedido={pedido}
+                        estilo={itemMenu}
+                        onEditar={() => onEditarPartidas(pedido)}
+                        onAntes={() => setMenu(false)}
+                      />
                     )}
                     {/* Para los pedidos que ya se entregaron en la realidad y
                         cuyo inventario se ajusto a mano: marcarlos por el

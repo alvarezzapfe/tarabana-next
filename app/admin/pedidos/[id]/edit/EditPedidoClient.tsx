@@ -2,6 +2,9 @@
 import { useState } from 'react'
 import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
+import EditarPartidas from '../../EditarPartidas'
+import { BotonEditarProductos } from '../../AccionEditarProductos'
+import { folioDe } from '../../pedidos-ui'
 
 const statusConfig: Record<string, string> = {
   pendiente: 'Pendiente', confirmado: 'Confirmado', enviado: 'En camino',
@@ -12,6 +15,7 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
   const router = useRouter()
   const supabase = createClient()
   const [saving, setSaving] = useState(false)
+  const [editandoProductos, setEditandoProductos] = useState(false)
 
   const [status, setStatus] = useState(pedido.status || 'pendiente')
   const [condicionesPago, setCondicionesPago] = useState(pedido.condiciones_pago || 'contado')
@@ -97,8 +101,17 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
         </div>
       </div>
 
-      {/* Productos (read-only) */}
+      {/* Productos */}
       <Section title="Productos del pedido" />
+      {/* La regla mira el status GUARDADO, no el del selector de arriba: lo
+          que decide es lo que el servidor va a ver, no lo que alguien dejo a
+          medio cambiar en el formulario. */}
+      <div style={{ marginBottom: 10 }}>
+        <BotonEditarProductos
+          pedido={{ id: pedido.id, status: pedido.status, cliente_id: pedido.cliente_id ?? null }}
+          onEditar={() => setEditandoProductos(true)}
+        />
+      </div>
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', marginBottom: 4 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -216,6 +229,20 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
           {saving ? 'Guardando...' : 'Guardar cambios'}
         </button>
       </div>
+
+      {editandoProductos && (
+        <EditarPartidas
+          pedido={{
+            id: pedido.id,
+            folio: folioDe(pedido.id),
+            cliente: pedido.profiles?.full_name || pedido.profiles?.email || 'Cliente',
+            cliente_id: pedido.cliente_id ?? null,
+            status: pedido.status,
+          }}
+          onCerrar={() => setEditandoProductos(false)}
+          onGuardado={() => router.refresh()}
+        />
+      )}
     </div>
   )
 }

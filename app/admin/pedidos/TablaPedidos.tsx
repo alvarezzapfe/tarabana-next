@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useMemo, useState } from 'react'
+import AccionEditarProductos from './AccionEditarProductos'
 import { etiquetaFecha } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import {
@@ -89,12 +90,13 @@ type Props = {
   canEdit: boolean
   onPago: (f: FilaPedido) => void
   onStatus: (f: FilaPedido) => void
+  onEditarPartidas: (f: FilaPedido) => void
 }
 
 export default function TablaPedidos(props: Props) {
   const {
     filas, orden, onOrden, columnas, abierta, onAbrir,
-    seleccion, onSeleccion, canEdit, onPago, onStatus,
+    seleccion, onSeleccion, canEdit, onPago, onStatus, onEditarPartidas,
   } = props
 
   /** El menu de la fila, anclado al boton en coordenadas de ventana. */
@@ -427,6 +429,7 @@ export default function TablaPedidos(props: Props) {
           y={menu.y}
           canEdit={canEdit}
           onStatus={onStatus}
+          onEditarPartidas={onEditarPartidas}
           onCerrar={() => setMenu(null)}
         />
       )}
@@ -441,12 +444,13 @@ export default function TablaPedidos(props: Props) {
  * dentro de la celda: la tabla vive en dos contenedores con scroll y un
  * menu absoluto se corta en el borde.
  */
-function MenuFila({ fila, x, y, canEdit, onStatus, onCerrar }: {
+function MenuFila({ fila, x, y, canEdit, onStatus, onEditarPartidas, onCerrar }: {
   fila: FilaPedido
   x: number
   y: number
   canEdit: boolean
   onStatus: (f: FilaPedido) => void
+  onEditarPartidas: (f: FilaPedido) => void
   onCerrar: () => void
 }) {
   const item: React.CSSProperties = {
@@ -466,6 +470,16 @@ function MenuFila({ fila, x, y, canEdit, onStatus, onCerrar }: {
       }}
     >
       <a href={`/admin/pedidos/${fila.id}/edit`} style={item}>Ver pedido</a>
+      {/* Debajo de "Ver pedido" y nunca escondida: en un pedido que no se
+          puede editar sale apagada con el motivo y con la salida real. */}
+      {canEdit && (
+        <AccionEditarProductos
+          pedido={fila}
+          estilo={item}
+          onEditar={() => onEditarPartidas(fila)}
+          onAntes={onCerrar}
+        />
+      )}
       {canEdit && fila.status !== 'cancelado' && (
         <button type="button" onClick={() => { onCerrar(); onStatus(fila) }} style={item}>
           Cambiar status
