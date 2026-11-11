@@ -1,6 +1,14 @@
 -- ============================================================
--- set_pedido_items(): reemplaza las partidas de un pedido — NO APLICADA AUN
+-- set_pedido_items(): reemplaza las partidas de un pedido
 -- ============================================================
+--
+-- APLICADA el 2026-11-10. Verificado contra produccion despues de aplicarla:
+-- publicada en /rpc/set_pedido_items con la firma (p_pedido_id uuid,
+-- p_items jsonb, p_total numeric), `anon` recibe 42501 al llamarla, y los
+-- cuatro rechazos del cuerpo responden con su errcode — pedido inexistente
+-- 23503, entregado/cancelado 55000, total que no cuadra 22023, pedido sin
+-- partidas 22023 — sin dejar escrito nada.
+--
 --
 -- Editar las partidas de un pedido existente es BORRAR las que tiene e
 -- INSERTAR las nuevas. Desde el cliente de Supabase eso son dos llamadas sin
