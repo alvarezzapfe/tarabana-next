@@ -136,16 +136,34 @@ statement. Entonces:
 
 | # | Archivo | Qué | Estado |
 |---|---|---|---|
-| 1 | `…_iva_por_partida.sql` + `_down` | columnas, backfill, vista, trigger, `set_pedido_items` con `incluye_iva` por partida | |
-| 2 | `src/lib/iva.ts` | `baseGravableDe({gravable, total, descuento, envio, envioConIva})`; `desglosar` gana los 6 renglones | |
-| 3 | `src/lib/editar-partidas.ts` | **`sobrepagoDe` cambia de firma**: recibe `gravable` en vez del booleano; `recalcularPartidas` arrastra el flag por línea | |
-| 4 | `pos-ui.ts` (`Partida`) + `Carrito.tsx` | flag por renglón, switch general tri-estado, switch de envío, desglose de 6 | |
-| 5 | `crear-pedido.ts` + `/crear` | persiste el flag por partida y `envio_incluye_iva` | |
-| 6 | `EditarPartidas.tsx` + ruta `/partidas` | switches por partida al editar | |
-| 7 | ruta `[id]/iva` + `SwitchIva.tsx` | "todas" + envío, misma regla de sobrepago y de no-editable, `audit_log` | |
-| 8 | `plantilla-pedidos.ts` + `pedidos-importar.ts` | columna `iva` por renglón; precedencia **renglón > columna del pedido > `requiere_factura`** | |
-| 9 | Word, portal, `TablaPedidos`, exportes, `reporte.ts` | desglose con Base gravable; en el Word, marca por partida cuáles van gravadas | |
-| 10 | `comisiones.test.ts` | caso de IVA mixto, sin tocar la fórmula | |
+| 1 | `20261112000000_iva_por_partida.sql` + `_down` | columnas, backfill, vista, triggers, `set_pedido_items` con `incluye_iva` por partida | aplicada |
+| 2 | `src/lib/iva.ts` | `baseGravableDe`; `desglosar` con los 6 renglones | hecho |
+| 3 | `src/lib/editar-partidas.ts` | `sobrepagoDe` recibe `gravable`; `recalcularPartidas` arrastra el flag | hecho |
+| 4 | `pos-ui.ts` + `Carrito.tsx` | flag por renglón, switch general tri-estado, switch de envío, desglose de 6 | hecho |
+| 5 | `crear-pedido.ts` + `/crear` | persiste el flag por partida y `envio_incluye_iva` | hecho |
+| 6 | `EditarPartidas.tsx` + ruta `/partidas` | switches por partida al editar | hecho |
+| 7 | ruta `[id]/iva` + `SwitchIva.tsx` | "todas" + envío, sobrepago, `audit_log` | hecho |
+| 8 | `plantilla-pedidos.ts` + `pedidos-importar.ts` | columna `iva` por renglón; precedencia renglón > pedido > cliente | hecho |
+| 9 | Word, portal, `TablaPedidos`, `PanelPedido` | Base gravable, y marca de IVA por partida cuando hay mezcla | hecho |
+| 10 | `comisiones.test.ts` | caso de IVA mixto, sin tocar la fórmula | hecho |
+
+### Lo que salió distinto de lo planeado
+
+**El `revoke` que faltaba.** `pedido_todas_las_partidas_con_iva` es
+`SECURITY DEFINER` y devuelve un escalar, así que con el `EXECUTE` por default
+de `PUBLIC` quedaba **publicada como RPC por PostgREST**: cualquier `anon`
+podía preguntarle "este pedido lleva IVA en todas sus partidas" saltándose
+RLS, de un pedido a la vez. Lo detectó el dueño del proyecto después de
+aplicar la migración y lo corrió a mano; quedó registrado en el archivo y la
+verificación lo comprueba con `has_function_privilege`.
+
+**El reporte y `metricas.ts` no se tocaron.** `iva_monto` sigue existiendo con
+el mismo significado, así que `ventaDe` (venta sin IVA) y el renglón de IVA del
+reporte siguen funcionando sin cambios.
+
+**La base gravable se muestra sólo cuando no es todo el pedido.** Si coincide
+con subtotal − descuento + envío, el renglón no explica nada; con IVA parcial,
+en cambio, es lo único que vuelve verificable el impuesto impreso.
 
 ### Lo que NO cambia, y por qué
 
