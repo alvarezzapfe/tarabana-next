@@ -371,3 +371,34 @@ antes/después por columna.
 Si alguna vez hace falta de verdad, se arregla con un trigger `BEFORE UPDATE`
 que haga `new.updated_at := now()` — pero eso es una migración, y mientras no
 exista, no confiar en la columna.
+
+## `pedidos_saldo` incluye IVA desde el 2026-11-11
+
+`pedidos.incluye_iva` y `pedidos.iva_tasa` (migración `20261111000000`)
+agregaron una tercera columna a la vista, `iva_monto`, y cambiaron lo que
+significan dos que ya existían:
+
+```
+base            = total - descuento_monto + costo_envio
+iva_monto       = round(base * iva_tasa, 2) si incluye_iva, si no 0
+total_con_envio = base + iva_monto        <- antes era solo `base`
+saldo           = total_con_envio - pagado
+```
+
+Dos consecuencias al leer datos:
+
+- **`total` sigue siendo bruto y SIN IVA.** El IVA nunca entra en
+  `pedido_items`: es un atributo del pedido y se suma una sola vez, al final.
+  `crearPedido` y `set_pedido_items` no lo conocen, y su comparación de totales
+  contra las partidas sigue cuadrando.
+- **Lo facturado de un pedido (`pagado + saldo`) ahora puede traer IVA.** Para
+  medir VENTA hay que restarle `iva_monto` — es lo que hace `ventaDe` en
+  `src/lib/metricas.ts`, que también explica por qué la cobranza sí lo deja.
+
+`iva_tasa` es una copia de `app_config.impuestos.iva_tasa` tomada al crear el
+pedido, no una lectura en vivo: un pedido cobrado y pagado al 16% no puede
+amanecer con saldo porque la tasa cambió.
+
+Los 15 pedidos vivos al momento de la migración quedaron en
+`incluye_iva = false`, así que ninguno movió su saldo; la propia migración lo
+verifica comparando contra una foto tomada antes de tocar nada.
