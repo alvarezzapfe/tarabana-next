@@ -129,16 +129,38 @@ vez por partida.
 
 | # | Archivo | Qué | Estado |
 |---|---|---|---|
-| 1 | `…_pedido_ajuste.sql` + `_down` | columnas, constraint, vista de 26 | |
-| 2 | `src/lib/ajuste.ts` | `ajusteParaCuadrar`, `excedeTolerancia`, `TOLERANCIA_AJUSTE = 0.05`. Puro, con tests | |
-| 3 | `src/lib/iva.ts` | `desglosar` gana `ajuste` y lo suma al total | |
-| 4 | `src/lib/editar-partidas.ts` | `sobrepagoDe` suma el ajuste a `aCobrar` | |
-| 5 | `src/lib/metricas.ts` | `FilaSaldo.ajuste` **obligatoria**; `ventaDe = neto − iva − ajuste`; `ajusteTotal`; `ResumenPeriodo.ajuste` | |
-| 6 | `crear-pedido.ts` + `/crear` | persiste `ajuste`/`ajuste_motivo`, solo admin | |
-| 7 | ruta `[id]/ajuste` + `CampoAjuste.tsx` | panel y pantalla vieja; motivo, 5%, sobrepago, total negativo, `audit_log` | |
-| 8 | `Carrito.tsx` | campo Ajuste, motivo y "Cuadrar contra OC"; desglose de 7 renglones | |
-| 9 | `dash-ui.ts`, `pedidos-ui.ts`, `TablaPedidos`, Word, portal, `clientes-export`, `reporte.ts` | formateador con centavos y renglón de Ajuste | |
-| 10 | `comisiones.test.ts` | ajuste positivo y negativo, sin tocar la fórmula | |
+| 1 | `20261113000000_pedido_ajuste.sql` + `_down` | columnas, constraint, vista de 26 | aplicada |
+| 2 | `src/lib/ajuste.ts` | `ajusteParaCuadrar`, `excedeTolerancia`, `motivoRechazo`, `TOLERANCIA_AJUSTE` | hecho |
+| 3 | `src/lib/iva.ts` | `desglosar` gana `ajuste` y lo suma al total | hecho |
+| 4 | `src/lib/editar-partidas.ts` | `sobrepagoDe` suma el ajuste; se extrajo `sobrepagoDeTotal` | hecho |
+| 5 | `src/lib/metricas.ts` | `FilaSaldo.ajuste`; `ventaDe = neto − iva − ajuste`; `ajusteTotal`; `ResumenPeriodo.ajuste` | hecho |
+| 6 | `crear-pedido.ts` + `/crear` | persiste `ajuste`/`ajuste_motivo`, solo admin | hecho |
+| 7 | ruta `[id]/ajuste` + `CampoAjuste.tsx` | panel y pantalla vieja | hecho |
+| 8 | `Carrito.tsx` | campo Ajuste, motivo y "Cuadrar contra OC"; desglose de 7 | hecho |
+| 9 | `dash-ui.ts`, `pedidos-ui.ts`, `TablaPedidos`, Word, portal, `clientes-export`, `reporte.ts` | centavos y renglón de Ajuste | hecho |
+| 10 | `comisiones.test.ts` | ajuste positivo y negativo, sin tocar la fórmula | hecho |
+
+### Lo que salió distinto de lo planeado
+
+**`sobrepagoDeTotal`.** La ruta del ajuste saca `totalAntes` de la vista
+(`total_con_envio − ajuste`) en vez de reconstruir el descuento, el prorrateo
+del IVA y el redondeo. Reconstruirlo sería una segunda implementación, y el día
+que difiriera por un centavo el aviso del 5% y el del sobrepago hablarían de un
+pedido que no existe. Para eso se extrajo `sobrepagoDeTotal(aCobrar, pagado)`,
+del que `sobrepagoDe` ahora depende: el redondeo del sobrepago vive en un solo
+lugar.
+
+**La pantalla vieja de edición recibe el total de la vista.** Lo había
+calculado ahí mismo y estaba mal: ignoraba el IVA. Ahora la página consulta
+`pedidos_saldo` y pasa `total_con_envio − ajuste`; en un pedido cancelado llega
+`null` y el campo no se muestra, porque sin total autoritativo no se puede
+cuadrar nada.
+
+**El 5% se pregunta en el cliente y se vuelve a exigir en el servidor.** En el
+POS se confirma antes de mandar y el body viaja con `confirmar_ajuste`; el
+guard del servidor queda como defensa contra una llamada armada a mano. Quien
+captura no tiene por qué descubrir la regla con un error después de picar
+Confirmar.
 
 El desglose completo, en orden: **Subtotal, Descuento, Envío, Base gravable,
 IVA, Ajuste, Total.**

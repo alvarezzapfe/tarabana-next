@@ -29,7 +29,7 @@ export default function SeccionResumen({ r }: { r: Reporte }) {
     // Sin IVA, como todo lo analitico. El IVA entra como KPI propio y solo
     // cuando lo hay, para que el reporte de un periodo sin pedidos
     // facturados con IVA se vea exactamente como antes.
-    { label: 'Facturado', valor: moneda(r.resumen.facturado), v: variacion(r.resumen.facturado, r.previo.facturado), nota: 'sin IVA' },
+    { label: 'Facturado', valor: moneda(r.resumen.facturado), v: variacion(r.resumen.facturado, r.previo.facturado), nota: 'sin IVA ni ajustes' },
     { label: 'Cobrado', valor: moneda(r.resumen.cobrado), v: variacion(r.resumen.cobrado, r.previo.cobrado) },
     {
       label: '% cobrado',
@@ -47,6 +47,15 @@ export default function SeccionResumen({ r }: { r: Reporte }) {
     { label: 'Clientes', valor: enteros(r.resumen.clientes), v: variacion(r.resumen.clientes, r.previo.clientes) },
     { label: 'Ritmo anualizado', valor: moneda(r.ritmo), v: null },
   ]
+
+  if (r.resumen.ajuste !== 0 || r.previo.ajuste !== 0) {
+    kpis.splice(1, 0, {
+      label: 'Ajustes de OC',
+      valor: moneda(r.resumen.ajuste),
+      v: variacion(r.resumen.ajuste, r.previo.ajuste),
+      nota: 'aparte de Facturado',
+    })
+  }
 
   if (r.resumen.iva > 0 || r.previo.iva > 0) {
     kpis.splice(1, 0, {
@@ -79,8 +88,8 @@ export default function SeccionResumen({ r }: { r: Reporte }) {
       <p className="rep-nota">
         El periodo anterior es {periodoLegible(r.anterior)}, de la misma duración. Cobrado va por fecha de
         pago; el resto, por fecha del pedido. «% cobrado» es la parte de lo facturado EN EL PERIODO que ya
-        entró, no el cociente de los dos KPIs. Las ventas van SIN IVA —el IVA no es ingreso, se cobra para
-        enterarlo— y la cobranza de abajo CON IVA, que es lo que el cliente debe.
+        entró, no el cociente de los dos KPIs. Las ventas van SIN IVA y SIN ajustes de OC —ninguno de los
+        dos es ingreso— y la cobranza de abajo los incluye, que es lo que el cliente debe.
       </p>
 
       <h3 className="rep-sub">Al día de hoy</h3>

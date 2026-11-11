@@ -267,11 +267,12 @@ test('el resumen del Excel trae el periodo, la hora y los hallazgos', () => {
   const valor = (c: string) => hoja.filas.find(f => f.Concepto === c)?.Valor
   assert.equal(valor('Periodo'), '2026-11-01 a 2026-11-05')
   assert.equal(valor('Generado'), r.generado)
-  assert.equal(valor('Facturado (sin IVA)'), 3_500)
+  assert.equal(valor('Facturado (sin IVA ni ajustes)'), 3_500)
   // El IVA va como renglon propio, y aparece aunque sea 0: en una hoja de
   // calculo un renglon ausente se lee como un olvido, no como un cero.
   assert.equal(valor('IVA facturado'), 0)
-  assert.equal(valor('Total facturado (con IVA)'), 3_500)
+  assert.equal(valor('Ajustes de OC'), 0)
+  assert.equal(valor('Total facturado (con IVA y ajustes)'), 3_500)
   assert.equal(hoja.filas.filter(f => f.Concepto === 'Hallazgo').length, r.hallazgos.length)
 })
 

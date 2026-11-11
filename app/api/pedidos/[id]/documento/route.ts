@@ -205,6 +205,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const descMonto = saldo ? Number(saldo.descuento_monto) || 0 : descLocal
   const ivaMonto = saldo ? Number(saldo.iva_monto) || 0 : 0
   const baseGravable = saldo ? Number(saldo.base_gravable) || 0 : 0
+  const ajuste = saldo ? Number(saldo.ajuste) || 0 : Number(pedido.ajuste) || 0
   const totalCobrar = saldo
     ? Number(saldo.total_con_envio) || 0
     : (pedido.total || 0) - descLocal + (pedido.costo_envio || 0)
@@ -228,6 +229,16 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       desgloseRows.push(['Base gravable', fmt(baseGravable)])
     }
     desgloseRows.push([`IVA (${etiquetaTasa(Number(pedido.iva_tasa) || IVA_TASA_DEFAULT)})`, fmt(ivaMonto)])
+  }
+
+  // El ajuste con su MOTIVO en la etiqueta: es un renglon que mueve el total
+  // sin corresponder a ninguna partida, y el cliente tiene derecho a leer por
+  // que. El signo va adelante del peso porque puede ir en los dos sentidos.
+  if (ajuste !== 0) {
+    const etiquetaAjuste = pedido.ajuste_motivo
+      ? `Ajuste (${pedido.ajuste_motivo})`
+      : 'Ajuste'
+    desgloseRows.push([etiquetaAjuste, `${ajuste < 0 ? '-' : '+'}${fmt(Math.abs(ajuste))}`])
   }
   desgloseRows.push(['TOTAL', fmt(totalCobrar), true])
   desgloseRows.push(['Pagado', fmt(saldo?.pagado || 0)])

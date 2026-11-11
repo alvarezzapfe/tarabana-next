@@ -6,6 +6,7 @@ import EditarPartidas from '../../EditarPartidas'
 import { BotonEditarProductos } from '../../AccionEditarProductos'
 import { folioDe } from '../../pedidos-ui'
 import SwitchIva from '../../SwitchIva'
+import CampoAjuste from '../../CampoAjuste'
 
 const statusConfig: Record<string, string> = {
   pendiente: 'Pendiente', confirmado: 'Confirmado', enviado: 'En camino',
@@ -25,7 +26,7 @@ function Section({ title }: { title: string }) {
   )
 }
 
-export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: any) {
+export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin, puedeAjustar, totalAntesDeAjuste }: any) {
   const router = useRouter()
   const supabase = createClient()
   const [saving, setSaving] = useState(false)
@@ -214,6 +215,31 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin }: a
         canEdit
         onGuardado={() => router.refresh()}
       />
+
+      {/* Ajuste.
+
+          Como el IVA, se guarda SOLO y no con el boton de abajo: va por su
+          propia ruta porque puede pedir dos confirmaciones —el 5% y el
+          sobrepago— y meterlo en el PATCH general obligaria a repetirlas ahi
+          junto con el audit_log. */}
+      {/* `totalAntesDeAjuste` es null en un pedido cancelado, que la vista
+          excluye: sin el total autoritativo no se puede cuadrar nada, y
+          calcularlo a mano aqui daria un numero sin el IVA. */}
+      {puedeAjustar && totalAntesDeAjuste !== null && (
+        <>
+          <Section title="Ajuste" />
+          <CampoAjuste
+            pedidoId={pedido.id}
+            folio={folioDe(pedido.id)}
+            status={pedido.status}
+            ajuste={Number(pedido.ajuste || 0)}
+            motivo={pedido.ajuste_motivo ?? null}
+            totalAntes={Number(totalAntesDeAjuste)}
+            canEdit
+            onGuardado={() => router.refresh()}
+          />
+        </>
+      )}
 
       <Section title="Fechas" />
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 4 }}>

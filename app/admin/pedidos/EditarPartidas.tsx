@@ -397,6 +397,14 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
                 }
                 envioConIva={false}
                 onEnvioConIva={() => {}}
+                // El ajuste NO se edita aqui: no es una partida, y vive en el
+                // panel con su atajo de OC y sus dos confirmaciones. Pasarlo
+                // en blanco deja el desglose de este modal hablando solo de la
+                // mercancia, que es lo que se esta editando.
+                ajuste=""
+                onAjuste={() => {}}
+                ajusteMotivo=""
+                onAjusteMotivo={() => {}}
                 ivaTasa={ivaTasa}
                 puedeIva
                 bloqueos={bloqueos}

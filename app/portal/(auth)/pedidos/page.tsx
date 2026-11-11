@@ -44,7 +44,7 @@ export default function MisPedidosPage() {
           .order('fecha_pedido', { ascending: false }),
         supabase
           .from('pedidos_saldo')
-          .select('id, descuento_monto, base_gravable, iva_monto, total_con_envio')
+          .select('id, descuento_monto, base_gravable, iva_monto, ajuste, total_con_envio')
           .eq('cliente_id', user.id),
       ])
 
@@ -92,6 +92,7 @@ export default function MisPedidosPage() {
                   envio: p.costo_envio || 0,
                   baseGravable: Number(p.saldo.base_gravable) || 0,
                   iva: Number(p.saldo.iva_monto) || 0,
+                  ajuste: Number(p.saldo.ajuste) || 0,
                   total: Number(p.saldo.total_con_envio) || 0,
                 }
               : desglosar({
@@ -107,6 +108,7 @@ export default function MisPedidosPage() {
                   envio: p.costo_envio || 0,
                   envioConIva: p.envio_incluye_iva,
                   tasa: p.iva_tasa,
+                  ajuste: p.ajuste,
                 })
             const pesos = (n: number) => n.toLocaleString('es-MX', { minimumFractionDigits: 2 })
 
@@ -210,7 +212,7 @@ export default function MisPedidosPage() {
                         </a>
                       </div>
                       <div style={{ textAlign: 'right' }}>
-                        {(d.envio > 0 || d.descuento > 0 || d.iva > 0) && (
+                        {(d.envio > 0 || d.descuento > 0 || d.iva > 0 || d.ajuste !== 0) && (
                           <>
                             <p style={{ margin: 0, color: '#9ca3af', fontSize: 12 }}>Subtotal: ${pesos(d.subtotal)}</p>
                             {d.descuento > 0 && (
@@ -233,6 +235,12 @@ export default function MisPedidosPage() {
                                   IVA ({etiquetaTasa(Number(p.iva_tasa) || IVA_TASA_DEFAULT)}): ${pesos(d.iva)}
                                 </p>
                               </>
+                            )}
+                            {d.ajuste !== 0 && (
+                              <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 12 }}>
+                                Ajuste{p.ajuste_motivo ? ` (${p.ajuste_motivo})` : ''}:{' '}
+                                {d.ajuste < 0 ? '−' : '+'}${pesos(Math.abs(d.ajuste))}
+                              </p>
                             )}
                           </>
                         )}

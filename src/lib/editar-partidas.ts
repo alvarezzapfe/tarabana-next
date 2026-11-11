@@ -294,6 +294,22 @@ export type Sobrepago = {
  * guardarse sin que alguien lo vea y lo confirme: un saldo negativo descuadra
  * la cobranza y no hay nada en la pantalla que lo explique despues.
  */
+/**
+ * El sobrepago a partir de lo que se cobra y lo que ya se pago.
+ *
+ * Existe aparte de `sobrepagoDe` para quien YA tiene el total autoritativo —la
+ * ruta del ajuste lo saca de `pedidos_saldo`— y no deberia recalcularlo:
+ * reconstruir el IVA y el prorrateo para volver a llegar al mismo numero es
+ * una segunda implementacion que puede divergir de la vista.
+ */
+export function sobrepagoDeTotal(aCobrar: number, pagado: number): Sobrepago | null {
+  const cobrar = Number(aCobrar) || 0
+  const yaPagado = Number(pagado) || 0
+  const sobra = Math.round((yaPagado - cobrar) * 100) / 100
+  if (sobra <= 0) return null
+  return { aCobrar: cobrar, pagado: yaPagado, sobra }
+}
+
 export function sobrepagoDe(entrada: {
   total: number
   descuento_tipo?: string | null
@@ -333,10 +349,7 @@ export function sobrepagoDe(entrada: {
     + ivaDe(base, Number(entrada.iva_tasa) || 0)
     + (Number(entrada.ajuste) || 0)
 
-  const pagado = Number(entrada.pagado) || 0
-  const sobra = Math.round((pagado - aCobrar) * 100) / 100
-  if (sobra <= 0) return null
-  return { aCobrar, pagado, sobra }
+  return sobrepagoDeTotal(aCobrar, entrada.pagado)
 }
 
 /** Status en los que las partidas ya no se tocan. Lo repite el RPC. */
