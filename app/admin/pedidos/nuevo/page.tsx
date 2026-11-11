@@ -14,10 +14,11 @@ import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA,
   type Partida, type Producto,
   card, claveCelda, etiquetaDe, moneda, precioDe, presentacionesVisibles,
-  celdaVale, disponibleEn, productoDeClave, tabular, vistaCelda,
+  celdaVale, disponibleEn, gravableDe, monedaExacta, monedaFirmada, productoDeClave, tabular, vistaCelda,
 } from './pos-ui'
 import { comprometidoDeJSON } from '../../../../src/lib/stock-disponible'
-import { IVA_TASA_DEFAULT, tasaIvaDeConfig } from '../../../../src/lib/iva'
+import { IVA_TASA_DEFAULT, desglosar, tasaIvaDeConfig } from '../../../../src/lib/iva'
+import { TOLERANCIA_AJUSTE, excedeTolerancia, motivoRechazo } from '../../../../src/lib/ajuste'
 
 /**
  * Captura de pedidos, estilo punto de venta.
@@ -121,6 +122,9 @@ export default function NuevoPedidoPage() {
   /** null = el default del cliente, igual que arriba. */
   const [envioIvaManual, setEnvioIvaManual] = useState<boolean | null>(null)
   const [ivaTasa, setIvaTasa] = useState(IVA_TASA_DEFAULT)
+  /** Ajuste para cuadrar contra la OC del cliente. Solo admin lo ve. */
+  const [ajuste, setAjuste] = useState('')
+  const [ajusteMotivo, setAjusteMotivo] = useState('')
 
   const [drawerMix, setDrawerMix] = useState(false)
   const [carritoMovil, setCarritoMovil] = useState(false)
@@ -495,6 +499,22 @@ export default function NuevoPedidoPage() {
     const descVal = Number(descuento.valor.replace(/[^\d.]/g, '')) || 0
     const envio = Number(costoEnvio.replace(/[^\d.]/g, '')) || 0
 
+    // El 5% se pregunta aqui y se manda ya confirmado. El servidor lo vuelve a
+    // exigir —es su guard contra una llamada armada a mano— pero quien captura
+    // no tiene por que descubrirlo con un error despues de picar Confirmar.
+    if (puedeDescuento && ajusteNum !== 0) {
+      const rechazo = motivoRechazo({ ajuste: ajusteNum, motivo: ajusteMotivo, totalAntes: totalSinAjuste })
+      if (rechazo) { setError(rechazo); setEnviando(false); return }
+
+      if (excedeTolerancia(ajusteNum, totalSinAjuste)) {
+        const ok = window.confirm(
+          `El ajuste de ${monedaFirmada(ajusteNum)} pasa del ${TOLERANCIA_AJUSTE * 100}% del total ` +
+          `(${monedaExacta(totalSinAjuste)}).\n\n¿Es correcto?`
+        )
+        if (!ok) { setEnviando(false); return }
+      }
+    }
+
     const res = await fetch('/api/admin/pedidos/crear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -524,6 +544,9 @@ export default function NuevoPedidoPage() {
         // navegador pudiera proponer la tasa de IVA seria dejarle fijar el
         // precio final.
         envio_incluye_iva: envioConIva,
+        ...(puedeDescuento && ajusteNum !== 0
+          ? { ajuste: ajusteNum, ajuste_motivo: ajusteMotivo.trim(), confirmar_ajuste: true }
+          : {}),
       }),
     })
 
@@ -539,6 +562,23 @@ export default function NuevoPedidoPage() {
 
   const totalCarrito = partidas.reduce((s, p) => s + p.precio * p.cantidad, 0)
 
+  // El desglose se recalcula aqui con la MISMA funcion que usa el carrito, no
+  // con una copia: de aqui sale el total contra el que se mide el 5%.
+  const ajusteNum = Number(ajuste.replace(/[^\d.-]/g, '')) || 0
+  const envioNum = Math.max(0, Number(costoEnvio.replace(/[^\d.]/g, '')) || 0)
+  const descValNum = Math.max(0, Number(descuento.valor.replace(/[^\d.]/g, '')) || 0)
+  const descMontoNum = descuento.tipo === 'porcentaje'
+    ? Math.round(totalCarrito * descValNum) / 100
+    : descuento.tipo === 'monto' ? descValNum : 0
+  const totalSinAjuste = desglosar({
+    subtotal: totalCarrito,
+    gravable: gravableDe(partidas),
+    descuento: Math.min(descMontoNum, totalCarrito),
+    envio: envioNum,
+    envioConIva,
+    tasa: ivaTasa,
+  }).total
+
   const carrito = (
     <Carrito
       partidas={partidas}
@@ -550,6 +590,10 @@ export default function NuevoPedidoPage() {
       onDescuento={setDescuento}
       costoEnvio={costoEnvio}
       onCostoEnvio={setCostoEnvio}
+      ajuste={ajuste}
+      onAjuste={setAjuste}
+      ajusteMotivo={ajusteMotivo}
+      onAjusteMotivo={setAjusteMotivo}
       onIvaPartida={ivaDePartida}
       onIvaTodas={ivaDeTodas}
       envioConIva={envioConIva}

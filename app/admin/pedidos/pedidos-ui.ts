@@ -15,7 +15,7 @@ import { nombreLegible } from '../../../src/lib/metricas'
 
 export {
   ACENTO, ROJO, TINTA, TINTA_MEDIA, GRIS, GRIS_SUAVE, BORDE, PISTA,
-  card, tabular, moneda,
+  card, tabular, moneda, monedaExacta, monedaFirmada,
 } from '../dash-ui'
 
 // ── Catalogos de estado ─────────────────────────────────────
@@ -163,6 +163,9 @@ export type FilaPedido = {
   partidas_con_iva: number
   /** La tasa con la que se facturo ESTE pedido, no la vigente. */
   iva_tasa: number
+  /** Ajuste para cuadrar contra la OC del cliente. Puede ser negativo. */
+  ajuste: number
+  ajuste_motivo: string | null
   cobrado: number
   saldo: number
   /** 0 a 100. */
@@ -309,6 +312,10 @@ export function armarFilas(
       envio_incluye_iva: !!p.envio_incluye_iva,
       partidas_con_iva: items.filter(i => i.incluye_iva).length,
       iva_tasa: num(p.iva_tasa),
+      // El monto sale de la vista, que es quien lo cobra; el motivo de la
+      // tabla, porque un cancelado no esta en la vista y aun asi se muestra.
+      ajuste: s ? num(s.ajuste) : num(p.ajuste),
+      ajuste_motivo: texto(p.ajuste_motivo),
       cobrado,
       saldo: Math.max(0, saldo),
       pctCobrado: total > 0 ? Math.min(100, (cobrado / total) * 100) : 0,
@@ -533,6 +540,8 @@ export const totalesDe = (filas: FilaPedido[]) => ({
   total: filas.reduce((s, f) => s + f.total, 0),
   /** Cuanto de ese total es IVA. 0 mientras ningun pedido lo lleve. */
   iva: filas.reduce((s, f) => s + f.iva, 0),
+  /** Ajustes del filtro, neteados entre si. */
+  ajuste: filas.reduce((s, f) => s + f.ajuste, 0),
   cobrado: filas.reduce((s, f) => s + f.cobrado, 0),
   saldo: filas.reduce((s, f) => s + f.saldo, 0),
 })

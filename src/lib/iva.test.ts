@@ -187,3 +187,43 @@ test('tasaIvaDeConfig respeta un 0 explicito', () => {
   // Es el unico caso en que 0 es una respuesta y no un error de lectura.
   assert.equal(tasaIvaDeConfig({ iva_tasa: 0 }), 0)
 })
+
+// ── El ajuste en el desglose ────────────────────────────────
+
+test('ajuste: entra DESPUES del IVA y no mueve la base', () => {
+  const sinAjuste = desglosar({ subtotal: 1_000, gravable: 1_000, tasa: 0.16 })
+  const conAjuste = desglosar({ subtotal: 1_000, gravable: 1_000, tasa: 0.16, ajuste: 0.27 })
+
+  // La base y el IVA son los mismos: el ajuste no es un descuento.
+  assert.equal(conAjuste.baseGravable, sinAjuste.baseGravable)
+  assert.equal(conAjuste.iva, sinAjuste.iva)
+  // Lo unico que cambia es el total.
+  assert.equal(conAjuste.ajuste, 0.27)
+  assert.equal(conAjuste.total, 1_160.27)
+  assert.equal(sinAjuste.total, 1_160)
+})
+
+test('ajuste negativo: baja el total y deja la base intacta', () => {
+  const d = desglosar({ subtotal: 1_000, gravable: 1_000, tasa: 0.16, ajuste: -160 })
+  assert.equal(d.baseGravable, 1_000)
+  assert.equal(d.iva, 160)
+  assert.equal(d.total, 1_000)
+})
+
+test('ajuste con IVA mixto y descuento: cada renglon en su lugar', () => {
+  // 600 gravados de 1,000, descuento 100 -> base 540, IVA 86.40, ajuste -0.40
+  const d = desglosar({
+    subtotal: 1_000, gravable: 600, descuento: 100, tasa: 0.16, ajuste: -0.4,
+  })
+  assert.equal(d.baseGravable, 540)
+  assert.equal(d.iva, 86.4)
+  assert.equal(d.ajuste, -0.4)
+  // 1,000 - 100 + 86.40 - 0.40 = 986.00
+  assert.equal(d.total, 986)
+})
+
+test('ajuste: sin ajuste el desglose es el de siempre', () => {
+  const d = desglosar({ subtotal: 1_000, gravable: 0 })
+  assert.equal(d.ajuste, 0)
+  assert.equal(d.total, 1_000)
+})

@@ -29,6 +29,12 @@ export const FONDO = '#fafafa'
 
 export const tabular = { fontVariantNumeric: 'tabular-nums' } as const
 export const moneda = (n: number) => `$${Math.round(n).toLocaleString('es-MX')}`
+
+// Los formateadores con centavos se reexportan de dash-ui en vez de copiarse:
+// `moneda` de arriba ya es una copia del de alla, y una tercera version de
+// "como se escribe el dinero" es como se llega a que dos pantallas muestren
+// totales distintos.
+export { monedaExacta, monedaFirmada } from '../../dash-ui.ts'
 export const card = {
   background: '#fff',
   border: `1px solid ${BORDE}`,

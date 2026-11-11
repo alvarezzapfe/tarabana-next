@@ -5,11 +5,12 @@ import { formatLitros } from '../../../src/lib/unidades'
 import { METODOS_PAGO } from '../../../src/lib/pagos'
 import AccionEditarProductos from './AccionEditarProductos'
 import SwitchIva from './SwitchIva'
+import CampoAjuste from './CampoAjuste'
 import { IVA_TASA_DEFAULT, etiquetaTasa } from '../../../src/lib/iva'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type FilaPedido, type PagoFila,
-  estadoDe, moneda, pasosDe, tabular,
+  estadoDe, moneda, monedaExacta, monedaFirmada, pasosDe, tabular,
 } from './pedidos-ui'
 
 /**
@@ -335,7 +336,7 @@ export default function PanelPedido(props: Props) {
         {/* ── Cuerpo ──────────────────────────────────────────── */}
         <div style={{ flex: '1 1 auto', overflowY: 'auto', padding: '16px 20px 28px' }}>
           {pestana === 'resumen' && (
-            <Resumen pedido={pedido} esVendedor={esVendedor} canEdit={canEdit} onGuardado={onGuardado} />
+            <Resumen pedido={pedido} esVendedor={esVendedor} canEdit={canEdit} puedeDescuento={puedeDescuento} onGuardado={onGuardado} />
           )}
           {pestana === 'pagos' && (
             <Pagos
@@ -422,10 +423,11 @@ function LineaTiempo({ pasos }: { pasos: ReturnType<typeof pasosDe> }) {
 
 // ── Resumen ───────────────────────────────────────────────────
 
-function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
+function Resumen({ pedido, esVendedor, canEdit, puedeDescuento, onGuardado }: {
   pedido: FilaPedido
   esVendedor: boolean
   canEdit: boolean
+  puedeDescuento: boolean
   onGuardado: (mensaje: string) => void
 }) {
   const campos: { label: string; valor: string | null }[] = [
@@ -523,11 +525,35 @@ function Resumen({ pedido, esVendedor, canEdit, onGuardado }: {
               <Renglon etiqueta={`IVA (${etiquetaTasa(pedido.iva_tasa || IVA_TASA_DEFAULT)})`} valor={moneda(pedido.iva)} />
             </>
           )}
-          <Renglon etiqueta="Total" valor={moneda(pedido.total)} fuerte />
+          {/* El ajuste con su signo y con CENTAVOS: es lo unico del desglose
+              que puede ser de 27 centavos, y `moneda` los redondearia a $0. */}
+          {pedido.ajuste !== 0 && (
+            <Renglon
+              etiqueta={`Ajuste${pedido.ajuste_motivo ? ` (${pedido.ajuste_motivo})` : ''}`}
+              valor={monedaFirmada(pedido.ajuste)}
+              color={ACENTO}
+            />
+          )}
+          <Renglon etiqueta="Total" valor={pedido.ajuste !== 0 ? monedaExacta(pedido.total) : moneda(pedido.total)} fuerte />
         </div>
 
         {/* El vendedor ve el renglon pero no el switch: cambiarlo mueve en
             16% lo que paga el cliente, igual que un descuento. */}
+        {/* El ajuste es de admin, como el descuento: mueve lo que paga el
+            cliente sin tocar ningun precio. */}
+        {puedeDescuento && (
+          <CampoAjuste
+            pedidoId={pedido.id}
+            folio={pedido.folio}
+            status={pedido.status}
+            ajuste={pedido.ajuste}
+            motivo={pedido.ajuste_motivo}
+            totalAntes={pedido.total - pedido.ajuste}
+            canEdit={canEdit}
+            onGuardado={onGuardado}
+          />
+        )}
+
         {!esVendedor && (
           <SwitchIva
             pedidoId={pedido.id}

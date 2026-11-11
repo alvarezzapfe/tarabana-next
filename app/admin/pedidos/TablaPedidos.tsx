@@ -6,7 +6,7 @@ import { formatLitros } from '../../../src/lib/unidades'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
   type ColumnaOpcional, type ColumnaOrden, type FilaPedido, type Orden,
-  estadoDe, moneda, tabular, totalesDe,
+  estadoDe, moneda, monedaExacta, monedaFirmada, tabular, totalesDe,
 } from './pedidos-ui'
 
 /**
@@ -306,9 +306,19 @@ export default function TablaPedidos(props: Props) {
                   {f.iva > 0 && (
                     <span
                       style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}
-                      title={`Incluye ${moneda(f.iva)} de IVA sobre una base de ${moneda(f.base_gravable)}`}
+                      title={`Incluye ${monedaExacta(f.iva)} de IVA sobre una base de ${monedaExacta(f.base_gravable)}`}
                     >
                       {f.incluye_iva ? 'IVA incl.' : `IVA en ${f.partidas_con_iva}/${f.items.length}`}
+                    </span>
+                  )}
+                  {/* Un total que no cuadra con subtotal - descuento + envio +
+                      IVA necesita explicacion, y el ajuste es la unica. */}
+                  {f.ajuste !== 0 && (
+                    <span
+                      style={{ display: 'block', color: ACENTO, fontSize: 9.5, fontWeight: 600 }}
+                      title={f.ajuste_motivo || 'Ajuste'}
+                    >
+                      ajuste {monedaFirmada(f.ajuste)}
                     </span>
                   )}
                 </td>
@@ -430,6 +440,11 @@ export default function TablaPedidos(props: Props) {
                   {c.key === 'total' && totales.iva > 0 && (
                     <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}>
                       {moneda(totales.iva)} de IVA
+                    </span>
+                  )}
+                  {c.key === 'total' && totales.ajuste !== 0 && (
+                    <span style={{ display: 'block', color: ACENTO, fontSize: 9.5, fontWeight: 600 }}>
+                      {monedaFirmada(totales.ajuste)} de ajuste
                     </span>
                   )}
                 </td>

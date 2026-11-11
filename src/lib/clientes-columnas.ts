@@ -86,6 +86,8 @@ const DECLARADAS: Declaracion[] = [
   // este archivo es de cobranza: facturado, cobrado y saldo tienen que
   // cuadrar entre si, y los tres van con IVA.
   { titulo: 'IVA',             ancho: 13, formato: 'pesos',  calculada: true },
+  // Cuanto del total es ajuste de OC. Puede ser negativo.
+  { titulo: 'Ajuste',          ancho: 13, formato: 'pesos',  calculada: true },
   { titulo: 'Cobrado',         ancho: 14, formato: 'pesos',  calculada: true },
   { titulo: 'Saldo',           ancho: 14, formato: 'pesos',  calculada: true },
   { titulo: 'Último pedido',   ancho: 13, formato: 'fecha',  calculada: true },

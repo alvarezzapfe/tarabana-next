@@ -37,6 +37,9 @@ export async function POST(request: Request) {
       descuento_valor: body.descuento_valor,
       descuento_motivo: body.descuento_motivo,
       envio_incluye_iva: body.envio_incluye_iva,
+      ajuste: body.ajuste,
+      ajuste_motivo: body.ajuste_motivo,
+      confirmar_ajuste: body.confirmar_ajuste,
     },
     {
       userId: user.id,

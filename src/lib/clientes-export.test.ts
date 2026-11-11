@@ -37,6 +37,7 @@ const saldo = (over: Partial<FilaSaldo> = {}): FilaSaldo => ({
   pagado: 400,
   saldo: 200,
   iva_monto: 0,
+  ajuste: 0,
   status: 'entregado',
   estado_cobro: 'parcial',
   dias_vencido: 0,
@@ -145,7 +146,7 @@ test('las filas sin cliente_id se ignoran en vez de agruparse juntas', () => {
 
 // ── Hoja "Clientes" ─────────────────────────────────────────
 
-test('un renglon por cliente, con las 36 columnas pedidas', () => {
+test('un renglon por cliente, con las 37 columnas pedidas', () => {
   const [hoja] = armarHojasClientes({
     clientes: [cliente(), cliente({ id: 'c2' })],
     saldos: [],
@@ -153,7 +154,7 @@ test('un renglon por cliente, con las 36 columnas pedidas', () => {
   })
   assert.equal(hoja.nombre, 'Clientes')
   assert.equal(hoja.filas.length, 2)
-  assert.equal(hoja.columnas.length, 36)
+  assert.equal(hoja.columnas.length, 37)
   assert.equal(hoja.columnas.length, new Set(hoja.columnas).size, 'hay encabezados repetidos')
   assert.equal(hoja.anchos!.length, hoja.columnas.length)
 })
@@ -192,6 +193,7 @@ test('cada celda corresponde a su encabezado', () => {
   assert.equal(f['# pedidos'], 1)
   assert.equal(f['Total facturado'], 600)
   assert.equal(f['IVA'], 0)
+  assert.equal(f['Ajuste'], 0)
   assert.equal(f['Cobrado'], 400)
   assert.equal(f['Saldo'], 200)
   assert.equal(f['Notas'], 'Pide factura el mismo dia')

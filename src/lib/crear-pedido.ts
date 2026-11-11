@@ -30,7 +30,9 @@ import { calcularPedido } from './calcular-pedido'
 import { STATUS_SIN_COMPROMISO, comprometidoDe, type OpcionesComprometido } from './stock-disponible'
 import { logAction } from './audit'
 import { enviarInvitacionCliente } from './invitar-cliente'
-import { cargarTasaIva } from './iva'
+import { baseGravableDe, cargarTasaIva, ivaDe } from './iva'
+import { TOLERANCIA_AJUSTE, excedeTolerancia, motivoRechazo } from './ajuste'
+import { descuentoMonto } from './editar-partidas'
 
 /** Item tal como lo arma el admin: producto_id = "<uuid>-<unidad>". */
 export type ItemCrudo = {
@@ -75,6 +77,18 @@ export type DatosPedido = {
    * final.
    */
   envio_incluye_iva?: boolean | null
+  /**
+   * Ajuste en pesos para cuadrar contra la OC del cliente. Positivo o
+   * negativo, y pide motivo. Solo admin, igual que el descuento y el envio:
+   * mueve lo que el cliente paga sin tocar ningun precio.
+   */
+  ajuste?: number | null
+  ajuste_motivo?: string | null
+  /**
+   * Confirmacion explicita cuando el ajuste pasa del 5% (ver
+   * ./ajuste). Sin esto, un ajuste grande se rechaza en vez de pasar callado.
+   */
+  confirmar_ajuste?: boolean
 }
 
 export type ContextoPedido = {
@@ -309,6 +323,46 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
     return malo('El descuento no puede ser mayor al subtotal')
   }
 
+  // ── Ajuste ────────────────────────────────────────────────
+  //
+  // Solo admin, por lo mismo que el descuento: mueve lo que el cliente paga
+  // sin tocar ningun precio, y sin motivo no queda explicacion de por que.
+  const ajuste = Number(datos.ajuste ?? 0)
+  if (ajuste !== 0) {
+    if (!canManageAsAdmin(role)) {
+      return malo(
+        esVendedor
+          ? 'Un vendedor no puede ajustar el total de un pedido'
+          : 'Solo admin y super admin pueden ajustar el total de un pedido',
+        403
+      )
+    }
+
+    // `totalAntes` es lo que se cobraria sin ajuste, IVA incluido: es contra
+    // eso que se mide el 5%, no contra el bruto de las partidas.
+    const descuento = descuentoMonto(calculo.total, datos.descuento_tipo, datos.descuento_valor)
+    const gravable = calculo.items.reduce((t, i) => t + (i.incluye_iva ? i.subtotal : 0), 0)
+    const baseGravable = baseGravableDe({
+      subtotal: calculo.total,
+      gravable,
+      descuento,
+      envio: costoEnvio,
+      envioConIva: envioIncluyeIva,
+    })
+    const totalAntes = calculo.total - descuento + costoEnvio + ivaDe(baseGravable, ivaTasa)
+
+    const rechazo = motivoRechazo({ ajuste, motivo: datos.ajuste_motivo, totalAntes })
+    if (rechazo) return malo(rechazo)
+
+    if (excedeTolerancia(ajuste, totalAntes) && datos.confirmar_ajuste !== true) {
+      return malo(
+        `El ajuste de ${ajuste.toFixed(2)} pasa del ${TOLERANCIA_AJUSTE * 100}% del total (${totalAntes.toFixed(2)}). Confirmalo para continuar.`
+      )
+    }
+  } else if (datos.ajuste_motivo?.trim()) {
+    return malo('Hay un motivo de ajuste sin ajuste')
+  }
+
   // ── Pedido y partidas: o los dos, o ninguno ───────────────
   const { data: pedido, error } = await db.from('pedidos').insert({
     cliente_id: datos.cliente_id,
@@ -332,6 +386,8 @@ export async function crearPedido(datos: DatosPedido, ctx: ContextoPedido): Prom
     // trigger de la migracion 20261112000000 desde las partidas y el envio.
     envio_incluye_iva: envioIncluyeIva,
     iva_tasa: ivaTasa,
+    ajuste,
+    ajuste_motivo: ajuste !== 0 ? datos.ajuste_motivo!.trim() : null,
   }).select('id').single()
 
   if (error || !pedido) return malo(error?.message || 'No se pudo crear el pedido')

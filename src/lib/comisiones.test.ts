@@ -727,3 +727,52 @@ test('IVA mixto con envio: el envio sale y el IVA tambien', () => {
   // 1,612 x 1,400/1,612 = 1,400; / 1.265 = 1,106.72.
   assert.equal(r.base, 1_106.72)
 })
+
+test('ajuste de OC: no genera comision, en los dos sentidos', () => {
+  // El prorrateo por `total_con_envio` ya excluye el ajuste, porque el ajuste
+  // esta en el denominador y no en el numerador. No hay nada en la formula que
+  // hable del ajuste, y es a proposito: cuadrar una OC no es vender.
+  //
+  // Mercancia 1,000, pagado completo en los tres casos.
+  const base = (conEnvio: number, cobrado: number) => calcularComision({
+    pagos: [pago('g1', 'p1', cobrado)],
+    pedidos: [pedido('p1', 1_000, { total_con_envio: conEnvio })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  }).base
+
+  const sinAjuste = base(1_000, 1_000)
+  const conAjustePositivo = base(1_500, 1_500)   // la OC pedia 500 mas
+  const conAjusteNegativo = base(700, 700)       // la OC pedia 300 menos
+
+  assert.equal(sinAjuste, 790.51)
+  assert.equal(conAjustePositivo, 790.51)
+  assert.equal(conAjusteNegativo, 790.51)
+})
+
+test('ajuste de OC: un pago parcial se prorratea sobre la mercancia', () => {
+  // Total con ajuste 1,500, cobrada la mitad: comisiona la mitad de la
+  // MERCANCIA (500), no la mitad del total.
+  const r = calcularComision({
+    pagos: [pago('g1', 'p1', 750)],
+    pedidos: [pedido('p1', 1_000, { total_con_envio: 1_500 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+  // 500 / 1.265 = 395.26
+  assert.equal(r.base, 395.26)
+})
+
+test('ajuste de OC con IVA y descuento: sigue siendo la mercancia neta', () => {
+  // total 2,260, descuento 226, IVA sobre 2,034 = 325.44, ajuste +0.56
+  // -> total_con_envio 2,360.00
+  const r = calcularComision({
+    pagos: [pago('g1', 'p1', 2_360)],
+    pedidos: [pedido('p1', 2_260, { descuento_monto: 226, total_con_envio: 2_360 })],
+    tramos: ESCALERA,
+    periodo: PERIODO,
+  })
+  // 2,360 x 2,034/2,360 = 2,034; / 1.265 = 1,607.91 — el mismo numero que sin
+  // IVA y sin ajuste.
+  assert.equal(r.base, 1_607.91)
+})

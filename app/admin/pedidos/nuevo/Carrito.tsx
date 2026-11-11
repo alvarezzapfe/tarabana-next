@@ -1,10 +1,13 @@
 'use client'
+import { useState } from 'react'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
-  type Partida, estadoIva, gravableDe, litrosDePartida, litrosTotalesDe, moneda, tabular,
+  type Partida, estadoIva, gravableDe, litrosDePartida, litrosTotalesDe,
+  moneda, monedaExacta, monedaFirmada, tabular,
 } from './pos-ui'
 import { formatLitros } from '../../../../src/lib/unidades'
 import { desglosar, etiquetaTasa, ivaDe } from '../../../../src/lib/iva'
+import { TOLERANCIA_AJUSTE, ajusteParaCuadrar, excedeTolerancia, motivoRechazo } from '../../../../src/lib/ajuste'
 import ChipIva from './ChipIva'
 
 /**
@@ -50,6 +53,12 @@ type Props = {
   onEnvioConIva: (valor: boolean) => void
   /** Tasa vigente, la que se guardara en el pedido. */
   ivaTasa: number
+
+  /** Ajuste para cuadrar contra la OC. Texto, como el envio y el descuento. */
+  ajuste: string
+  onAjuste: (v: string) => void
+  ajusteMotivo: string
+  onAjusteMotivo: (v: string) => void
   /**
    * Quien puede mover los switches. El vendedor no: gravar o desgravar cambia
    * en 16% lo que paga el cliente, igual que un descuento, y por eso sigue el
@@ -72,10 +81,15 @@ type Props = {
 }
 
 export default function Carrito(props: Props) {
+  // El total de la OC es un auxiliar de captura: no viaja al servidor ni le
+  // importa a nadie mas, asi que vive aqui y no en la pagina.
+  const [oc, setOc] = useState('')
+
   const {
     partidas, stockPorClave, onCantidad, onQuitar,
     puedeDescuento, descuento, onDescuento, costoEnvio, onCostoEnvio,
     onIvaPartida, onIvaTodas, envioConIva, onEnvioConIva, ivaTasa, puedeIva,
+    ajuste, onAjuste, ajusteMotivo, onAjusteMotivo,
     bloqueos, enviando, onConfirmar, error,
     etiquetaConfirmar = 'Confirmar pedido', etiquetaEnviando = 'Creando…',
   } = props
@@ -88,6 +102,7 @@ export default function Carrito(props: Props) {
     : descuento.tipo === 'monto' ? descVal : 0
   // El descuento se tope al subtotal, como antes: un descuento mayor que la
   // mercancia no puede volver negativa la base ni regalar envio.
+  const ajusteNum = Number(ajuste.replace(/[^\d.-]/g, '')) || 0
   const { baseGravable, iva, total } = desglosar({
     subtotal,
     gravable: gravableDe(partidas),
@@ -95,7 +110,12 @@ export default function Carrito(props: Props) {
     envio,
     envioConIva,
     tasa: ivaTasa,
+    ajuste: ajusteNum,
   })
+  // Lo que se cobraria sin ajuste: contra esto se mide el 5% y contra esto se
+  // cuadra la OC.
+  const totalAntes = total - ajusteNum
+  const rechazoAjuste = motivoRechazo({ ajuste: ajusteNum, motivo: ajusteMotivo, totalAntes })
   const estado = estadoIva(partidas)
   const litros = litrosTotalesDe(partidas)
 
@@ -257,7 +277,7 @@ export default function Carrito(props: Props) {
                         linea — y con mezcla es justo lo que uno quiere ver. */}
                     {p.incluyeIva && (
                       <span style={{ ...tabular, display: 'block', color: ACENTO, fontSize: 10, fontWeight: 600 }}>
-                        + {moneda(ivaDe(p.precio * p.cantidad, ivaTasa))} IVA
+                        + {monedaExacta(ivaDe(p.precio * p.cantidad, ivaTasa))} IVA
                       </span>
                     )}
                   </span>
@@ -347,6 +367,89 @@ export default function Carrito(props: Props) {
         </div>
       )}
 
+      {/* ── Ajuste ────────────────────────────────────────
+          Despues del IVA porque entra despues del IVA: no mueve la base
+          gravable, y por eso es un ajuste y no un descuento. */}
+      {puedeDescuento && partidas.length > 0 && (
+        <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+            <span style={{ color: TINTA_MEDIA, fontSize: 12, fontWeight: 600 }}>Ajuste</span>
+            <span style={{ marginLeft: 'auto', ...tabular, color: GRIS_SUAVE, fontSize: 10.5 }}>
+              sin ajuste: {monedaExacta(totalAntes)}
+            </span>
+          </div>
+
+          {/* Cuadrar contra la OC: la operacion real es "cuadrame en 10,000",
+              no "ponle 0.27". Restar a mano es pedirle al usuario la
+              aritmetica que esta pantalla ya tiene. */}
+          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end' }}>
+            <div style={{ flex: 1 }}>
+              <label style={etiqueta}>Total de la OC</label>
+              <input
+                value={oc}
+                onChange={e => setOc(e.target.value)}
+                inputMode="decimal"
+                placeholder="10,000.00"
+                style={{ ...input, ...tabular }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const meta = Number(oc.replace(/[^\d.-]/g, ''))
+                if (!Number.isFinite(meta)) return
+                const calculado = ajusteParaCuadrar(meta, totalAntes)
+                onAjuste(calculado === 0 ? '' : String(calculado))
+              }}
+              disabled={!oc.trim()}
+              style={{
+                padding: '7px 11px', background: '#fff', border: `1px solid ${BORDE}`,
+                borderRadius: 7, color: oc.trim() ? TINTA_MEDIA : GRIS_SUAVE,
+                fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap',
+                cursor: oc.trim() ? 'pointer' : 'default',
+              }}
+            >
+              Cuadrar
+            </button>
+          </div>
+
+          <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ width: 104 }}>
+              <label style={etiqueta}>Ajuste $</label>
+              <input
+                value={ajuste}
+                onChange={e => {
+                  const v = e.target.value.replace(/[^\d.-]/g, '')
+                  const negativo = v.startsWith('-')
+                  onAjuste((negativo ? '-' : '') + v.replace(/-/g, ''))
+                }}
+                inputMode="decimal"
+                placeholder="0.00"
+                style={{ ...input, ...tabular, color: ajusteNum < 0 ? ROJO : ajusteNum > 0 ? ACENTO : TINTA }}
+              />
+            </div>
+            <div style={{ flex: 1 }}>
+              <label style={etiqueta}>
+                Motivo {ajusteNum !== 0 && <span style={{ color: ROJO }}>*</span>}
+              </label>
+              <input
+                value={ajusteMotivo}
+                onChange={e => onAjusteMotivo(e.target.value)}
+                placeholder="Redondeo OC 4471"
+                style={{ ...input, borderColor: ajusteNum !== 0 && !ajusteMotivo.trim() ? ROJO : BORDE }}
+              />
+            </div>
+          </div>
+
+          {ajusteNum !== 0 && !rechazoAjuste && excedeTolerancia(ajusteNum, totalAntes) && (
+            <p style={{ margin: 0, color: ACENTO, fontSize: 11 }}>
+              Pasa del {TOLERANCIA_AJUSTE * 100}% del total; se te va a pedir confirmación.
+            </p>
+          )}
+          {rechazoAjuste && <p style={{ margin: 0, color: ROJO, fontSize: 11.5 }}>{rechazoAjuste}</p>}
+        </div>
+      )}
+
       {/* ── Totales ───────────────────────────────────────── */}
       <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
         {partidas.length > 0 && (
@@ -354,28 +457,33 @@ export default function Carrito(props: Props) {
             Los precios de lista son sin IVA.
           </p>
         )}
-        <Renglon label="Subtotal" valor={moneda(subtotal)} />
+        {/* Con CENTAVOS en todo el desglose: `moneda` redondea a pesos, y
+            aqui es donde el usuario cuadra contra una orden de compra. */}
+        <Renglon label="Subtotal" valor={monedaExacta(subtotal)} />
         {descuentoMonto > 0 && (
           <Renglon
             label={`Descuento${descuento.tipo === 'porcentaje' ? ` (${descVal}%)` : ''}`}
-            valor={`−${moneda(descuentoMonto)}`}
+            valor={`−${monedaExacta(descuentoMonto)}`}
             color={ACENTO}
           />
         )}
-        {envio > 0 && <Renglon label="Envío" valor={moneda(envio)} />}
+        {envio > 0 && <Renglon label="Envío" valor={monedaExacta(envio)} />}
         {/* La base gravable solo aparece cuando hay IVA: en un pedido
             exento seria un renglon en cero invitando a preguntar por que. */}
         {baseGravable > 0 && (
           <>
-            <Renglon label="Base gravable" valor={moneda(baseGravable)} />
-            <Renglon label={`IVA (${etiquetaTasa(ivaTasa)})`} valor={moneda(iva)} />
+            <Renglon label="Base gravable" valor={monedaExacta(baseGravable)} />
+            <Renglon label={`IVA (${etiquetaTasa(ivaTasa)})`} valor={monedaExacta(iva)} />
           </>
+        )}
+        {ajusteNum !== 0 && (
+          <Renglon label="Ajuste" valor={monedaFirmada(ajusteNum)} color={ACENTO} />
         )}
         <Renglon label="Litros" valor={formatLitros(litros)} />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, paddingTop: 8, marginTop: 3, borderTop: `1px solid ${PISTA}` }}>
           <span style={{ color: TINTA, fontSize: 13, fontWeight: 600 }}>Total</span>
           <span style={{ ...tabular, marginLeft: 'auto', color: TINTA, fontSize: 21, fontWeight: 700 }}>
-            {moneda(total)}
+            {monedaExacta(total)}
           </span>
         </div>
       </div>
