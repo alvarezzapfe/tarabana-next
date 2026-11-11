@@ -11,8 +11,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   PRESENTACIONES, celdaStock, celdaVale, claveCelda, detalleStock, disponibleEn,
-  etiquetaDe, litrosDePartida, litrosTotalesDe, motivoBloqueo, precioDe,
-  presentacionesVisibles, productoDeClave, stockDe, vistaCelda,
+  estadoIva, etiquetaDe, gravableDe, importeDe, litrosDePartida, litrosTotalesDe,
+  motivoBloqueo, precioDe, presentacionesVisibles, productoDeClave, stockDe, vistaCelda,
   type Partida, type Producto,
 } from './pos-ui.ts'
 import { claveStock } from '../../../../src/lib/stock-disponible.ts'
@@ -331,4 +331,34 @@ test('que renglones se pintan en movil no depende del cliente', () => {
     stock_barril10_acero: 4,
   })
   assert.equal(celdaVale(soloStock, 'barril10_acero', LIBRE), true)
+})
+
+// ── IVA por partida ─────────────────────────────────────────
+
+const linea = (over: Partial<Partida> = {}): Partida => ({
+  producto_id: 'p1-lata', nombre: 'Magma — Lata', unidad: 'lata',
+  cantidad: 10, precio: 50, ...over,
+})
+
+test('el gravable suma solo las partidas marcadas', () => {
+  const partidas = [linea(), linea({ producto_id: 'p2-lata', incluyeIva: true })]
+  assert.equal(importeDe(partidas[0]), 500)
+  assert.equal(gravableDe(partidas), 500)
+  assert.equal(gravableDe([]), 0)
+  assert.equal(gravableDe(partidas.map(p => ({ ...p, incluyeIva: true }))), 1_000)
+})
+
+test('estadoIva distingue todas, ninguna y mezcla', () => {
+  const a = linea()
+  const b = linea({ producto_id: 'p2-lata' })
+  assert.equal(estadoIva([]), 'ninguna')
+  assert.equal(estadoIva([a, b]), 'ninguna')
+  assert.equal(estadoIva([{ ...a, incluyeIva: true }, { ...b, incluyeIva: true }]), 'todas')
+  assert.equal(estadoIva([{ ...a, incluyeIva: true }, b]), 'mezcla')
+})
+
+test('una sola partida gravada es "todas", no "mezcla"', () => {
+  // El switch general tiene que verse prendido, no indeterminado: no hay
+  // ninguna otra partida que contradiga.
+  assert.equal(estadoIva([linea({ incluyeIva: true })]), 'todas')
 })

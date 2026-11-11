@@ -732,13 +732,15 @@ test('parseSiNo entiende lo que de verdad llega de un Excel', () => {
 test('IVA: vacio toma el default del cliente', () => {
   const sinFactura = plan(filas({ referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10' }))
   assert.equal(sinFactura.pedidos[0].incluye_iva, false)
+  assert.equal(sinFactura.pedidos[0].gravable, 0)
   assert.equal(sinFactura.pedidos[0].ivaMonto, 0)
 
   const conFactura = plan(filas({ referencia: 'B', cliente: 'dos@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10' }))
   assert.equal(conFactura.pedidos[0].incluye_iva, true)
+  assert.ok(conFactura.pedidos[0].partidas.every(p => p.incluye_iva))
 })
 
-test('IVA: la columna manda sobre el default del cliente', () => {
+test('IVA: la columna del PEDIDO manda sobre el default del cliente', () => {
   const p = plan(filas({
     referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
     cantidad: '10', incluye_iva: 'Si',
@@ -747,34 +749,104 @@ test('IVA: la columna manda sobre el default del cliente', () => {
   assert.equal(p.incluye_iva, true)
   // 10 latas a 50 = 500; IVA 80; total 580.
   assert.equal(p.subtotal, 500)
+  assert.equal(p.gravable, 500)
   assert.equal(p.ivaMonto, 80)
   assert.equal(p.total, 580)
 })
 
-test('IVA: "No" se lo quita a un cliente que factura', () => {
-  const p = plan(filas({
-    referencia: 'B', cliente: 'dos@cliente.mx', producto: 'Magma', presentacion: 'Lata',
-    cantidad: '10', incluye_iva: 'No',
-  })).pedidos[0]
+test('IVA: la columna del RENGLON manda sobre la del pedido', () => {
+  // El pedido dice que todo lleva IVA; un renglon dice que no.
+  const p = plan(filas(
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', incluye_iva: 'Si' },
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Brisa', presentacion: 'Lata', cantidad: '10', iva: 'No' },
+  )).pedidos[0]
+
+  assert.equal(p.valido, true, JSON.stringify(p.errores))
+  assert.equal(p.subtotal, 1_000)
+  // Solo Magma grava.
+  assert.equal(p.gravable, 500)
+  assert.equal(p.ivaMonto, 80)
+  assert.equal(p.total, 1_080)
+  // Y el resumen dice la verdad: no es "todo con IVA".
   assert.equal(p.incluye_iva, false)
-  assert.equal(p.ivaMonto, 0)
 })
 
-test('IVA: va despues del descuento y sobre el envio', () => {
+test('IVA mixto con descuento porcentual: el descuento se prorratea', () => {
+  const p = plan(filas(
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', iva: 'Si',
+      descuento_tipo: 'porcentaje', descuento_valor: '10', descuento_motivo: 'Volumen' },
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Brisa', presentacion: 'Lata', cantidad: '10' },
+  )).pedidos[0]
+
+  // 1,000 de subtotal, 100 de descuento, 500 gravados -> base 450, IVA 72.
+  assert.equal(p.descuentoMonto, 100)
+  assert.equal(p.gravable, 500)
+  assert.equal(p.baseGravable, 450)
+  assert.equal(p.ivaMonto, 72)
+  assert.equal(p.total, 972)
+})
+
+test('IVA mixto con descuento de monto', () => {
+  const p = plan(filas(
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', iva: 'Si',
+      descuento_tipo: 'monto', descuento_valor: '250', descuento_motivo: 'Cortesia' },
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Brisa', presentacion: 'Lata', cantidad: '10' },
+  )).pedidos[0]
+
+  // 1,000 - 250 = 750; lo gravado baja a 500 x 0.75 = 375; IVA 60.
+  assert.equal(p.baseGravable, 375)
+  assert.equal(p.ivaMonto, 60)
+  assert.equal(p.total, 810)
+})
+
+test('IVA: el envio sigue la columna del pedido', () => {
   const p = plan(filas({
     referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
-    cantidad: '10', incluye_iva: 'Si',
-    descuento_tipo: 'monto', descuento_valor: '100', descuento_motivo: 'Volumen',
-    costo_envio: '50',
+    cantidad: '10', incluye_iva: 'Si', costo_envio: '200',
   })).pedidos[0]
 
-  // 500 - 100 + 50 = 450 de base; IVA 72; total 522.
-  assert.equal(p.descuentoMonto, 100)
-  assert.equal(p.ivaMonto, 72)
-  assert.equal(p.total, 522)
+  // 500 de mercancia gravada + 200 de flete gravado = 700 de base; IVA 112.
+  assert.equal(p.envio_incluye_iva, true)
+  assert.equal(p.baseGravable, 700)
+  assert.equal(p.ivaMonto, 112)
+  assert.equal(p.total, 812)
 })
 
-test('IVA: dos renglones con valores distintos es un error', () => {
+test('IVA: "No" en el pedido desgrava tambien el envio', () => {
+  const p = plan(filas({
+    referencia: 'B', cliente: 'dos@cliente.mx', producto: 'Magma', presentacion: 'Lata',
+    cantidad: '10', incluye_iva: 'No', costo_envio: '200',
+  })).pedidos[0]
+  assert.equal(p.envio_incluye_iva, false)
+  assert.equal(p.baseGravable, 0)
+  // Cliente 2 es mayorista: 10 latas a $45 = 450, mas 200 de flete.
+  assert.equal(p.total, 650)
+})
+
+test('IVA: dos renglones de la MISMA celda, uno gravado, gravan la celda', () => {
+  // Se consolidan en una sola partida, igual que la cantidad: si una mitad
+  // pedia IVA, la partida resultante lo lleva. Partirla seria inventar una
+  // segunda partida que el archivo no pidio.
+  const p = plan(filas(
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '4', iva: 'Si' },
+    { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '6', iva: 'No' },
+  )).pedidos[0]
+
+  assert.equal(p.partidas.length, 1)
+  assert.equal(p.partidas[0].cantidad, 10)
+  assert.equal(p.partidas[0].incluye_iva, true)
+})
+
+test('IVA: un valor de renglon que no se entiende se rechaza', () => {
+  const p = plan(filas({
+    referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
+    cantidad: '10', iva: 'tal vez',
+  })).pedidos[0]
+  assert.equal(p.valido, false)
+  assert.match(p.errores.map(e => e.mensaje).join(' '), /iva "tal vez" no valido/)
+})
+
+test('IVA: dos valores distintos en la columna del PEDIDO siguen siendo error', () => {
   const p = plan(filas(
     { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', incluye_iva: 'Si' },
     { referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Brisa', presentacion: 'Lata', cantidad: '5', incluye_iva: 'No' },
@@ -784,18 +856,9 @@ test('IVA: dos renglones con valores distintos es un error', () => {
   assert.match(p.errores.map(e => e.mensaje).join(' '), /incluye_iva distintos/)
 })
 
-test('IVA: un valor que no se entiende se rechaza', () => {
-  const p = plan(filas({
-    referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata',
-    cantidad: '10', incluye_iva: 'tal vez',
-  })).pedidos[0]
-  assert.equal(p.valido, false)
-  assert.match(p.errores.map(e => e.mensaje).join(' '), /incluye_iva "tal vez" no valido/)
-})
-
-test('IVA: quien no puede descuentos tampoco lo captura', () => {
+test('IVA: quien no puede descuentos tampoco captura la columna del renglon', () => {
   const p = construirPlan(
-    filas({ referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', incluye_iva: 'Si' }),
+    filas({ referencia: 'A', cliente: 'uno@cliente.mx', producto: 'Magma', presentacion: 'Lata', cantidad: '10', iva: 'Si' }),
     CATALOGO,
     { puedeDescuento: false, esVendedor: true, hoy: HOY }
   ).pedidos[0]
@@ -804,7 +867,9 @@ test('IVA: quien no puede descuentos tampoco lo captura', () => {
   assert.match(p.errores.map(e => e.mensaje).join(' '), /solo admin y super admin pueden cambiar el IVA/)
 })
 
-test('IVA: la plantilla de admin trae la columna, la del vendedor no', () => {
-  assert.ok((COLUMNAS_ADMIN as readonly string[]).includes('incluye_iva'))
-  assert.ok(!(COLUMNAS_BASE as readonly string[]).includes('incluye_iva'))
+test('IVA: las dos columnas son de admin, no van en la plantilla del vendedor', () => {
+  for (const col of ['incluye_iva', 'iva']) {
+    assert.ok((COLUMNAS_ADMIN as readonly string[]).includes(col), col)
+    assert.ok(!(COLUMNAS_BASE as readonly string[]).includes(col), col)
+  }
 })

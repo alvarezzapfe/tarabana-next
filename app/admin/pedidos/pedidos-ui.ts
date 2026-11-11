@@ -117,6 +117,8 @@ export type ItemFila = {
   precio: number
   subtotal: number
   litros: number
+  /** Si esta partida causa IVA. */
+  incluye_iva: boolean
 }
 
 export type PagoFila = {
@@ -152,7 +154,13 @@ export type FilaPedido = {
   costo_envio: number
   /** IVA facturado. 0 en los pedidos que no lo llevan. */
   iva: number
+  /** Lo que de verdad causo IVA, ya prorrateado el descuento. */
+  base_gravable: number
+  /** Resumen: todas las partidas gravadas y el envio tambien. */
   incluye_iva: boolean
+  envio_incluye_iva: boolean
+  /** Cuantas de sus partidas van gravadas. Para el switch de mezcla. */
+  partidas_con_iva: number
   /** La tasa con la que se facturo ESTE pedido, no la vigente. */
   iva_tasa: number
   cobrado: number
@@ -263,6 +271,7 @@ export function armarFilas(
         precio,
         subtotal: cantidad * precio,
         litros,
+        incluye_iva: !!it.incluye_iva,
       }
     })
 
@@ -295,7 +304,10 @@ export function armarFilas(
       // Las dos banderas salen de la tabla: un cancelado no esta en la vista
       // y aun asi se muestra como se facturo.
       iva: s ? num(s.iva_monto) : 0,
+      base_gravable: s ? num(s.base_gravable) : 0,
       incluye_iva: !!p.incluye_iva,
+      envio_incluye_iva: !!p.envio_incluye_iva,
+      partidas_con_iva: items.filter(i => i.incluye_iva).length,
       iva_tasa: num(p.iva_tasa),
       cobrado,
       saldo: Math.max(0, saldo),

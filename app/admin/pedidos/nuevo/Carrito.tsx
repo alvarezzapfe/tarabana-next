@@ -1,7 +1,7 @@
 'use client'
 import {
   ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA,
-  type Partida, estadoIva, gravableDe, importeDe, litrosDePartida, litrosTotalesDe, moneda, tabular,
+  type Partida, estadoIva, gravableDe, litrosDePartida, litrosTotalesDe, moneda, tabular,
 } from './pos-ui'
 import { formatLitros } from '../../../../src/lib/unidades'
 import { desglosar, etiquetaTasa } from '../../../../src/lib/iva'
