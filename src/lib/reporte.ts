@@ -179,9 +179,14 @@ export function hojasDeReporte(r: Reporte): HojaDatos[] {
     { Concepto: 'Periodo', Valor: periodo, Unidad: '' },
     { Concepto: 'Generado', Valor: r.generado, Unidad: '' },
     { Concepto: 'Periodo anterior', Valor: `${r.anterior.desde} a ${r.anterior.hasta}`, Unidad: '' },
-    { Concepto: 'Facturado', Valor: dinero(r.resumen.facturado), Unidad: 'MXN' },
-    { Concepto: 'Facturado periodo anterior', Valor: dinero(r.previo.facturado), Unidad: 'MXN' },
-    { Concepto: 'Cobrado (por fecha de pago)', Valor: dinero(r.resumen.cobrado), Unidad: 'MXN' },
+    { Concepto: 'Facturado (sin IVA)', Valor: dinero(r.resumen.facturado), Unidad: 'MXN' },
+    { Concepto: 'Facturado periodo anterior (sin IVA)', Valor: dinero(r.previo.facturado), Unidad: 'MXN' },
+    // Renglon aparte y no sumado arriba: ver las dos unidades en metricas.ts.
+    // Siempre visible aunque sea 0, porque en una hoja de calculo la ausencia
+    // de un renglon se lee como un olvido y no como un cero.
+    { Concepto: 'IVA facturado', Valor: dinero(r.resumen.iva), Unidad: 'MXN' },
+    { Concepto: 'Total facturado (con IVA)', Valor: dinero(r.resumen.facturado + r.resumen.iva), Unidad: 'MXN' },
+    { Concepto: 'Cobrado (por fecha de pago, con IVA)', Valor: dinero(r.resumen.cobrado), Unidad: 'MXN' },
     { Concepto: '% cobrado de lo facturado', Valor: r.resumen.pctCobrado === null ? '—' : pct(r.resumen.pctCobrado), Unidad: '%' },
     { Concepto: 'Pedidos', Valor: r.resumen.pedidos, Unidad: '' },
     { Concepto: 'Litros vendidos', Valor: litros(r.resumen.litros), Unidad: 'L' },

@@ -82,6 +82,10 @@ const DECLARADAS: Declaracion[] = [
   { titulo: 'Fecha de alta',   ancho: 13, formato: 'fecha',  calculada: true },
   { titulo: '# pedidos',       ancho: 11, formato: 'entero', calculada: true },
   { titulo: 'Total facturado', ancho: 16, formato: 'pesos',  calculada: true },
+  // Cuanto de ese total es IVA. Va aqui y no en lugar de la de arriba porque
+  // este archivo es de cobranza: facturado, cobrado y saldo tienen que
+  // cuadrar entre si, y los tres van con IVA.
+  { titulo: 'IVA',             ancho: 13, formato: 'pesos',  calculada: true },
   { titulo: 'Cobrado',         ancho: 14, formato: 'pesos',  calculada: true },
   { titulo: 'Saldo',           ancho: 14, formato: 'pesos',  calculada: true },
   { titulo: 'Último pedido',   ancho: 13, formato: 'fecha',  calculada: true },
