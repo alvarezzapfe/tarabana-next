@@ -36,6 +36,7 @@ export async function POST(request: Request) {
       descuento_tipo: body.descuento_tipo,
       descuento_valor: body.descuento_valor,
       descuento_motivo: body.descuento_motivo,
+      incluye_iva: body.incluye_iva,
     },
     {
       userId: user.id,

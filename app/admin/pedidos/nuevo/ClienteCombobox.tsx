@@ -15,6 +15,8 @@ export type Cliente = {
   nombre: string
   email: string | null
   nivel_precio: string | null
+  /** Default del switch de IVA del pedido. */
+  requiere_factura: boolean
 }
 
 type Props = {

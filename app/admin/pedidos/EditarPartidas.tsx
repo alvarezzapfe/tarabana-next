@@ -354,6 +354,15 @@ export default function EditarPartidas({ pedido, onCerrar, onGuardado }: Props) 
                 onDescuento={() => {}}
                 costoEnvio=""
                 onCostoEnvio={() => {}}
+                // Sin IVA, igual que sin descuento y sin envio: aqui se
+                // edita la MERCANCIA, y el total que importa mientras se
+                // captura es el de las partidas. El IVA del pedido se prende
+                // y apaga desde el panel, con su propia confirmacion de
+                // sobrepago, y el servidor lo recalcula al guardar.
+                incluyeIva={false}
+                onIncluyeIva={() => {}}
+                ivaTasa={0}
+                puedeIva={false}
                 bloqueos={bloqueos}
                 enviando={guardando}
                 onConfirmar={() => guardar(false)}

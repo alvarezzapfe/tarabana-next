@@ -4,15 +4,20 @@ import {
   type Partida, litrosDePartida, litrosTotalesDe, moneda, tabular,
 } from './pos-ui'
 import { formatLitros } from '../../../../src/lib/unidades'
+import { desglosar, etiquetaTasa } from '../../../../src/lib/iva'
 
 /**
  * Carrito de la captura.
  *
- * Muestra el desglose completo: subtotal, descuento, envio y total. La
+ * Muestra el desglose completo: subtotal, descuento, envio, IVA y total. La
  * pantalla anterior calculaba el descuento y luego hacia `total = subtotal`,
- * asi que ensenaba el subtotal etiquetado como total. Aqui el total es
- * `subtotal - descuento + envio`, que es lo que despues cobra la vista
- * `pedidos_saldo`.
+ * asi que ensenaba el subtotal etiquetado como total. Aqui el total sale de
+ * `desglosar`, que es la misma aritmetica —redondeo del IVA incluido— que
+ * despues cobra la vista `pedidos_saldo`. Si las dos no coincidieran al
+ * centavo, el pedido nunca llegaria a 'pagado'.
+ *
+ * Los precios de lista son SIN IVA. El switch decide si se cobra, y arranca
+ * prendido para los clientes con `requiere_factura`.
  */
 
 export type Descuento = {
@@ -34,6 +39,17 @@ type Props = {
   costoEnvio: string
   onCostoEnvio: (v: string) => void
 
+  incluyeIva: boolean
+  onIncluyeIva: (v: boolean) => void
+  /** Tasa vigente, la que se guardara en el pedido. */
+  ivaTasa: number
+  /**
+   * Quien puede mover el switch. El vendedor no: prenderlo o apagarlo cambia
+   * en 16% lo que paga el cliente, igual que un descuento, y por eso sigue el
+   * mismo criterio. Apagado sigue viendo el renglon, para saber que se cobra.
+   */
+  puedeIva: boolean
+
   /** Motivos por los que no se puede confirmar. Vacio = se puede. */
   bloqueos: string[]
   enviando: boolean
@@ -51,6 +67,7 @@ export default function Carrito(props: Props) {
   const {
     partidas, stockPorClave, onCantidad, onQuitar,
     puedeDescuento, descuento, onDescuento, costoEnvio, onCostoEnvio,
+    incluyeIva, onIncluyeIva, ivaTasa, puedeIva,
     bloqueos, enviando, onConfirmar, error,
     etiquetaConfirmar = 'Confirmar pedido', etiquetaEnviando = 'Creando…',
   } = props
@@ -61,7 +78,15 @@ export default function Carrito(props: Props) {
   const descuentoMonto = descuento.tipo === 'porcentaje'
     ? Math.round(subtotal * descVal) / 100
     : descuento.tipo === 'monto' ? descVal : 0
-  const total = Math.max(0, subtotal - descuentoMonto) + envio
+  // El descuento se tope al subtotal, como antes: un descuento mayor que la
+  // mercancia no puede volver negativa la base ni regalar envio.
+  const { iva, total } = desglosar({
+    subtotal,
+    descuento: Math.min(descuentoMonto, subtotal),
+    envio,
+    incluyeIva,
+    tasa: ivaTasa,
+  })
   const litros = litrosTotalesDe(partidas)
 
   const input: React.CSSProperties = {
@@ -211,6 +236,32 @@ export default function Carrito(props: Props) {
         </div>
       )}
 
+      {/* ── IVA ───────────────────────────────────────────── */}
+      {partidas.length > 0 && (
+        <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12 }}>
+          <label
+            style={{
+              display: 'flex', alignItems: 'center', gap: 9,
+              cursor: puedeIva ? 'pointer' : 'default',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={incluyeIva}
+              disabled={!puedeIva}
+              onChange={e => onIncluyeIva(e.target.checked)}
+              style={{ width: 15, height: 15, accentColor: ACENTO, cursor: puedeIva ? 'pointer' : 'default', margin: 0 }}
+            />
+            <span style={{ color: puedeIva ? TINTA : GRIS, fontSize: 12.5, fontWeight: 600 }}>
+              Incluir IVA ({etiquetaTasa(ivaTasa)})
+            </span>
+          </label>
+          <p style={{ margin: '5px 0 0 24px', color: GRIS_SUAVE, fontSize: 11 }}>
+            Los precios de lista son sin IVA.
+          </p>
+        </div>
+      )}
+
       {/* ── Totales ───────────────────────────────────────── */}
       <div style={{ borderTop: `1px solid ${BORDE}`, paddingTop: 12, display: 'flex', flexDirection: 'column', gap: 5 }}>
         <Renglon label="Subtotal" valor={moneda(subtotal)} />
@@ -222,6 +273,7 @@ export default function Carrito(props: Props) {
           />
         )}
         {envio > 0 && <Renglon label="Envío" valor={moneda(envio)} />}
+        {incluyeIva && <Renglon label={`IVA (${etiquetaTasa(ivaTasa)})`} valor={moneda(iva)} />}
         <Renglon label="Litros" valor={formatLitros(litros)} />
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, paddingTop: 8, marginTop: 3, borderTop: `1px solid ${PISTA}` }}>
           <span style={{ color: TINTA, fontSize: 13, fontWeight: 600 }}>Total</span>
