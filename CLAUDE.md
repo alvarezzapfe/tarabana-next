@@ -1,6 +1,6 @@
 @AGENTS.md
 
-## Produccion: dos cosas que se preguntan antes, siempre
+## Produccion: tres cosas que se preguntan antes, siempre
 
 Este proyecto apunta a una sola instancia de Supabase: `next dev` en localhost
 escribe en **produccion**. No existe un entorno de staging donde equivocarse
@@ -33,5 +33,21 @@ cuantas y de quien son, y esperar la indicacion** antes de borrarlas. Lo mismo
 aplica a cualquier limpieza automatica: un script de borrado de datos de
 prueba no toca `audit_log` por su cuenta.
 
-Las dos reglas valen igual para datos de prueba que para cualquier otra cosa:
-"lo iba a borrar al final" no las exime.
+### 3. "Solo lectura" significa CERO escrituras
+
+**Cuando el usuario diga "solo lectura", no se escribe NADA en produccion, ni
+temporalmente ni para revertir. Si una prueba necesita escribir, primero
+pregunta.**
+
+Un `update` seguido de su `update` inverso no es una lectura: es dos
+escrituras. Y entre las dos pasan cosas que no se revierten — triggers que
+corren, `updated_at` que se mueve, un webhook que sale, otra sesion que lee el
+estado intermedio. Que al final los datos queden iguales no vuelve la prueba
+inocua, solo la vuelve difícil de auditar.
+
+Lo que si se puede hacer en modo solo lectura para probar un trigger o una
+vista: leer filas que YA tengan el estado que interesa, o pedir permiso para
+crear datos de prueba y decir exactamente que se va a escribir.
+
+Las tres reglas valen igual para datos de prueba que para cualquier otra cosa:
+"lo iba a borrar al final" y "lo revierto en el mismo script" no las eximen.
