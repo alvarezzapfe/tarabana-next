@@ -186,7 +186,10 @@ export default function TablaPedidos(props: Props) {
     visibles.reduce((a, c) => a + (c.ancho ?? ANCHO_CLIENTE), 0)
 
   return (
-    <div style={{ overflowX: 'auto' }}>
+    // `minWidth: 0`: un contenedor de scroll sigue reportando el min-content
+    // de su contenido a un padre flex, y con la tabla en 1068 px eso hacia
+    // que <main> se negara a encoger en una ventana de 1200.
+    <div style={{ overflowX: 'auto', minWidth: 0 }}>
       <style>{CSS}</style>
       {/*
         `table-layout: fixed` y no auto: es lo que le da ancho DEFINIDO a la
@@ -231,7 +234,16 @@ export default function TablaPedidos(props: Props) {
                 </th>
               )
             })}
-            <th style={{ ...th, width: ANCHO_ACCIONES, cursor: 'default', textAlign: 'right' }} />
+            {/*
+              Con encabezado y no vacio: un <th /> sin texto deja una columna
+              fantasma a la derecha de la ultima real, y quien la ve no sabe
+              si le falta un dato o si ahi va algo. `sr-only` no aplica aqui
+              —el proyecto no lo tiene— asi que el texto se pinta, en el mismo
+              gris y tamaño que los demas encabezados.
+            */}
+            <th style={{ ...th, width: ANCHO_ACCIONES, cursor: 'default', textAlign: 'right' }}>
+              Acciones
+            </th>
           </tr>
         </thead>
 

@@ -126,6 +126,22 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         className="admin-main"
         style={{
           flex: 1,
+          /*
+           * `minWidth: 0` y no el `auto` por defecto.
+           *
+           * Un item flex no encoge por debajo del min-content de su
+           * contenido, asi que una tabla ancha adentro hacia que <main> se
+           * pasara del hueco que le toca y el DOCUMENTO entero acabara mas
+           * ancho que la ventana. Se notaba en ventanas sin maximizar: a
+           * 1200 px el area util son 872 y la tabla de pedidos pide 1068.
+           *
+           * Con esto, <main> siempre mide exactamente viewport menos sidebar,
+           * y lo ancho scrollea donde debe: dentro de su propia tarjeta.
+           * La contraparte es que cualquier cosa ancha necesita su contenedor
+           * con overflow propio, porque `body` tiene `overflow-x: hidden` y
+           * sin scroll propio se recorta en silencio.
+           */
+          minWidth: 0,
           marginLeft: 'var(--admin-sidebar-w, 240px)',
           padding: 'var(--admin-pad-y) var(--admin-pad-x)',
           background: '#fafafa',
