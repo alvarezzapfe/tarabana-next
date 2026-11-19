@@ -5,6 +5,9 @@ import {
   mermaDelPeriodo, ventanaDias, litrosDeEnvasado, historicoCsv,
   filtrarHistorico, fmtDias, fmtGravedad, FILTRO_VACIO,
   type FilaHistorico, type LoteParaAvance,
+  textoMotivo, textosMotivos, pesoAlerta, hayAlerta,
+  diasObjetivoEtapa, diasObjetivoTotal, diasRestantes, litrosEnCamino, barraEnVentana,
+  type DiasReceta, type LoteEnCamino,
 } from './produccion.ts'
 import { LITROS_POR_LATA } from './unidades.ts'
 
@@ -295,4 +298,252 @@ test('la gravedad va con tres decimales', () => {
   // la segunda se alinea con las demas.
   assert.equal(fmtGravedad(1.05), '1.050')
   assert.equal(fmtGravedad(null), '—')
+})
+
+// ── F2: alertas ─────────────────────────────────────────────
+
+test('un motivo desconocido no se esconde: se devuelve tal cual', () => {
+  // Si la vista empieza a emitir una clave nueva, tiene que aparecer en
+  // pantalla para que alguien la traduzca, no desaparecer en silencio.
+  assert.equal(textoMotivo('merma_alta'), 'Merma arriba del 10%')
+  assert.equal(textoMotivo('clave_que_no_existe'), 'clave_que_no_existe')
+})
+
+test('los motivos se traducen en orden y un null da lista vacia', () => {
+  assert.deepEqual(textosMotivos(['sin_lectura_48h', 'merma_alta']), [
+    'Sin lectura en más de 48 h',
+    'Merma arriba del 10%',
+  ])
+  assert.deepEqual(textosMotivos(null), [])
+  assert.deepEqual(textosMotivos(undefined), [])
+})
+
+test('el peso de alerta ordena rojo > ambar > ninguna', () => {
+  assert.ok(pesoAlerta('rojo') > pesoAlerta('ambar'))
+  assert.ok(pesoAlerta('ambar') > pesoAlerta('ninguna'))
+  assert.equal(pesoAlerta(null), 0)
+  assert.equal(hayAlerta('ninguna'), false)
+  assert.equal(hayAlerta('ambar'), true)
+})
+
+// ── F2: dias objetivo ───────────────────────────────────────
+
+const receta = (p: Partial<DiasReceta> = {}): DiasReceta => ({
+  dias_coccion: 1, dias_fermentacion: 14, dias_maduracion: 21, dias_envasado: 3, ...p,
+})
+
+test('dias objetivo por etapa espeja receta_dias_etapa() de SQL', () => {
+  const r = receta()
+  assert.equal(diasObjetivoEtapa('coccion', r), 1)
+  assert.equal(diasObjetivoEtapa('fermentacion', r), 14)
+  assert.equal(diasObjetivoEtapa('maduracion', r), 21)
+  assert.equal(diasObjetivoEtapa('envasado', r), 3)
+})
+
+test('planeado, liberado y descartado no tienen dias objetivo', () => {
+  // Planeado es la bandeja de entrada, no una etapa con duracion; las otras
+  // dos son terminales.
+  const r = receta()
+  assert.equal(diasObjetivoEtapa('planeado', r), null)
+  assert.equal(diasObjetivoEtapa('liberado', r), null)
+  assert.equal(diasObjetivoEtapa('descartado', r), null)
+})
+
+test('sin receta no hay dias objetivo de ninguna etapa', () => {
+  assert.equal(diasObjetivoEtapa('fermentacion', null), null)
+})
+
+test('un cero en la receta es un cero, no un faltante', () => {
+  // `0 || null` daria null y trataria "no madura" como "no se sabe".
+  assert.equal(diasObjetivoEtapa('maduracion', receta({ dias_maduracion: 0 })), 0)
+})
+
+test('el total suma las cuatro etapas', () => {
+  assert.equal(diasObjetivoTotal(receta()), 39)
+})
+
+test('una receta incompleta NO da un total parcial', () => {
+  // Un total a medias proyectaria una fecha falsa que se ve igual de
+  // legitima que una buena.
+  assert.equal(diasObjetivoTotal(receta({ dias_maduracion: null })), null)
+  assert.equal(diasObjetivoTotal(null), null)
+})
+
+// ── F2: litros en camino ────────────────────────────────────
+
+const enCamino = (p: Partial<LoteEnCamino> = {}): LoteEnCamino => ({
+  producto_id: 'brasa', etapa: 'fermentacion',
+  litros_reales: null, litros_objetivo: 800,
+  fecha_fin_estimada: '2026-11-25', ...p,
+})
+
+test('suma los litros de los lotes que caen en la ventana', () => {
+  const r = litrosEnCamino([
+    enCamino({ fecha_fin_estimada: '2026-11-25', litros_objetivo: 800 }),
+    enCamino({ fecha_fin_estimada: '2026-11-28', litros_objetivo: 500 }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), 1300)
+  assert.equal(r.lotesPor.get('brasa'), 2)
+})
+
+test('prefiere los litros reales sobre el objetivo cuando ya se midieron', () => {
+  const r = litrosEnCamino([
+    enCamino({ litros_reales: 780, litros_objetivo: 800 }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), 780)
+})
+
+test('un litros_reales de 0 se respeta y no cae al objetivo', () => {
+  // `?? `y no `||`: con `||` un lote medido en 0 reportaria su objetivo.
+  const r = litrosEnCamino([
+    enCamino({ litros_reales: 0, litros_objetivo: 800 }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), 0)
+})
+
+test('los lotes fuera de la ventana no se suman', () => {
+  const r = litrosEnCamino([
+    enCamino({ fecha_fin_estimada: '2026-12-20' }),
+    enCamino({ fecha_fin_estimada: '2026-10-01' }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), undefined)
+  assert.equal(r.sinFecha.get('brasa'), undefined)
+})
+
+test('la ventana es inclusiva en los dos extremos', () => {
+  const r = litrosEnCamino([
+    enCamino({ fecha_fin_estimada: '2026-11-18', litros_objetivo: 100 }),
+    enCamino({ fecha_fin_estimada: '2026-12-02', litros_objetivo: 200 }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), 300)
+})
+
+test('un lote sin fecha estimada se reporta, no se reparte ni se asume', () => {
+  // Mismo criterio que `sinClasificar` en stock-disponible.ts: el dato y sus
+  // huecos viajan juntos.
+  const r = litrosEnCamino([
+    enCamino({ fecha_fin_estimada: null }),
+    enCamino({ litros_objetivo: 500 }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), 500)
+  assert.equal(r.sinFecha.get('brasa'), 1)
+})
+
+test('un lote sin litros de ningun tipo tambien se reporta como hueco', () => {
+  const r = litrosEnCamino([
+    enCamino({ litros_reales: null, litros_objetivo: null }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), undefined)
+  assert.equal(r.sinFecha.get('brasa'), 1)
+})
+
+test('los lotes terminales no estan en camino: ya llegaron o se fueron', () => {
+  const r = litrosEnCamino([
+    enCamino({ etapa: 'liberado' }),
+    enCamino({ etapa: 'descartado' }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.size, 0)
+  assert.equal(r.sinFecha.size, 0)
+})
+
+test('separa por producto', () => {
+  const r = litrosEnCamino([
+    enCamino({ producto_id: 'brasa', litros_objetivo: 800 }),
+    enCamino({ producto_id: 'caliza', litros_objetivo: 300 }),
+  ], '2026-11-18', '2026-12-02')
+  assert.equal(r.por.get('brasa'), 800)
+  assert.equal(r.por.get('caliza'), 300)
+})
+
+// ── F2: geometria del calendario ────────────────────────────
+
+const V0 = '2026-11-01'
+const DIAS = 10   // ventana 2026-11-01 .. 2026-11-10
+
+test('una barra dentro de la ventana se posiciona en fracciones', () => {
+  // 11-03 a 11-04 = indices 2 y 3, fin inclusivo -> [2,4) de 10
+  const b = barraEnVentana('2026-11-03', '2026-11-04', V0, DIAS)
+  assert.ok(b)
+  assert.equal(b!.izq, 0.2)
+  assert.equal(b!.ancho, 0.2)
+  assert.equal(b!.cortadaIzq, false)
+  assert.equal(b!.cortadaDer, false)
+})
+
+test('un lote de un solo dia ocupa un dia, no cero', () => {
+  // El fin es inclusivo. Sin el +1, una barra de un dia seria invisible.
+  const b = barraEnVentana('2026-11-05', '2026-11-05', V0, DIAS)
+  assert.ok(b)
+  assert.equal(b!.ancho, 0.1)
+})
+
+test('una barra que empieza antes de la ventana se recorta y lo dice', () => {
+  const b = barraEnVentana('2026-10-20', '2026-11-03', V0, DIAS)
+  assert.ok(b)
+  assert.equal(b!.izq, 0)
+  assert.equal(b!.cortadaIzq, true)
+  assert.equal(b!.cortadaDer, false)
+})
+
+test('una barra que termina despues de la ventana se recorta y lo dice', () => {
+  const b = barraEnVentana('2026-11-08', '2026-12-15', V0, DIAS)
+  assert.ok(b)
+  assert.equal(b!.cortadaDer, true)
+  assert.equal(b!.izq + b!.ancho, 1)
+})
+
+test('una barra que cubre toda la ventana se corta en los dos lados', () => {
+  const b = barraEnVentana('2026-01-01', '2026-12-31', V0, DIAS)
+  assert.ok(b)
+  assert.equal(b!.izq, 0)
+  assert.equal(b!.ancho, 1)
+  assert.equal(b!.cortadaIzq, true)
+  assert.equal(b!.cortadaDer, true)
+})
+
+test('una barra totalmente fuera de la ventana es null, no una barra de ancho 0', () => {
+  // Devolver {ancho:0} haria que el calendario pintara una raya invisible
+  // por cada lote viejo.
+  assert.equal(barraEnVentana('2026-01-01', '2026-01-05', V0, DIAS), null)
+  assert.equal(barraEnVentana('2027-01-01', '2027-01-05', V0, DIAS), null)
+})
+
+test('una barra que acaba justo el dia anterior a la ventana es null', () => {
+  assert.equal(barraEnVentana('2026-10-25', '2026-10-31', V0, DIAS), null)
+})
+
+test('una barra que empieza el ultimo dia de la ventana si se ve', () => {
+  const b = barraEnVentana('2026-11-10', '2026-11-20', V0, DIAS)
+  assert.ok(b)
+  assert.equal(b!.izq, 0.9)
+  assert.equal(b!.ancho, 0.1)
+})
+
+test('una ventana de 0 dias no divide entre cero', () => {
+  assert.equal(barraEnVentana('2026-11-03', '2026-11-04', V0, 0), null)
+})
+
+test('los dias restantes se cuentan desde la etapa actual', () => {
+  const r = receta()  // 1 + 14 + 21 + 3
+  assert.equal(diasRestantes('planeado', r), 39)
+  assert.equal(diasRestantes('coccion', r), 39)
+  assert.equal(diasRestantes('fermentacion', r), 38)
+  assert.equal(diasRestantes('maduracion', r), 24)
+  assert.equal(diasRestantes('envasado', r), 3)
+})
+
+test('un lote terminal no tiene dias restantes', () => {
+  assert.equal(diasRestantes('liberado', receta()), null)
+  assert.equal(diasRestantes('descartado', receta()), null)
+})
+
+test('una receta incompleta no da restantes parciales', () => {
+  // Si falta maduracion, no se puede proyectar desde fermentacion.
+  assert.equal(diasRestantes('fermentacion', receta({ dias_maduracion: null })), null)
+  // Pero desde envasado si: maduracion ya no entra en lo que falta.
+  assert.equal(diasRestantes('envasado', receta({ dias_maduracion: null })), 3)
+})
+
+test('sin receta no hay restantes', () => {
+  assert.equal(diasRestantes('fermentacion', null), null)
 })

@@ -1,7 +1,8 @@
 'use client'
 import { useState, useEffect } from 'react'
+import { returnToDeURL } from '../../../src/lib/return-to'
 import { createClient } from '../../../src/lib/supabase'
-import { useRouter } from 'next/navigation'
+import { useRouter} from 'next/navigation'
 
 export default function VerificarMFAPage() {
   const [mode, setMode] = useState<'loading' | 'enroll' | 'verify'>('loading')
@@ -73,7 +74,10 @@ export default function VerificarMFAPage() {
       return
     }
 
-    router.push('/admin')
+    // El destino sobrevive al MFA. Es el tercer salto del flujo del QR:
+    // proxy.ts -> portal -> aqui -> el tanque. Sin esto, el cervecero
+    // terminaba en /admin despues de escanear FV3.
+    router.push(returnToDeURL() ?? '/admin')
     router.refresh()
   }
 

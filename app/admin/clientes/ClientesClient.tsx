@@ -377,111 +377,116 @@ export default function ClientesClient() {
 
       {/* Table */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Cliente', 'Tipo', 'Nivel de precio', 'Portal', 'Pedidos', 'Registrado', ...(canCreate ? [''] : [])].map((h, i) => (
-                <th key={i} style={{
-                  color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 14px',
-                  textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap',
-                }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length ? filtered.map(c => {
-              const nivel = c.nivel_precio || 'publico'
-              const badge = nivelBadgeStyle[nivel] || nivelBadgeStyle.publico
-              return (
-                <tr
-                  key={c.id}
-                  onClick={() => openPanel(c.id)}
-                  style={{
-                    borderBottom: '1px solid #f3f4f6',
-                    cursor: 'pointer',
-                    background: selectedId === c.id ? '#f9fafb' : 'transparent',
-                  }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f9fafb' }}
-                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = selectedId === c.id ? '#f9fafb' : 'transparent' }}
-                >
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: '#E8531D', fontSize: 13, fontWeight: 700, flexShrink: 0,
-                      }}>
-                        {nombreCliente(c).principal[0].toUpperCase()}
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {nombreCliente(c).principal}
-                        </p>
-                        <p style={{ color: '#9ca3af', margin: '1px 0 0', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                          {nombreCliente(c).secundario || c.email}
-                        </p>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{ color: '#6b7280', fontSize: 13 }}>{giroODe(c)}</span>
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{
-                      background: badge.bg, color: badge.color,
-                      padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
-                    }}>
-                      {nivelLabel(nivel)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    {c.cuenta_activada_at ? (
-                      <span style={{ background: '#d1fae5', color: '#10b981', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Activo</span>
-                    ) : c.invitacion_enviada_at ? (
-                      <span style={{ background: '#fef3c7', color: '#f59e0b', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Invitado</span>
-                    ) : (
-                      <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Sin invitar</span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 14px', color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>
-                    {pedidosCounts[c.id] || 0}
-                  </td>
-                  <td style={{ padding: '12px 14px', color: '#9ca3af', fontSize: 13, whiteSpace: 'nowrap' }}>
-                    {formatDate(c.created_at)}
-                  </td>
-                  {canCreate && (
-                    <td style={{ padding: '12px 14px' }} onClick={e => e.stopPropagation()}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <a href={`/admin/pedidos/nuevo?cliente=${c.id}`} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px',
-                          background: '#f3f4f6', color: '#6b7280', borderRadius: 6,
-                          textDecoration: 'none', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
+        {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                {['Cliente', 'Tipo', 'Nivel de precio', 'Portal', 'Pedidos', 'Registrado', ...(canCreate ? [''] : [])].map((h, i) => (
+                  <th key={i} style={{
+                    color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 14px',
+                    textTransform: 'uppercase', letterSpacing: '0.07em', whiteSpace: 'nowrap',
+                  }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length ? filtered.map(c => {
+                const nivel = c.nivel_precio || 'publico'
+                const badge = nivelBadgeStyle[nivel] || nivelBadgeStyle.publico
+                return (
+                  <tr
+                    key={c.id}
+                    onClick={() => openPanel(c.id)}
+                    style={{
+                      borderBottom: '1px solid #f3f4f6',
+                      cursor: 'pointer',
+                      background: selectedId === c.id ? '#f9fafb' : 'transparent',
+                    }}
+                    onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#f9fafb' }}
+                    onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = selectedId === c.id ? '#f9fafb' : 'transparent' }}
+                  >
+                    <td style={{ padding: '12px 14px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 32, height: 32, borderRadius: '50%', background: '#f3f4f6',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: '#E8531D', fontSize: 13, fontWeight: 700, flexShrink: 0,
                         }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
-                          Pedido
-                        </a>
-                        {canEdit && <a href={`/admin/clientes/edit/${c.id}`} style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px',
-                          background: '#f3f4f6', color: '#6b7280', borderRadius: 6,
-                          textDecoration: 'none', fontSize: 12, fontWeight: 500,
-                        }}>
-                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                          Editar
-                        </a>}
+                          {nombreCliente(c).principal[0].toUpperCase()}
+                        </div>
+                        <div style={{ minWidth: 0 }}>
+                          <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nombreCliente(c).principal}
+                          </p>
+                          <p style={{ color: '#9ca3af', margin: '1px 0 0', fontSize: 11, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {nombreCliente(c).secundario || c.email}
+                          </p>
+                        </div>
                       </div>
                     </td>
-                  )}
+                    <td style={{ padding: '12px 14px' }}>
+                      <span style={{ color: '#6b7280', fontSize: 13 }}>{giroODe(c)}</span>
+                    </td>
+                    <td style={{ padding: '12px 14px' }}>
+                      <span style={{
+                        background: badge.bg, color: badge.color,
+                        padding: '3px 10px', borderRadius: 99, fontSize: 12, fontWeight: 500,
+                      }}>
+                        {nivelLabel(nivel)}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 14px' }}>
+                      {c.cuenta_activada_at ? (
+                        <span style={{ background: '#d1fae5', color: '#10b981', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Activo</span>
+                      ) : c.invitacion_enviada_at ? (
+                        <span style={{ background: '#fef3c7', color: '#f59e0b', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Invitado</span>
+                      ) : (
+                        <span style={{ background: '#f3f4f6', color: '#9ca3af', padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>Sin invitar</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 14px', color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>
+                      {pedidosCounts[c.id] || 0}
+                    </td>
+                    <td style={{ padding: '12px 14px', color: '#9ca3af', fontSize: 13, whiteSpace: 'nowrap' }}>
+                      {formatDate(c.created_at)}
+                    </td>
+                    {canCreate && (
+                      <td style={{ padding: '12px 14px' }} onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <a href={`/admin/pedidos/nuevo?cliente=${c.id}`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px',
+                            background: '#f3f4f6', color: '#6b7280', borderRadius: 6,
+                            textDecoration: 'none', fontSize: 12, fontWeight: 500, whiteSpace: 'nowrap',
+                          }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 5v14M5 12h14"/></svg>
+                            Pedido
+                          </a>
+                          {canEdit && <a href={`/admin/clientes/edit/${c.id}`} style={{
+                            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '5px 10px',
+                            background: '#f3f4f6', color: '#6b7280', borderRadius: 6,
+                            textDecoration: 'none', fontSize: 12, fontWeight: 500,
+                          }}>
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7 M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                            Editar
+                          </a>}
+                        </div>
+                      </td>
+                    )}
+                  </tr>
+                )
+              }) : (
+                <tr>
+                  <td colSpan={canCreate ? 7 : 6} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
+                    {clientes.length === 0 ? 'No hay clientes aun -- agrega el primero' : 'Sin resultados para estos filtros'}
+                  </td>
                 </tr>
-              )
-            }) : (
-              <tr>
-                <td colSpan={canCreate ? 7 : 6} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>
-                  {clientes.length === 0 ? 'No hay clientes aun -- agrega el primero' : 'Sin resultados para estos filtros'}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {importando && (

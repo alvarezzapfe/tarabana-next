@@ -1,7 +1,7 @@
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import { canManageInventory } from '../../../src/lib/roles'
 import TableroClient from './TableroClient'
-import type { LoteFila, ProductoFila, TanqueFila } from './produccion-ui'
+import type { LoteFila, ProductoFila, RecetaFila, TanqueFila } from './produccion-ui'
 
 /**
  * Datos del Tablero.
@@ -22,7 +22,7 @@ import type { LoteFila, ProductoFila, TanqueFila } from './produccion-ui'
 export default async function TableroSection({ role }: { role?: string }) {
   const supabase = await createServerSupabaseClient()
 
-  const [{ data: lotes }, { data: tanques }, { data: productos }] = await Promise.all([
+  const [{ data: lotes }, { data: tanques }, { data: productos }, { data: recetas }] = await Promise.all([
     supabase.from('lotes_vista').select('*').order('fecha_coccion', { ascending: false, nullsFirst: false }),
     supabase.from('tanques').select('id, nombre, tipo, capacidad_litros, activo, notas').order('nombre'),
     // Solo productos que se pueden cocinar: sin prefijo de folio el trigger
@@ -33,6 +33,9 @@ export default async function TableroSection({ role }: { role?: string }) {
       .not('folio_prefijo', 'is', null)
       .is('descontinuado_at', null)
       .order('nombre'),
+    // Para precargar el alta: al elegir producto, el formulario rellena
+    // levadura y litros con los objetivos de su receta.
+    supabase.from('recetas').select('*'),
   ])
 
   return (
@@ -40,6 +43,7 @@ export default async function TableroSection({ role }: { role?: string }) {
       lotes={(lotes || []) as LoteFila[]}
       tanques={(tanques || []) as TanqueFila[]}
       productos={(productos || []) as ProductoFila[]}
+      recetas={(recetas || []) as RecetaFila[]}
       canEdit={canManageInventory(role)}
       // La fecha viene del servidor: llamar new Date() en render seria impuro
       // y daria un KPI distinto en el HTML del servidor y en la hidratacion.

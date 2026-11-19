@@ -27,34 +27,39 @@ export default async function ContabilidadSection() {
         ))}
       </div>
 
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-            {['Fecha', 'Cliente', 'Tipo precio', 'Total', 'Status'].map(h => (
-              <th key={h} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 14px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {pedidos?.length ? pedidos.map(p => (
-            <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-              <td style={{ color: '#6b7280', padding: '12px 14px', fontSize: 14 }}>{new Date(p.created_at).toLocaleDateString('es-MX')}</td>
-              <td style={{ color: '#374151', padding: '12px 14px', fontSize: 13 }}>{(p.profiles as any)?.email || '—'}</td>
-              <td style={{ color: '#6b7280', padding: '12px 14px', fontSize: 13 }}>{p.tipo_precio}</td>
-              <td style={{ color: '#E8531D', padding: '12px 14px', fontSize: 13.5, fontWeight: 600 }}>${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
-              <td style={{ padding: '12px 14px' }}>
-                <span style={{
-                  background: p.status === 'entregado' ? '#d1fae5' : '#fef3c7',
-                  color: p.status === 'entregado' ? '#10b981' : '#f59e0b',
-                  padding: '3px 10px', borderRadius: 99, fontSize: 13
-                }}>{p.status}</span>
-              </td>
+      {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+              {['Fecha', 'Cliente', 'Tipo precio', 'Total', 'Status'].map(h => (
+                <th key={h} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 14px', textTransform: 'uppercase', letterSpacing: '0.06em' }}>{h}</th>
+              ))}
             </tr>
-          )) : (
-            <tr><td colSpan={5} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin movimientos</td></tr>
-          )}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {pedidos?.length ? pedidos.map(p => (
+              <tr key={p.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                <td style={{ color: '#6b7280', padding: '12px 14px', fontSize: 14 }}>{new Date(p.created_at).toLocaleDateString('es-MX')}</td>
+                <td style={{ color: '#374151', padding: '12px 14px', fontSize: 13 }}>{(p.profiles as any)?.email || '—'}</td>
+                <td style={{ color: '#6b7280', padding: '12px 14px', fontSize: 13 }}>{p.tipo_precio}</td>
+                <td style={{ color: '#E8531D', padding: '12px 14px', fontSize: 13.5, fontWeight: 600 }}>${(p.total || 0).toLocaleString('es-MX', { minimumFractionDigits: 2 })}</td>
+                <td style={{ padding: '12px 14px' }}>
+                  <span style={{
+                    background: p.status === 'entregado' ? '#d1fae5' : '#fef3c7',
+                    color: p.status === 'entregado' ? '#10b981' : '#f59e0b',
+                    padding: '3px 10px', borderRadius: 99, fontSize: 13
+                  }}>{p.status}</span>
+                </td>
+              </tr>
+            )) : (
+              <tr><td colSpan={5} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin movimientos</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

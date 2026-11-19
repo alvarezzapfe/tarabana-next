@@ -1,0 +1,60 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { returnToValido, conReturnTo } from './return-to.ts'
+
+test('acepta una ruta de admin', () => {
+  assert.equal(returnToValido('/admin/produccion/t/FV3'), '/admin/produccion/t/FV3')
+  assert.equal(returnToValido('/admin/produccion?tab=tablero'), '/admin/produccion?tab=tablero')
+})
+
+test('rechaza una URL absoluta', () => {
+  // Este es el caso que volveria el parametro un redirector abierto: el link
+  // se ve legitimo porque el dominio es el nuestro.
+  assert.equal(returnToValido('https://sitio-falso.com/login'), null)
+  assert.equal(returnToValido('http://otro.com'), null)
+})
+
+test('rechaza una protocol-relative, que es el bypass clasico', () => {
+  // `//host` empieza con "/" y pasaria un filtro ingenuo, pero el navegador
+  // la resuelve como absoluta.
+  assert.equal(returnToValido('//sitio-falso.com/login'), null)
+})
+
+test('rechaza backslashes', () => {
+  // Varios navegadores los normalizan a "/".
+  assert.equal(returnToValido('/\\/sitio-falso.com'), null)
+  assert.equal(returnToValido('\\\\sitio-falso.com'), null)
+})
+
+test('rechaza rutas del sitio que no son de este flujo', () => {
+  assert.equal(returnToValido('/portal/catalogo'), null)
+  assert.equal(returnToValido('/api/auth/logout'), null)
+  assert.equal(returnToValido('/'), null)
+})
+
+test('rechaza lo vacio y lo ausente', () => {
+  assert.equal(returnToValido(''), null)
+  assert.equal(returnToValido(null), null)
+  assert.equal(returnToValido(undefined), null)
+})
+
+test('rechaza caracteres de control que podrian partir un header', () => {
+  assert.equal(returnToValido('/admin/x\nLocation: http://otro'), null)
+  assert.equal(returnToValido('/admin/x\r\n'), null)
+  assert.equal(returnToValido('/admin/x\u0000'), null)
+})
+
+test('rechaza lo absurdamente largo', () => {
+  assert.equal(returnToValido('/admin/' + 'a'.repeat(600)), null)
+})
+
+test('conReturnTo respeta el separador que ya traiga la base', () => {
+  assert.equal(conReturnTo('/portal', '/admin/x'), '/portal?returnTo=%2Fadmin%2Fx')
+  assert.equal(conReturnTo('/portal?a=1', '/admin/x'), '/portal?a=1&returnTo=%2Fadmin%2Fx')
+})
+
+test('conReturnTo no agrega nada si el destino no es valido', () => {
+  // Importante: devuelve la base limpia en vez de propagar basura.
+  assert.equal(conReturnTo('/portal', 'https://otro.com'), '/portal')
+  assert.equal(conReturnTo('/portal', null), '/portal')
+})

@@ -7,14 +7,14 @@ import FichaLote from './FichaLote'
 import NuevoLote from './NuevoLote'
 import {
   ETAPAS_TABLERO, esTerminal, siguienteEtapa, puedeAvanzar,
-  mermaDelPeriodo, ventanaDias,
+  mermaDelPeriodo, ventanaDias, pesoAlerta, textosMotivos,
   fmtDias, fmtGravedad, fmtLitros, fmtPct,
   type Etapa,
 } from '../../../src/lib/produccion'
-import { BORDE, GRIS, GRIS_SUAVE, TINTA, TINTA_MEDIA, enteros } from '../dash-ui'
+import { BORDE, GRIS, GRIS_SUAVE, MOVIL_MAX, TINTA, TINTA_MEDIA, enteros } from '../dash-ui'
 import {
-  AMBAR, COLUMNA_FONDO, ICONOS, estaParado, etiquetaEtapa,
-  type LoteFila, type ProductoFila, type TanqueFila,
+  AMBAR, BORDE_ALERTA, COLUMNA_FONDO, ICONOS, TEXTO_ALERTA, estaParado, etiquetaEtapa,
+  type LoteFila, type ProductoFila, type RecetaFila, type TanqueFila,
 } from './produccion-ui'
 
 /**
@@ -43,18 +43,31 @@ const CSS = `
   .tb-card:hover { border-color: #d1d5db; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
   .tb-avanzar:hover:not(:disabled) { background: #f9fafb; border-color: #d1d5db; }
   @media (max-width: 1100px) { .tb-kpis { grid-template-columns: repeat(2, 1fr); } }
-  @media (max-width: 560px) { .tb-kpis { grid-template-columns: 1fr; } }
+
+  /*
+   * En celular las columnas se APILAN en vez de hacer scroll horizontal: un
+   * kanban de 5 carriles de 260 px pide 1300 px, y en un telefono eso es
+   * barrer cinco pantallas a ciegas para encontrar un lote. Apiladas, cada
+   * etapa es una seccion con su titulo y su cuenta.
+   */
+  @media screen and (max-width: ${MOVIL_MAX}px) {
+    .tb-kpis { grid-template-columns: repeat(2, 1fr); }
+    .tb-cols { flex-direction: column; overflow-x: visible; gap: 18px; }
+    .tb-col  { width: 100%; flex: 1 1 auto; }
+  }
+  @media screen and (max-width: 420px) { .tb-kpis { grid-template-columns: 1fr; } }
 `
 
 type Props = {
   lotes: LoteFila[]
   tanques: TanqueFila[]
   productos: ProductoFila[]
+  recetas: RecetaFila[]
   canEdit: boolean
   ahoraISO: string
 }
 
-export default function TableroClient({ lotes, tanques, productos, canEdit, ahoraISO }: Props) {
+export default function TableroClient({ lotes, tanques, productos, recetas, canEdit, ahoraISO }: Props) {
   const router = useRouter()
   const params = useSearchParams()
   const loteAbierto = params.get('lote')
@@ -97,9 +110,13 @@ export default function TableroClient({ lotes, tanques, productos, canEdit, ahor
     const m = new Map<Etapa, LoteFila[]>()
     for (const e of ETAPAS_TABLERO) m.set(e, [])
     for (const l of activos) m.get(l.etapa)?.push(l)
-    // Dentro de cada columna, el que lleva mas tiempo parado va arriba: es el
-    // que hay que atender.
-    for (const arr of m.values()) arr.sort((a, b) => b.dias_en_etapa - a.dias_en_etapa)
+    // Dentro de cada columna: primero lo que tiene alerta, y entre iguales el
+    // que lleva mas tiempo. El orden es la primera señal, antes del color.
+    for (const arr of m.values()) {
+      arr.sort((a, b) =>
+        pesoAlerta(b.alerta_nivel) - pesoAlerta(a.alerta_nivel) ||
+        b.dias_en_etapa - a.dias_en_etapa)
+    }
     return m
   }, [activos])
 
@@ -251,6 +268,7 @@ export default function TableroClient({ lotes, tanques, productos, canEdit, ahor
       {nuevoAbierto && (
         <NuevoLote
           productos={productos}
+          recetas={recetas}
           // Solo tanques libres: un tanque con lote vivo adentro no puede
           // recibir otro, y ofrecerlo seria ofrecer un error.
           tanquesLibres={tanques.filter(
@@ -290,14 +308,19 @@ function TarjetaLote({
       )
     : null
 
-  const parado = estaParado(lote.etapa, lote.dias_en_etapa)
+  // `estaParado` sigue siendo el respaldo para un producto SIN receta: ahi la
+  // vista no puede comparar contra un objetivo y no emite `etapa_vencida`.
+  // Con receta, la alerta de la vista manda y esto no se usa.
+  const parado = !lote.tiene_receta && estaParado(lote.etapa, lote.dias_en_etapa)
+  const motivos = textosMotivos(lote.alerta_motivos)
+  const nivel = lote.alerta_nivel
 
   return (
     <div
       className="tb-card"
       style={{
         background: '#fff',
-        border: `1px solid ${parado ? '#fcd34d' : BORDE}`,
+        border: `1px solid ${nivel !== 'ninguna' ? BORDE_ALERTA[nivel] : parado ? BORDE_ALERTA.ambar : BORDE_ALERTA.ninguna}`,
         borderRadius: 9,
         padding: '11px 12px',
         display: 'flex',
@@ -368,6 +391,22 @@ function TarjetaLote({
           {avanzando ? 'Avanzando…' : `Avanzar a ${etiquetaEtapa(destino).toLowerCase()}`}
           {!avanzando && <Icono d={ICONOS.avanzar} size={13} strokeWidth={2.2} />}
         </button>
+      )}
+
+      {motivos.length > 0 && (
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {motivos.map(m => (
+            <li key={m} style={{ color: TEXTO_ALERTA[nivel], fontSize: 11, lineHeight: 1.35, fontWeight: 500 }}>
+              {m}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {!lote.tiene_receta && (
+        // Se dice, no se esconde: sin receta la vista no puede comparar contra
+        // ningun objetivo, asi que tres de las cuatro alertas no aplican.
+        <p style={{ margin: 0, color: GRIS_SUAVE, fontSize: 10.5 }}>Sin receta</p>
       )}
 
       {canEdit && destino && veredicto && !veredicto.ok && (

@@ -363,73 +363,78 @@ export default function ActividadClient() {
             {totalCount} entradas
           </p>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Timestamp', 'Actor', 'Accion', 'Entidad', 'Detalle'].map((h) => (
-                <th key={h} style={{
-                  color: '#9ca3af', fontSize: 12, textAlign: 'left', padding: '10px 16px',
-                  textTransform: 'uppercase', letterSpacing: '0.07em',
-                }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 && (
-              <tr>
-                <td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
-                  Sin registros
-                </td>
+        {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                {['Timestamp', 'Actor', 'Accion', 'Entidad', 'Detalle'].map((h) => (
+                  <th key={h} style={{
+                    color: '#9ca3af', fontSize: 12, textAlign: 'left', padding: '10px 16px',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                  }}>{h}</th>
+                ))}
               </tr>
-            )}
-            {logs.map((entry) => {
-              const actor = entry.actor_id ? profileMap[entry.actor_id] : null
-              const rc = actor ? (roleConfig[actor.role] || { label: actor.role, color: '#6b7280', bg: '#f3f4f6' }) : null
-              return (
-                <tr key={entry.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                  <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
-                    <span
-                      title={formatAbsolute(entry.created_at)}
-                      style={{ color: '#374151', fontSize: 13 }}
-                    >
-                      {tiempoRelativo(entry.created_at)}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    {actor ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>
-                          {actor.full_name || actor.email || '—'}
-                        </span>
-                        {rc && (
-                          <span style={{
-                            background: rc.bg, color: rc.color,
-                            padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600,
-                          }}>{rc.label}</span>
-                        )}
-                      </div>
-                    ) : (
-                      <span style={{ color: '#9ca3af', fontSize: 13 }}>
-                        {entry.actor_id ? entry.actor_id.slice(0, 8) : 'Sistema'}
-                      </span>
-                    )}
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    <span style={{ color: '#374151', fontSize: 13 }}>
-                      {actionTranslations[entry.accion] || entry.accion}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 16px' }}>
-                    {entityLink(entry.entidad, entry.entidad_id)}
-                  </td>
-                  <td style={{ padding: '12px 16px', maxWidth: 280 }}>
-                    {renderDetalle(entry.detalle)}
+            </thead>
+            <tbody>
+              {logs.length === 0 && (
+                <tr>
+                  <td colSpan={5} style={{ padding: 32, textAlign: 'center', color: '#9ca3af', fontSize: 13 }}>
+                    Sin registros
                   </td>
                 </tr>
-              )
-            })}
-          </tbody>
-        </table>
+              )}
+              {logs.map((entry) => {
+                const actor = entry.actor_id ? profileMap[entry.actor_id] : null
+                const rc = actor ? (roleConfig[actor.role] || { label: actor.role, color: '#6b7280', bg: '#f3f4f6' }) : null
+                return (
+                  <tr key={entry.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '12px 16px', whiteSpace: 'nowrap' }}>
+                      <span
+                        title={formatAbsolute(entry.created_at)}
+                        style={{ color: '#374151', fontSize: 13 }}
+                      >
+                        {tiempoRelativo(entry.created_at)}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {actor ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ color: '#1a1a1a', fontSize: 13, fontWeight: 500 }}>
+                            {actor.full_name || actor.email || '—'}
+                          </span>
+                          {rc && (
+                            <span style={{
+                              background: rc.bg, color: rc.color,
+                              padding: '2px 8px', borderRadius: 99, fontSize: 11, fontWeight: 600,
+                            }}>{rc.label}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <span style={{ color: '#9ca3af', fontSize: 13 }}>
+                          {entry.actor_id ? entry.actor_id.slice(0, 8) : 'Sistema'}
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      <span style={{ color: '#374151', fontSize: 13 }}>
+                        {actionTranslations[entry.accion] || entry.accion}
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px 16px' }}>
+                      {entityLink(entry.entidad, entry.entidad_id)}
+                    </td>
+                    <td style={{ padding: '12px 16px', maxWidth: 280 }}>
+                      {renderDetalle(entry.detalle)}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}

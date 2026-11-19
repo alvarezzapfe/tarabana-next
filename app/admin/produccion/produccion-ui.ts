@@ -1,4 +1,4 @@
-import { ETAPA_LABEL, type Etapa } from '../../../src/lib/produccion.ts'
+import { ETAPA_LABEL, type Etapa, type NivelAlerta } from '../../../src/lib/produccion.ts'
 import { ACENTO, GRIS, GRIS_SUAVE, PISTA } from '../dash-ui.ts'
 
 /**
@@ -45,6 +45,62 @@ export type LoteFila = {
   ultima_gravedad: number | null
   ultima_lectura_fecha: string | null
   dias_en_etapa: number
+
+  // ── F2: receta y proyeccion ──
+  tiene_receta: boolean
+  receta_id: string | null
+  og_obj: number | null
+  fg_obj: number | null
+  temp_ferm_min: number | null
+  temp_ferm_max: number | null
+  dias_objetivo_etapa: number | null
+  dias_objetivo_total: number | null
+  dias_restantes: number | null
+  fecha_fin_estimada: string | null
+
+  // ── F2: alertas. Las REGLAS viven en la vista; aqui solo llega el veredicto.
+  alerta_motivos: string[] | null
+  alerta_nivel: NivelAlerta
+}
+
+export type RecetaFila = {
+  id: string
+  producto_id: string
+  og_obj: number | null
+  fg_obj: number | null
+  temp_ferm_min: number | null
+  temp_ferm_max: number | null
+  dias_coccion: number | null
+  dias_fermentacion: number | null
+  dias_maduracion: number | null
+  dias_envasado: number | null
+  levadura_cepa: string | null
+  levadura_proveedor: string | null
+  notas: string | null
+}
+
+/** Una fila de public.tanque_ocupacion. */
+export type OcupacionFila = {
+  id: string
+  lote_id: string
+  tanque_id: string
+  tanque_nombre: string
+  tanque_tipo: TanqueTipo
+  tanque_activo: boolean
+  desde: string
+  hasta: string | null
+  abierta: boolean
+  folio: string | null
+  producto_id: string
+  producto_nombre: string | null
+  producto_estilo: string | null
+  etapa: Etapa
+  litros_reales: number | null
+  litros_objetivo: number | null
+  tiene_receta: boolean
+  alerta_nivel: NivelAlerta
+  fin: string | null
+  estimado: boolean
 }
 
 export type TanqueTipo = 'fermentador' | 'madurador' | 'brite'
@@ -131,7 +187,46 @@ export function estaParado(etapa: Etapa, dias: number): boolean {
   return dias > DIAS_NORMALES[etapa]
 }
 
+/**
+ * Sanitizadores para los campos numericos.
+ *
+ * La convencion del proyecto es `type="text"` con `inputMode`, NO
+ * `type="number"`: en un number input las flechas arriba y abajo cambian el
+ * valor, que pelea con mover el foco, y en celular el spinner es un blanco
+ * de 8 px. Esta documentado en MatrizProductos.tsx:11-16 y en
+ * PreciosClient.tsx:109, y esas pantallas filtran la entrada en el onChange.
+ *
+ * Al ser `text`, el navegador ya no valida nada, asi que filtrar aqui es lo
+ * que evita que alguien teclee letras, las vea aceptadas y reciba un 400 al
+ * guardar.
+ */
+export const soloDecimal = (v: string): string =>
+  v.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 12)
+
+export const soloEntero = (v: string): string => v.replace(/\D/g, '').slice(0, 9)
+
 export const AMBAR = '#b45309'
+export const ROJO_ALERTA = '#dc2626'
+
+/**
+ * Borde y texto de una tarjeta segun su nivel de alerta.
+ *
+ * Solo DOS colores encima del neutro, y los dos significan "mira esto". Las
+ * etapas siguen sin color: siete colores harian que ninguno signifique nada
+ * (ver el bloque de arriba), y entonces el ambar de una alerta real se
+ * perderia entre la decoracion.
+ */
+export const BORDE_ALERTA: Record<NivelAlerta, string> = {
+  ninguna: '#e5e7eb',
+  ambar: '#fcd34d',
+  rojo: '#fca5a5',
+}
+
+export const TEXTO_ALERTA: Record<NivelAlerta, string> = {
+  ninguna: '#6b7280',
+  ambar: AMBAR,
+  rojo: '#b91c1c',
+}
 
 /** Fondo de la columna del kanban. Neutro: la senal va en las tarjetas. */
 export const COLUMNA_FONDO = PISTA

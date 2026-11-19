@@ -6,6 +6,7 @@
  * pos-ui.ts: asi este modulo se carga sin bundler.
  */
 import { LITROS_POR_UNIDAD, type ColumnaStock } from './unidades.ts'
+import { diasEntre } from './fechas.ts'
 
 // ── Etapas ──────────────────────────────────────────────────
 
@@ -325,4 +326,231 @@ export function filtrarHistorico<T extends {
     if (f.hasta && (!fila.fecha_coccion || fila.fecha_coccion > f.hasta)) return false
     return true
   })
+}
+
+// ── F2: alertas ─────────────────────────────────────────────
+//
+// Las REGLAS viven en SQL, en `lotes_vista` (ver la migracion
+// 20261119000000_produccion_f2.sql). Aqui solo esta como se LEEN: el texto y
+// el orden de severidad.
+//
+// Esa division es a proposito. Con los umbrales en la vista hay una sola
+// verdad y el contador del sidebar es un `count(*)` barato; si las reglas
+// estuvieran aqui, el layout tendria que cargar todos los lotes en cada
+// pagina del panel para contar. Lo que SI vive aqui es el copy, porque un
+// texto para personas no tiene por que viajar desde una vista.
+
+export const NIVELES_ALERTA = ['ninguna', 'ambar', 'rojo'] as const
+export type NivelAlerta = (typeof NIVELES_ALERTA)[number]
+
+/** Los motivos que emite la vista, con su texto. */
+export const MOTIVO_ALERTA: Record<string, string> = {
+  sin_lectura_48h: 'Sin lectura en más de 48 h',
+  etapa_vencida: 'Lleva más días de los planeados en esta etapa',
+  etapa_muy_vencida: 'Pasa del doble de los días planeados',
+  fg_fuera_rango: 'FG fuera del objetivo',
+  merma_alta: 'Merma arriba del 10%',
+}
+
+/**
+ * Texto de un motivo. Un motivo desconocido se devuelve tal cual y no se
+ * esconde: si la vista empieza a emitir una clave nueva, se tiene que ver en
+ * la pantalla para que alguien la traduzca, no desaparecer en silencio.
+ */
+export const textoMotivo = (clave: string): string => MOTIVO_ALERTA[clave] ?? clave
+
+export function textosMotivos(motivos: string[] | null | undefined): string[] {
+  return (motivos ?? []).map(textoMotivo)
+}
+
+/** Orden de severidad, para ordenar una lista por "lo que urge primero". */
+export function pesoAlerta(nivel: NivelAlerta | null | undefined): number {
+  return nivel === 'rojo' ? 2 : nivel === 'ambar' ? 1 : 0
+}
+
+export const hayAlerta = (nivel: NivelAlerta | null | undefined): boolean =>
+  pesoAlerta(nivel) > 0
+
+// ── F2: proyeccion de fin de lote ───────────────────────────
+
+/**
+ * Dias objetivo de una etapa segun la receta. Espejo EXACTO de
+ * `public.receta_dias_etapa()` en la migracion.
+ *
+ * `null` cuando la receta no define esa etapa: null no es cero. Un producto
+ * sin dias de maduracion capturados no madura "cero dias"; no se sabe
+ * cuanto, y tratarlo como 0 adelantaria la proyeccion.
+ */
+export type DiasReceta = {
+  dias_coccion: number | null
+  dias_fermentacion: number | null
+  dias_maduracion: number | null
+  dias_envasado: number | null
+}
+
+export function diasObjetivoEtapa(etapa: Etapa, r: DiasReceta | null): number | null {
+  if (!r) return null
+  switch (etapa) {
+    case 'coccion': return r.dias_coccion
+    case 'fermentacion': return r.dias_fermentacion
+    case 'maduracion': return r.dias_maduracion
+    case 'envasado': return r.dias_envasado
+    // planeado, liberado y descartado no tienen duracion objetivo.
+    default: return null
+  }
+}
+
+/**
+ * Suma del plan completo, o `null` si la receta no define las cuatro etapas.
+ *
+ * Un total a medias proyectaria una fecha falsa que se ve igual de legitima
+ * que una buena, asi que se devuelve null y la pantalla dice "sin receta
+ * completa".
+ */
+export function diasObjetivoTotal(r: DiasReceta | null): number | null {
+  if (!r) return null
+  const { dias_coccion: c, dias_fermentacion: f, dias_maduracion: m, dias_envasado: e } = r
+  if (c === null || f === null || m === null || e === null) return null
+  return c + f + m + e
+}
+
+// ── F2: litros en camino ────────────────────────────────────
+
+export type LoteEnCamino = {
+  producto_id: string
+  etapa: Etapa
+  litros_reales: number | null
+  litros_objetivo: number | null
+  fecha_fin_estimada: string | null
+}
+
+/**
+ * Litros proyectados por producto dentro de una ventana de fechas.
+ *
+ * Espeja la forma de `src/lib/stock-disponible.ts`: agregacion pura que
+ * devuelve el dato Y SUS HUECOS. Los lotes sin fecha estimada no se reparten
+ * ni se asumen — se cuentan en `sinFecha` para que la pantalla los muestre,
+ * igual que `sinClasificar` en `comprometidoDe`.
+ *
+ * Las fechas se comparan como strings 'YYYY-MM-DD'. Pasarlas por `Date` las
+ * corre un dia en CDMX (ver el encabezado de fechas.ts).
+ */
+export function litrosEnCamino(
+  lotes: LoteEnCamino[],
+  desde: string,
+  hasta: string
+): { por: Map<string, number>; lotesPor: Map<string, number>; sinFecha: Map<string, number> } {
+  const por = new Map<string, number>()
+  const lotesPor = new Map<string, number>()
+  const sinFecha = new Map<string, number>()
+
+  for (const l of lotes) {
+    if (esTerminal(l.etapa)) continue
+
+    if (!l.fecha_fin_estimada) {
+      sinFecha.set(l.producto_id, (sinFecha.get(l.producto_id) || 0) + 1)
+      continue
+    }
+    if (l.fecha_fin_estimada < desde || l.fecha_fin_estimada > hasta) continue
+
+    // Los reales cuando ya se midieron, el objetivo mientras no: un lote
+    // recien encubado no aporta cero.
+    const litros = l.litros_reales ?? l.litros_objetivo
+    if (litros === null) {
+      sinFecha.set(l.producto_id, (sinFecha.get(l.producto_id) || 0) + 1)
+      continue
+    }
+    por.set(l.producto_id, (por.get(l.producto_id) || 0) + litros)
+    lotesPor.set(l.producto_id, (lotesPor.get(l.producto_id) || 0) + 1)
+  }
+
+  return { por, lotesPor, sinFecha }
+}
+
+// ── F2: geometria del calendario ────────────────────────────
+
+/** Ventana del calendario: 30 dias atras, 45 adelante. */
+export const CAL_DIAS_ATRAS = 30
+export const CAL_DIAS_ADELANTE = 45
+
+/**
+ * Posicion y ancho de una barra en la ventana, en FRACCION del ancho total.
+ *
+ * Fracciones y no pixeles por lo mismo que `GraficaPeriodo`: el contenedor no
+ * conoce su ancho real, pero las proporciones no cambian, asi que la barra se
+ * posiciona con porcentajes y sobrevive al scroll horizontal y al zoom.
+ *
+ * Recorta a la ventana y lo DICE: `cortadaIzq` / `cortadaDer` dejan que la
+ * barra se dibuje con el borde abierto, para que no parezca que el lote
+ * empieza o acaba justo en el borde del calendario.
+ *
+ * Devuelve null si la barra queda completamente fuera.
+ */
+export type Barra = {
+  izq: number
+  ancho: number
+  cortadaIzq: boolean
+  cortadaDer: boolean
+}
+
+export function barraEnVentana(
+  inicio: string,
+  fin: string,
+  ventanaInicio: string,
+  dias: number
+): Barra | null {
+  if (dias <= 0) return null
+
+  const i = diasDesde(ventanaInicio, inicio)
+  // El fin es INCLUSIVO: un lote que empieza y acaba el mismo dia ocupa un
+  // dia, no cero.
+  const f = diasDesde(ventanaInicio, fin) + 1
+
+  if (f <= 0 || i >= dias) return null
+
+  const iRec = Math.max(0, i)
+  const fRec = Math.min(dias, f)
+
+  return {
+    izq: iRec / dias,
+    ancho: (fRec - iRec) / dias,
+    cortadaIzq: i < 0,
+    cortadaDer: f > dias,
+  }
+}
+
+/**
+ * Dias entre dos fechas 'YYYY-MM-DD', sin pasar por Date.
+ *
+ * Reimplementar esto seria un error: `diasEntre` de fechas.ts ya lo resuelve
+ * ancorado a mediodia UTC justo para que ningun corrimiento de zona mueva el
+ * resultado. Esto es solo el alias con el nombre que usa el calendario.
+ */
+function diasDesde(desde: string, hasta: string): number {
+  return diasEntre(desde, hasta)
+}
+
+/**
+ * Dias que FALTAN desde la etapa actual. Espejo de
+ * `public.receta_dias_restantes()`.
+ *
+ * `planeado` y `coccion` devuelven el plan completo: en las dos todavia falta
+ * todo. Cualquier null hace null el total, porque una receta incompleta no se
+ * proyecta a medias.
+ */
+export function diasRestantes(etapa: Etapa, r: DiasReceta | null): number | null {
+  if (!r) return null
+  const { dias_coccion: c, dias_fermentacion: f, dias_maduracion: m, dias_envasado: e } = r
+  const suma = (...xs: (number | null)[]): number | null =>
+    xs.some(x => x === null) ? null : (xs as number[]).reduce((a, b) => a + b, 0)
+
+  switch (etapa) {
+    case 'planeado':
+    case 'coccion': return suma(c, f, m, e)
+    case 'fermentacion': return suma(f, m, e)
+    case 'maduracion': return suma(m, e)
+    case 'envasado': return suma(e)
+    // liberado y descartado: ya no falta nada.
+    default: return null
+  }
 }

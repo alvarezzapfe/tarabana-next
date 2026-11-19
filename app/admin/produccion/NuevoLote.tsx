@@ -5,7 +5,8 @@ import { hoyMx } from '../../../src/lib/fechas'
 import { BORDE, GRIS, GRIS_SUAVE, TINTA } from '../dash-ui'
 import {
   ICONOS, TANQUE_TIPO_LABEL, botonNeutro, botonPrimario, inputBase, labelBase,
-  type ProductoFila, type TanqueFila,
+  soloDecimal, soloEntero,
+  type ProductoFila, type RecetaFila, type TanqueFila,
 } from './produccion-ui'
 
 /**
@@ -28,12 +29,13 @@ const CSS = `
 
 type Props = {
   productos: ProductoFila[]
+  recetas: RecetaFila[]
   tanquesLibres: TanqueFila[]
   onCerrar: () => void
   onCreado: () => void
 }
 
-export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado }: Props) {
+export default function NuevoLote({ productos, recetas, tanquesLibres, onCerrar, onCreado }: Props) {
   const [form, setForm] = useState({
     producto_id: '',
     tanque_id: '',
@@ -55,6 +57,23 @@ export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado
   }, [onCerrar])
 
   const producto = productos.find(p => p.id === form.producto_id)
+  const receta = recetas.find(r => r.producto_id === form.producto_id)
+
+  /**
+   * Al elegir producto se precarga la levadura de su receta, pero SOLO en los
+   * campos que estan vacios: si alguien ya escribio una cepa distinta —porque
+   * este lote usa otra— pisarsela al cambiar de producto seria perder lo que
+   * acaba de capturar.
+   */
+  const elegirProducto = (id: string) => {
+    const r = recetas.find(x => x.producto_id === id)
+    setForm(f => ({
+      ...f,
+      producto_id: id,
+      levadura_cepa: f.levadura_cepa || r?.levadura_cepa || '',
+      levadura_proveedor: f.levadura_proveedor || r?.levadura_proveedor || '',
+    }))
+  }
   const litros = parseFloat(form.litros_objetivo)
   const valido = !!form.producto_id && !!form.fecha_coccion && Number.isFinite(litros) && litros > 0
 
@@ -115,7 +134,7 @@ export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado
             <select
               style={{ ...inputBase, color: form.producto_id ? '#1a1a1a' : GRIS_SUAVE }}
               value={form.producto_id}
-              onChange={e => set('producto_id', e.target.value)}
+              onChange={e => elegirProducto(e.target.value)}
             >
               <option value="">Selecciona el producto</option>
               {productos.map(p => (
@@ -125,6 +144,14 @@ export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado
               ))}
             </select>
           </label>
+
+          {form.producto_id && !receta && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', color: '#92400e', borderRadius: 8, padding: '9px 12px', fontSize: 12, lineHeight: 1.5 }}>
+              Este producto no tiene receta. El lote se crea igual, pero no se
+              va a proyectar en el calendario ni va a alertar por días de etapa
+              o por FG.
+            </div>
+          )}
 
           <label>
             <span style={labelBase}>Tanque</span>
@@ -152,11 +179,10 @@ export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado
               <span style={labelBase}>Litros objetivo</span>
               <input
                 style={inputBase}
-                type="number"
-                step="0.01"
-                min="0.01"
+                type="text"
+                inputMode="decimal"
                 value={form.litros_objetivo}
-                onChange={e => set('litros_objetivo', e.target.value)}
+                onChange={e => set('litros_objetivo', soloDecimal(e.target.value))}
                 placeholder="1000"
               />
             </label>
@@ -176,7 +202,7 @@ export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado
             <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.3fr 0.7fr', gap: 10 }}>
               <input style={inputBase} placeholder="Cepa" value={form.levadura_cepa} onChange={e => set('levadura_cepa', e.target.value)} />
               <input style={inputBase} placeholder="Proveedor" value={form.levadura_proveedor} onChange={e => set('levadura_proveedor', e.target.value)} />
-              <input style={inputBase} type="number" step="1" min="0" placeholder="Gen." value={form.levadura_generacion} onChange={e => set('levadura_generacion', e.target.value)} />
+              <input style={inputBase} type="text" inputMode="numeric" min="0" placeholder="Gen." value={form.levadura_generacion} onChange={e => set('levadura_generacion', soloEntero(e.target.value))} />
             </div>
           </div>
         </div>

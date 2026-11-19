@@ -17,6 +17,28 @@ import type { Rango } from '../../src/lib/metricas.ts'
  * Si todo esta de color, nada resalta.
  */
 
+/**
+ * Corte de "pantalla chica" para el chrome del admin.
+ *
+ * El proyecto tiene 11 breakpoints distintos repartidos en archivos
+ * (560/640/720/760/767/768/900/1020/1080/1100) porque cada pantalla eligio el
+ * suyo. Este NO los reemplaza —reescribirlos todos seria otra tarea— pero el
+ * codigo nuevo usa este, y el cajon del sidebar es el que manda: por debajo
+ * de aqui no hay sidebar fijo, asi que las pantallas tienen el ancho
+ * completo.
+ */
+export const MOVIL_MAX = 860
+
+/**
+ * Alto de la barra fija con la hamburguesa, en celular.
+ *
+ * Vive aqui y no en Sidebar.tsx porque la necesitan los dos: el Sidebar para
+ * dibujarla y el layout para empujar el padding-top de <main> y que el
+ * contenido no quede debajo. Y Sidebar es 'use client', asi que un server
+ * component no deberia importar constantes de ahi.
+ */
+export const ALTO_BARRA_MOVIL = 52
+
 export const ACENTO = '#D95F2E'
 export const ROJO = '#dc2626'
 
