@@ -516,3 +516,123 @@ Cuatro cosas que importan al leer o tocar esto:
   IVA, total, saldo); el select de afuera es pura proyección. Si alguien
   "simplifica" eso a un nivel, la suma del total vuelve a quedar repetida
   cuatro veces y una discrepancia entre copias es invisible al revisar.
+
+## Módulo Producción (migración 20261118000000)
+
+### De qué estado partió `lotes`
+
+Verificado contra producción con el service client (solo lectura) el
+2026-11-18: `lotes` era **la tabla original** de `tarabana_schema.sql:241`
+—sus 9 columnas, sin una sola migración encima— y tenía **0 filas**. El único
+código que la tocaba era `app/admin/produccion/page.tsx`, y solo leía; su
+botón "+ Nuevo lote" apuntaba a `/admin/produccion/nuevo`, que no existía.
+
+Por eso la migración puede tirar las cinco columnas legacy sin perder un dato.
+El reemplazo, una a una:
+
+```
+nombre_lote          -> folio (generado por trigger, único)
+volumen_litros       -> litros_objetivo / litros_reales
+latas_producidas     -> lote_envasado
+barriles_producidos  -> lote_envasado
+fecha_produccion     -> fecha_coccion
+```
+
+El guard del bloque lo vuelve a comprobar al aplicar, y está condicionado a
+que `nombre_lote` todavía exista: sin eso, re-correr la migración con lotes
+reales abortaría aunque no quedara nada que tirar.
+
+### El stock sigue en `productos`; `inventario_movimientos` es el libro
+
+**Inventario no tenía tabla de movimientos.** El stock son los 7 contadores
+enteros de `productos` y **eso no cambió**: siguen siendo la existencia
+actual, y ninguna pantalla cambió cómo los lee.
+
+`inventario_movimientos` es nuevo y es el libro de entradas/salidas, con
+`lote_id` nullable. Existe porque "que la entrada a inventario referencie el
+lote" no se podía cumplir: no había movimiento al que ponerle un lote. Nace
+solo con las entradas por producción; el ajuste manual
+(`/api/admin/inventario/[id]/stock`) y la entrega siguen escribiendo
+`productos.stock_*` y dejando su rastro en `audit_log`, y se le pueden
+conectar después sin migrar nada.
+
+El `unique (lote_id, producto_id, columna_stock) where lote_id is not null`
+es el guard de idempotencia: liberar dos veces el mismo lote choca ahí, la
+transacción aborta y el stock **no** se suma dos veces.
+
+### `lote_envasado.litros_equivalentes` es generada, y duplica factores a propósito
+
+Los factores (lata 355 ml ⇒ caja12 = 4.26 L, caja24 = 8.52 L, barriles 20/10)
+están **en los dos lados**: `LITROS_POR_UNIDAD` en `src/lib/unidades.ts` y la
+expresión de la columna generada. Es la misma clase de espejo que
+`roles.ts` ↔ las funciones SQL.
+
+Está así porque la merma es `litros_reales - sum(litros_equivalentes)`: si el
+cliente pudiera mandar los litros, podría mandar unos que no corresponden a
+las cajas y la merma quedaría falseada sin que nada lo note. **Si esos
+factores cambian, se cambian en los dos lados.**
+
+El envasado habla en **columnas de stock** (`stock_caja24`…), no en unidades
+de venta de `pedido_items` (`caja24`, `mix24`…). Son dos vocabularios y
+mezclarlos manda el stock a la columna equivocada.
+
+### `productos.folio_prefijo`
+
+Columna nueva, `text` nullable con unique parcial y check `^[A-Z]{3}$`. Las 3
+letras del folio (`BRA-26-014`) salen de aquí y **no** se derivan del nombre
+ni de `productos.estilo`: estilo es texto libre y choca —`Lager` y
+`Lager Mexicana` darían `LAG` las dos— y derivar del nombre ataría el folio a
+un nombre que puede cambiar.
+
+Nullable porque un producto de reventa o una cerveza de invitado no se cocina
+en casa, y volverla NOT NULL rompería `/api/admin/inventario/crear`. Quien
+intente crear un lote de un producto sin prefijo recibe un error explícito
+del trigger.
+
+Cambiar el prefijo **no** reescribe folios ya emitidos: `lotes` guarda su
+propio `folio_prefijo` y su `folio` ya formado. Un folio impreso en una caja
+no puede cambiar porque alguien editó el catálogo.
+
+### El consecutivo del folio es una tabla contador, no un `max()+1`
+
+`lote_folios (prefijo, anio, ultimo)`. Dos cocciones capturadas al mismo
+tiempo leerían el mismo `max()` y chocarían contra `lotes_folio_key`; el
+`on conflict (prefijo, anio) do update ... returning` toma el lock del
+renglón, así que la segunda transacción espera y se lleva el siguiente.
+
+### `lotes_vista` enumera columnas; no usa `l.*`
+
+A propósito, y es la lección que este proyecto ya pagó con `pedidos_saldo`
+(el archivo declara 11 columnas, producción tiene 16): `create or replace
+view` con `*` congela la lista del momento en que se creó, así que un
+`alter table lotes add column` posterior **no aparece en la vista** y nadie se
+entera. Agregar una columna a `lotes` pide tocar la vista y el tipo
+`LoteFila` en `app/admin/produccion/produccion-ui.ts`.
+
+`security_invoker = on`, igual que `pedidos_saldo`.
+
+### La merma es `null`, nunca 0, cuando falta un lado
+
+Un lote sin `litros_reales` capturados o sin envasado no tiene merma "de
+cero": tiene merma **desconocida**. La vista devuelve `null` en
+`merma_litros` / `merma_pct`, y `mermaDelPeriodo` en `src/lib/produccion.ts`
+los deja fuera del KPI y los cuenta en `sinDatos` — mismo criterio que
+`sinUnidad` en `topProductosEnLitros`.
+
+El KPI de merma a 90 días es **ponderado por volumen**, no el promedio de los
+porcentajes: promediarlos le daría el mismo peso a un lote de 50 L que a uno
+de 1000 L.
+
+### `deleted_at` y no `descontinuado_at`
+
+`lotes.deleted_at` se llama así aunque el soft-delete de `productos` sea
+`descontinuado_at`. No es la misma cosa: `descontinuado_at` es una baja de
+catálogo, y un lote borrado es una captura equivocada. Un lote **liberado** no
+se borra ni en suave (la ruta responde 409): ya movió inventario.
+
+### Trigger de `updated_at`
+
+`public.toca_updated_at()` es el primer trigger de `updated_at` del proyecto
+—hasta ahora el código lo seteaba a mano— y cuelga solo de `lotes` y
+`tanques`. Está porque `lotes` se escribe desde varias rutas y desde dos
+funciones SQL, y que una se olvide deja el `updated_at` mintiendo.

@@ -5,11 +5,13 @@ import MarcaClient from './MarcaClient'
 import NegocioClient from './NegocioClient'
 import TaproomSection from './TaproomSection'
 import MedalleroSection from './MedalleroSection'
+import TanquesSection from './TanquesSection'
 import ActividadClient from './ActividadClient'
 
 const DESCRIPCIONES: Record<string, string> = {
   marca: 'Acento del panel',
   negocio: 'Condiciones de pago, alertas y moneda',
+  tanques: 'Fermentadores, maduradores y brites',
   taproom: 'Horarios y datos del taproom',
   medallero: 'Reconocimientos y competencias',
   actividad: 'Bitácora de acciones del equipo',
@@ -34,6 +36,7 @@ export default async function ConfiguracionPage({ searchParams }: { searchParams
       />
       {activa === 'marca' && <MarcaClient />}
       {activa === 'negocio' && <NegocioClient />}
+      {activa === 'tanques' && <TanquesSection acento={acento} />}
       {activa === 'taproom' && <TaproomSection />}
       {activa === 'medallero' && <MedalleroSection />}
       {activa === 'actividad' && <ActividadClient />}

@@ -199,3 +199,117 @@ la acción tenga éxito.
 `profiles.last_seen_at` se actualiza fire-and-forget en `app/admin/layout.tsx`
 con `createServiceClient`, solo si pasaron más de 5 minutos desde el último
 update. No bloquea el render del layout.
+
+## Módulo Producción (migración 20261118000000)
+
+### Tres predicados nuevos, espejo de `roles.ts`
+
+Hasta ahora SQL tenía cuatro predicados (`is_staff`, `is_admin`,
+`is_super_admin`, `is_vendedor`) y `roles.ts` declaraba encima subconjuntos
+más estrechos que **solo existían en TS**, para la UI. Producción necesita
+esos subconjuntos en las policies, así que tres bajaron a SQL:
+
+| Función SQL | Helper TS | Roles |
+|---|---|---|
+| `can_manage_inventory()` | `canManageInventory()` | super_admin, admin, produccion |
+| `is_staff_sin_ventas()` | `isStaffSinVentas()` | super_admin, admin, produccion, contabilidad |
+| `can_manage_as_admin()` | `canManageAsAdmin()` | super_admin, admin |
+
+La regla de nombres: **cada función SQL es el snake_case exacto de su helper
+de `roles.ts`**. Si divergen, un usuario entra a la pantalla y RLS le vacía
+las tablas sin error.
+
+Mismo patrón que las otras: `stable`, `security definer`, `search_path`
+fijo, `revoke` de public/anon y `grant` a authenticated.
+
+### `lotes` pierde `is_admin()`: ventas ya no escribe producción
+
+Las policies originales (`20260731000000_three_level_roles.sql:68`) eran
+`lotes_read = is_staff()` y `lotes_write = is_admin()`. **`is_admin()`
+incluye a ventas**, así que ventas podía escribir lotes aunque el sidebar le
+esconda Producción (`staffSinVentas`). La UI escondía y RLS permitía.
+
+Las nuevas:
+
+| Tabla | SELECT | INSERT / UPDATE | DELETE |
+|---|---|---|---|
+| `lotes` | `is_staff_sin_ventas()` | `can_manage_inventory()` | ninguna — soft-delete vía `deleted_at` |
+| `lote_lecturas` | `is_staff_sin_ventas()` | `can_manage_inventory()` | ninguna |
+| `lote_envasado` | `is_staff_sin_ventas()` | `can_manage_inventory()` | ninguna |
+| `tanques` | `is_staff_sin_ventas()` | `can_manage_as_admin()` (FOR ALL) | igual |
+| `lote_eventos` | `is_staff_sin_ventas()` | **ninguna** | ninguna |
+| `inventario_movimientos` | `is_staff_sin_ventas()` | **ninguna** | ninguna |
+| `lote_folios` | **ninguna** | **ninguna** | ninguna |
+
+Ventas y vendedor reciben 0 filas en todo el módulo. Contabilidad lee todo y
+no escribe nada, igual que en Clientes.
+
+### Los dos logs son append-only para `authenticated`
+
+`lote_eventos` e `inventario_movimientos` **no tienen policy de escritura**.
+Los escribe `avanzar_lote()` (security definer) con el actor explícito. Un log
+que el cliente puede insertar deja de ser evidencia de quién movió qué — el
+mismo criterio por el que `audit_log` no se escribe desde el browser.
+
+`lote_folios` tiene RLS encendido y **cero policies**: ni lectura. Es el
+contador del consecutivo y solo lo toca el trigger. Bajar un contador a mano
+reusaría un folio ya emitido.
+
+### `tanques` es de admin aunque el módulo sea de producción
+
+El CRUD vive en **Configuración → Tanques** (`can_manage_as_admin()`), no en
+Producción. Dar de alta un fermentador cambia la capacidad instalada de la
+fábrica, que es decisión del dueño; producción los ocupa con sus lotes y los
+ve en **Producción → Tanques**, en solo lectura.
+
+El predicado de la pestaña queda dentro del del item padre (Configuración ya
+es `canManageAsAdmin`), así que nadie ve una pestaña de una sección a la que
+no puede entrar, y coincide con la policy.
+
+### Las funciones del módulo solo las llama `service_role`
+
+```sql
+revoke execute on function public.avanzar_lote(...) from public, anon, authenticated;
+grant  execute on function public.avanzar_lote(...) to service_role;
+```
+
+Mismo criterio que `public.aplicar_pago`. El `grant` a `service_role` va
+**explícito**: revocar de `public` quita el EXECUTE heredado, y sin el grant
+la única vía de ejecución quedaría cerrada.
+
+`avanzar_lote()` es el único camino para mover la etapa, porque es lo que
+valida los requisitos (no envasar sin FG, no liberar sin envasado), respeta
+el orden de las etapas, deja el evento con su actor real y —al liberar— mete
+la entrada a inventario, todo en **una** transacción. Si la entrada falla, la
+etapa tampoco se movió.
+
+### Esta pantalla NO suma a la deuda de writes con anon key
+
+Medallero, Vendedores, Comisiones y Taproom escriben con la anon key desde el
+browser (ver la sección de deuda arriba). Producción y el CRUD de tanques
+escriben **por route handler** con `createServiceClient` y guard de rol
+server-side, como pedidos y puntos de venta. El guard común está en
+`app/api/admin/produccion/guard.ts`.
+
+`app/admin/inventario/edit/[id]` sigue en la deuda: por eso
+`productos.folio_prefijo` se guarda por su propia ruta
+(`/api/admin/inventario/[id]/folio-prefijo`) y no con el Guardar grande de
+esa pantalla.
+
+### Entradas nuevas de `audit_log`
+
+| Acción | Entidad | Ruta |
+|---|---|---|
+| `lote.crear` | lotes | `/api/admin/produccion/lotes` |
+| `lote.actualizar` | lotes | `/api/admin/produccion/lotes/[id]` (PATCH) |
+| `lote.borrar` | lotes | `/api/admin/produccion/lotes/[id]` (DELETE) — soft-delete |
+| `lote.avanzar` | lotes | `/api/admin/produccion/lotes/[id]/avanzar` |
+| `lote.liberar` | lotes | igual, cuando la etapa destino es `liberado` |
+| `lote.envasado` | lote_envasado | `/api/admin/produccion/lotes/[id]/envasado` |
+| `tanque.crear` / `tanque.actualizar` / `tanque.borrar` | tanques | `/api/admin/produccion/tanques[/id]` |
+| `producto.folio_prefijo` | productos | `/api/admin/inventario/[id]/folio-prefijo` |
+
+Las **lecturas de la bitácora no escriben `audit_log`** a propósito: una
+medición de gravedad es un dato de proceso, no un cambio de estado del
+sistema, y su rastro es la propia fila con su `created_by`. Una entrada por
+medición diaria ahogaría la bitácora de acciones.

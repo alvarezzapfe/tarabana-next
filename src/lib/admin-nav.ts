@@ -129,6 +129,16 @@ export const NAV: NavItemDef[] = [
     href: '/admin/produccion',
     icon: 'M3 3h18v18H3z M3 9h18 M9 21V9',
     visible: staffSinVentas,
+    // Las tres vistas son `?tab=` de la misma pagina, como Pedidos: el host
+    // resuelve la activa con resolverTab(). Contabilidad las ve en solo
+    // lectura — eso no lo impone este predicado, lo imponen las policies
+    // (insert/update piden can_manage_inventory()) y el `canEdit` de la
+    // pantalla, que a contabilidad le deja el tablero sin botones.
+    tabs: [
+      { key: 'tablero', label: 'Tablero', visible: staffSinVentas },
+      { key: 'tanques', label: 'Tanques', visible: staffSinVentas },
+      { key: 'historico', label: 'Histórico', visible: staffSinVentas },
+    ],
   },
   {
     key: 'inventario',
@@ -193,6 +203,15 @@ export const NAV: NavItemDef[] = [
     tabs: [
       { key: 'marca', label: 'Marca', visible: isSuperAdmin },
       { key: 'negocio', label: 'Negocio', visible: isSuperAdmin },
+      // Tanques: el catalogo de vasijas fisicas. Vive en Configuracion y no
+      // en Produccion porque dar de alta un fermentador cambia la capacidad
+      // instalada de la fabrica, que es una decision de admin; produccion
+      // los ocupa con sus lotes y los ve en Produccion -> Tanques.
+      //
+      // `canManageAsAdmin` queda DENTRO del predicado del item padre, asi
+      // que nadie ve una pestana de una seccion a la que no puede entrar, y
+      // es el mismo que pide la policy `tanques_write`.
+      { key: 'tanques', label: 'Tanques', visible: canManageAsAdmin },
       { key: 'taproom', label: 'Taproom', legacyHref: '/admin/taproom', visible: canManageAsAdmin },
       { key: 'medallero', label: 'Medallero', legacyHref: '/admin/medallero', visible: canManageAsAdmin },
       { key: 'actividad', label: 'Actividad', legacyHref: '/admin/actividad', visible: isSuperAdmin },
