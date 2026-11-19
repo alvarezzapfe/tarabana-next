@@ -1,5 +1,5 @@
 import { ETAPA_LABEL, type Etapa } from '../../../src/lib/produccion.ts'
-import { GRIS, GRIS_SUAVE, PISTA } from '../dash-ui.ts'
+import { ACENTO, GRIS, GRIS_SUAVE, PISTA } from '../dash-ui.ts'
 
 /**
  * Tipos y tokens que comparten las tres pestanas de Produccion.
@@ -162,8 +162,18 @@ export const labelBase = {
   marginBottom: 6,
 }
 
-export const botonPrimario = (acento: string) => ({
-  background: acento,
+/**
+ * Boton de accion primaria.
+ *
+ * Usa la constante ACENTO de dash-ui (#D95F2E), NO el acento tematico que
+ * `contextoAdmin()` saca de `app_config.branding.color_primary`. Es lo que
+ * hace Pedidos con su "+ Nuevo pedido" (ver PedidosClient), y por eso ese
+ * sale naranja mientras el subrayado de las pestanas sale del color de
+ * marca. Hilar el acento tematico aqui era lo que pintaba este boton de azul
+ * claro cuando el branding es #1cabe9.
+ */
+export const botonPrimario = () => ({
+  background: ACENTO,
   color: '#fff',
   border: 'none',
   borderRadius: 8,

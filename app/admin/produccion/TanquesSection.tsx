@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
 import { esTerminal, fmtDias, fmtGravedad, fmtLitros } from '../../../src/lib/produccion'
-import { BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA } from '../dash-ui'
+import { ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA } from '../dash-ui'
 import Icono from './Icono'
 import {
   AMBAR, ICONOS, TANQUE_TIPO_LABEL, estaParado, etiquetaEtapa, vacio,
@@ -19,7 +19,7 @@ import {
  * senal de color de la pantalla junto con el lote parado: un tanque ocupado
  * es lo normal y no necesita destacarse.
  */
-export default async function TanquesSection({ acento }: { acento: string }) {
+export default async function TanquesSection() {
   const supabase = await createServerSupabaseClient()
 
   const [{ data: tanques }, { data: lotes }] = await Promise.all([
@@ -53,7 +53,7 @@ export default async function TanquesSection({ acento }: { acento: string }) {
         <p style={{ margin: '0 0 6px', color: GRIS, fontSize: 14 }}>No hay tanques dados de alta.</p>
         <p style={{ margin: 0, fontSize: 12.5 }}>
           Se dan de alta en{' '}
-          <Link href="/admin/configuracion?tab=tanques" style={{ color: acento, textDecoration: 'none', fontWeight: 600 }}>
+          <Link href="/admin/configuracion?tab=tanques" style={{ color: ACENTO, textDecoration: 'none', fontWeight: 600 }}>
             Configuración → Tanques
           </Link>
           .

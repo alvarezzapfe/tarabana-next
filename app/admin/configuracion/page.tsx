@@ -36,7 +36,7 @@ export default async function ConfiguracionPage({ searchParams }: { searchParams
       />
       {activa === 'marca' && <MarcaClient />}
       {activa === 'negocio' && <NegocioClient />}
-      {activa === 'tanques' && <TanquesSection acento={acento} />}
+      {activa === 'tanques' && <TanquesSection />}
       {activa === 'taproom' && <TaproomSection />}
       {activa === 'medallero' && <MedalleroSection />}
       {activa === 'actividad' && <ActividadClient />}

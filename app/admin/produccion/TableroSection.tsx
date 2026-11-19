@@ -19,9 +19,7 @@ import type { LoteFila, ProductoFila, TanqueFila } from './produccion-ui'
  * Con el volumen de una fabrica chica, una consulta es mas simple que dos y
  * no se pueden desincronizar.
  */
-export default async function TableroSection({
-  acento, role,
-}: { acento: string; role?: string }) {
+export default async function TableroSection({ role }: { role?: string }) {
   const supabase = await createServerSupabaseClient()
 
   const [{ data: lotes }, { data: tanques }, { data: productos }] = await Promise.all([
@@ -43,7 +41,6 @@ export default async function TableroSection({
       tanques={(tanques || []) as TanqueFila[]}
       productos={(productos || []) as ProductoFila[]}
       canEdit={canManageInventory(role)}
-      acento={acento}
       // La fecha viene del servidor: llamar new Date() en render seria impuro
       // y daria un KPI distinto en el HTML del servidor y en la hidratacion.
       ahoraISO={new Date().toISOString()}

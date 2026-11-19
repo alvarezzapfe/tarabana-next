@@ -11,7 +11,7 @@ import type { LoteFila } from './produccion-ui'
  * una tabla que cabe en memoria. Si esto crece a miles de lotes, los filtros
  * se mueven a `searchParams` y a la consulta.
  */
-export default async function HistoricoSection({ acento }: { acento: string }) {
+export default async function HistoricoSection() {
   const supabase = await createServerSupabaseClient()
 
   const { data } = await supabase
@@ -20,5 +20,5 @@ export default async function HistoricoSection({ acento }: { acento: string }) {
     .order('fecha_coccion', { ascending: false, nullsFirst: false })
     .order('created_at', { ascending: false })
 
-  return <HistoricoClient lotes={(data || []) as LoteFila[]} acento={acento} />
+  return <HistoricoClient lotes={(data || []) as LoteFila[]} />
 }

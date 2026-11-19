@@ -13,7 +13,7 @@ import {
 } from '../../../src/lib/produccion'
 import { BORDE, GRIS, GRIS_SUAVE, TINTA, TINTA_MEDIA, enteros } from '../dash-ui'
 import {
-  AMBAR, COLUMNA_FONDO, ICONOS, botonPrimario, estaParado, etiquetaEtapa,
+  AMBAR, COLUMNA_FONDO, ICONOS, estaParado, etiquetaEtapa,
   type LoteFila, type ProductoFila, type TanqueFila,
 } from './produccion-ui'
 
@@ -51,16 +51,17 @@ type Props = {
   tanques: TanqueFila[]
   productos: ProductoFila[]
   canEdit: boolean
-  acento: string
   ahoraISO: string
 }
 
-export default function TableroClient({ lotes, tanques, productos, canEdit, acento, ahoraISO }: Props) {
+export default function TableroClient({ lotes, tanques, productos, canEdit, ahoraISO }: Props) {
   const router = useRouter()
   const params = useSearchParams()
   const loteAbierto = params.get('lote')
 
-  const [nuevoAbierto, setNuevoAbierto] = useState(false)
+  // El modal de alta se abre desde la URL, porque el boton que lo dispara
+  // vive en la cabecera (Tabs acciones) y es un Link del server component.
+  const nuevoAbierto = params.get('nuevo') === '1'
   const [avanzando, setAvanzando] = useState<string | null>(null)
   const [error, setError] = useState('')
 
@@ -106,6 +107,12 @@ export default function TableroClient({ lotes, tanques, productos, canEdit, acen
     const q = new URLSearchParams(params.toString())
     if (id) q.set('lote', id)
     else q.delete('lote')
+    router.replace(q.size ? `/admin/produccion?${q}` : '/admin/produccion', { scroll: false })
+  }, [params, router])
+
+  const cerrarNuevo = useCallback(() => {
+    const q = new URLSearchParams(params.toString())
+    q.delete('nuevo')
     router.replace(q.size ? `/admin/produccion?${q}` : '/admin/produccion', { scroll: false })
   }, [params, router])
 
@@ -156,22 +163,14 @@ export default function TableroClient({ lotes, tanques, productos, canEdit, acen
         />
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 14 }}>
-        <p style={{ margin: 0, color: GRIS, fontSize: 12.5 }}>
-          {activos.length === 0
-            ? 'Ningún lote en proceso.'
-            : `${activos.length} lote${activos.length === 1 ? '' : 's'} en proceso.`}
+      {/* Con cero lotes no se dice nada: las columnas vacias ya lo comunican,
+          y un renglon de texto encima solo mete ruido en una pantalla que ya
+          esta vacia. El alta vive en la cabecera. */}
+      {activos.length > 0 && (
+        <p style={{ margin: '0 0 14px', color: GRIS, fontSize: 12.5 }}>
+          {activos.length} lote{activos.length === 1 ? '' : 's'} en proceso.
         </p>
-        {canEdit && (
-          <button
-            onClick={() => setNuevoAbierto(true)}
-            style={{ ...botonPrimario(acento), display: 'inline-flex', alignItems: 'center', gap: 7 }}
-          >
-            <Icono d={ICONOS.mas} size={15} strokeWidth={2.2} />
-            Nuevo lote
-          </button>
-        )}
-      </div>
+      )}
 
       {error && (
         <div
@@ -244,7 +243,6 @@ export default function TableroClient({ lotes, tanques, productos, canEdit, acen
           key={ficha.id}
           lote={ficha}
           canEdit={canEdit}
-          acento={acento}
           onCerrar={() => abrir(null)}
           onCambio={() => router.refresh()}
         />
@@ -258,9 +256,8 @@ export default function TableroClient({ lotes, tanques, productos, canEdit, acen
           tanquesLibres={tanques.filter(
             t => t.activo && !activos.some(l => l.tanque_id === t.id)
           )}
-          acento={acento}
-          onCerrar={() => setNuevoAbierto(false)}
-          onCreado={() => { setNuevoAbierto(false); router.refresh() }}
+          onCerrar={cerrarNuevo}
+          onCreado={() => { cerrarNuevo(); router.refresh() }}
         />
       )}
     </>

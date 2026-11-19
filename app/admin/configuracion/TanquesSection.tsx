@@ -9,7 +9,7 @@ import type { TanqueFila } from '../produccion/produccion-ui'
  * un tanque tiene historial para explicar por que no se puede borrar (hay
  * que desactivarlo) antes de que el usuario lo intente y reciba un 409.
  */
-export default async function TanquesSection({ acento }: { acento: string }) {
+export default async function TanquesSection() {
   const supabase = await createServerSupabaseClient()
 
   const [{ data: tanques }, { data: lotes }] = await Promise.all([
@@ -33,7 +33,6 @@ export default async function TanquesSection({ acento }: { acento: string }) {
     <TanquesClient
       tanques={(tanques || []) as TanqueFila[]}
       usos={usos}
-      acento={acento}
     />
   )
 }

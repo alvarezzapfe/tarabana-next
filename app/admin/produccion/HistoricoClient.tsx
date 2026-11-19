@@ -9,7 +9,7 @@ import {
   fmtAbv, fmtGravedad, fmtLitros, fmtPct,
   type FilaHistorico, type FiltroHistorico,
 } from '../../../src/lib/produccion'
-import { BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA } from '../dash-ui'
+import { ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, TINTA, TINTA_MEDIA } from '../dash-ui'
 import {
   AMBAR, ICONOS, botonNeutro, etiquetaEtapa, inputBase, labelBase, vacio,
   type LoteFila,
@@ -45,7 +45,7 @@ const COLS: { label: string; alinear?: 'right' }[] = [
   { label: 'ABV', alinear: 'right' },
 ]
 
-export default function HistoricoClient({ lotes, acento }: { lotes: LoteFila[]; acento: string }) {
+export default function HistoricoClient({ lotes }: { lotes: LoteFila[] }) {
   const router = useRouter()
   const params = useSearchParams()
   const loteAbierto = params.get('lote')
@@ -131,7 +131,7 @@ export default function HistoricoClient({ lotes, acento }: { lotes: LoteFila[]; 
         {hayFiltro && (
           <button
             onClick={() => setFiltro(FILTRO_VACIO)}
-            style={{ marginLeft: 8, background: 'none', border: 'none', padding: 0, color: acento, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ marginLeft: 8, background: 'none', border: 'none', padding: 0, color: ACENTO, fontSize: 12.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}
           >
             Limpiar filtros
           </button>
@@ -228,7 +228,6 @@ export default function HistoricoClient({ lotes, acento }: { lotes: LoteFila[]; 
           // El Historico es de consulta: lo que se edita se edita en el
           // Tablero, donde esta el lote vivo.
           canEdit={false}
-          acento={acento}
           onCerrar={() => abrir(null)}
           onCambio={() => router.refresh()}
         />

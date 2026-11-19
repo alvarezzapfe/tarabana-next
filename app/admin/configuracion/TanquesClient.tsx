@@ -30,10 +30,9 @@ const VACIO = { nombre: '', tipo: 'fermentador' as TanqueTipo, capacidad_litros:
 type Props = {
   tanques: TanqueFila[]
   usos: Record<string, { total: number; vivos: number }>
-  acento: string
 }
 
-export default function TanquesClient({ tanques, usos, acento }: Props) {
+export default function TanquesClient({ tanques, usos }: Props) {
   const router = useRouter()
   const [form, setForm] = useState(VACIO)
   const [editId, setEditId] = useState<string | null>(null)
@@ -147,7 +146,7 @@ export default function TanquesClient({ tanques, usos, acento }: Props) {
           <button
             onClick={guardar}
             disabled={guardando || !valido}
-            style={{ ...botonPrimario(acento), opacity: guardando || !valido ? 0.5 : 1, cursor: valido ? 'pointer' : 'not-allowed' }}
+            style={{ ...botonPrimario(), opacity: guardando || !valido ? 0.5 : 1, cursor: valido ? 'pointer' : 'not-allowed' }}
           >
             {guardando ? 'Guardando…' : editId ? 'Guardar cambios' : 'Agregar tanque'}
           </button>

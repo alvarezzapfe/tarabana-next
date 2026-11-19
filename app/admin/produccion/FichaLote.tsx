@@ -55,12 +55,11 @@ type Detalle = {
 type Props = {
   lote: LoteFila
   canEdit: boolean
-  acento: string
   onCerrar: () => void
   onCambio: () => void
 }
 
-export default function FichaLote({ lote, canEdit, acento, onCerrar, onCambio }: Props) {
+export default function FichaLote({ lote, canEdit, onCerrar, onCambio }: Props) {
   const [tab, setTab] = useState<Pestana>('general')
   const [detalle, setDetalle] = useState<Detalle | null>(null)
   // Arranca en true y NO se resetea dentro del efecto: quien pinta este
@@ -160,7 +159,7 @@ export default function FichaLote({ lote, canEdit, acento, onCerrar, onCambio }:
               >
                 {p.label}
                 {tab === p.key && (
-                  <span aria-hidden style={{ position: 'absolute', left: 6, right: 6, bottom: -1, height: 2, background: acento, borderRadius: 1 }} />
+                  <span aria-hidden style={{ position: 'absolute', left: 6, right: 6, bottom: -1, height: 2, background: ACENTO, borderRadius: 1 }} />
                 )}
               </button>
             ))}
@@ -175,7 +174,7 @@ export default function FichaLote({ lote, canEdit, acento, onCerrar, onCambio }:
           )}
 
           {tab === 'general' && (
-            <General lote={lote} canEdit={canEdit} acento={acento} onGuardado={onCambio} />
+            <General lote={lote} canEdit={canEdit} onGuardado={onCambio} />
           )}
 
           {tab === 'lecturas' && (
@@ -184,7 +183,6 @@ export default function FichaLote({ lote, canEdit, acento, onCerrar, onCambio }:
                 loteId={lote.id}
                 lecturas={detalle?.lecturas || []}
                 canEdit={canEdit}
-                acento={acento}
                 onGuardado={async () => { await recargar(); onCambio() }}
               />
             )
@@ -196,7 +194,6 @@ export default function FichaLote({ lote, canEdit, acento, onCerrar, onCambio }:
                 lote={lote}
                 envasado={detalle?.envasado || []}
                 canEdit={canEdit}
-                acento={acento}
                 onGuardado={async () => { await recargar(); onCambio() }}
               />
             )
@@ -252,8 +249,8 @@ function Dato({ label, valor, tono }: { label: string; valor: string; tono?: 'al
 // ── General: datos y captura de medidas ─────────────────────
 
 function General({
-  lote, canEdit, acento, onGuardado,
-}: { lote: LoteFila; canEdit: boolean; acento: string; onGuardado: () => void }) {
+  lote, canEdit, onGuardado,
+}: { lote: LoteFila; canEdit: boolean; onGuardado: () => void }) {
   const [editando, setEditando] = useState(false)
   const [guardando, setGuardando] = useState(false)
   const [error, setError] = useState('')
@@ -329,7 +326,7 @@ function General({
           El ABV lo calcula la base de datos a partir de OG y FG; no se captura.
         </p>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={guardar} disabled={guardando} style={{ ...botonPrimario(acento), opacity: guardando ? 0.6 : 1 }}>
+          <button onClick={guardar} disabled={guardando} style={{ ...botonPrimario(), opacity: guardando ? 0.6 : 1 }}>
             {guardando ? 'Guardando…' : 'Guardar'}
           </button>
           <button onClick={() => setEditando(false)} style={botonNeutro}>Cancelar</button>
@@ -397,12 +394,11 @@ function General({
 // ── Lecturas: bitacora y grafica ────────────────────────────
 
 function Lecturas({
-  loteId, lecturas, canEdit, acento, onGuardado,
+  loteId, lecturas, canEdit, onGuardado,
 }: {
   loteId: string
   lecturas: LecturaFila[]
   canEdit: boolean
-  acento: string
   onGuardado: () => void
 }) {
   const [form, setForm] = useState({ gravedad: '', temperatura_c: '', ph: '', nota: '' })
@@ -474,7 +470,7 @@ function Lecturas({
                   labelFormatter={t => (typeof t === 'string' ? etiquetaFecha(t) : '')}
                   contentStyle={{ fontSize: 12, borderRadius: 8, border: `1px solid ${BORDE}` }}
                 />
-                <Line type="monotone" dataKey="gravedad" stroke={acento || ACENTO} strokeWidth={2} dot={{ r: 2.5 }} />
+                <Line type="monotone" dataKey="gravedad" stroke={ACENTO} strokeWidth={2} dot={{ r: 2.5 }} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -532,7 +528,7 @@ function Lecturas({
             onClick={guardar}
             disabled={guardando || vacio}
             title={vacio ? 'Captura al menos una medición o una nota' : undefined}
-            style={{ ...botonPrimario(acento), opacity: guardando || vacio ? 0.5 : 1, cursor: vacio ? 'not-allowed' : 'pointer' }}
+            style={{ ...botonPrimario(), opacity: guardando || vacio ? 0.5 : 1, cursor: vacio ? 'not-allowed' : 'pointer' }}
           >
             {guardando ? 'Guardando…' : 'Registrar lectura'}
           </button>
@@ -545,12 +541,11 @@ function Lecturas({
 // ── Envasado y merma ────────────────────────────────────────
 
 function Envasado({
-  lote, envasado, canEdit, acento, onGuardado,
+  lote, envasado, canEdit, onGuardado,
 }: {
   lote: LoteFila
   envasado: EnvasadoFila[]
   canEdit: boolean
-  acento: string
   onGuardado: () => void
 }) {
   const [columna, setColumna] = useState<ColumnaStock>('stock_caja24')
@@ -664,7 +659,7 @@ function Envasado({
           <button
             onClick={guardar}
             disabled={guardando || previo === null}
-            style={{ ...botonPrimario(acento), opacity: guardando || previo === null ? 0.5 : 1, cursor: previo === null ? 'not-allowed' : 'pointer' }}
+            style={{ ...botonPrimario(), opacity: guardando || previo === null ? 0.5 : 1, cursor: previo === null ? 'not-allowed' : 'pointer' }}
           >
             {guardando ? 'Guardando…' : 'Guardar'}
           </button>

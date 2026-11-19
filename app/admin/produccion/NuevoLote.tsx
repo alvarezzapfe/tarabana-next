@@ -29,12 +29,11 @@ const CSS = `
 type Props = {
   productos: ProductoFila[]
   tanquesLibres: TanqueFila[]
-  acento: string
   onCerrar: () => void
   onCreado: () => void
 }
 
-export default function NuevoLote({ productos, tanquesLibres, acento, onCerrar, onCreado }: Props) {
+export default function NuevoLote({ productos, tanquesLibres, onCerrar, onCreado }: Props) {
   const [form, setForm] = useState({
     producto_id: '',
     tanque_id: '',
@@ -187,7 +186,7 @@ export default function NuevoLote({ productos, tanquesLibres, acento, onCerrar, 
           <button
             onClick={crear}
             disabled={guardando || !valido}
-            style={{ ...botonPrimario(acento), opacity: guardando || !valido ? 0.5 : 1, cursor: valido ? 'pointer' : 'not-allowed' }}
+            style={{ ...botonPrimario(), opacity: guardando || !valido ? 0.5 : 1, cursor: valido ? 'pointer' : 'not-allowed' }}
           >
             {guardando ? 'Creando…' : 'Crear lote'}
           </button>
