@@ -4,6 +4,7 @@ import { createClient } from '../../../../../src/lib/supabase'
 import { useRouter, useParams } from 'next/navigation'
 import { canManageInventory, isSuperAdmin as checkSuperAdmin } from '../../../../../src/lib/roles'
 import { leerPreciosDeFormulario, primerErrorDePrecios } from '../../../../../src/lib/precios'
+import CampoPrefijo from './CampoPrefijo'
 
 interface EstiloDB { id: string; nombre: string; familia: string | null; orden: number }
 
@@ -32,6 +33,11 @@ export default function EditProductoPage() {
     activo: true, imagen_url: '',
   })
 
+  // El prefijo de folio se guarda por su propia ruta, no con el Guardar de
+  // esta pantalla (ver CampoPrefijo). Aqui solo se recuerda el valor inicial
+  // para pintarlo.
+  const [folioPrefijo, setFolioPrefijo] = useState<string | null>(null)
+
   const estilosByFamilia = useMemo(() => {
     const groups: Record<string, EstiloDB[]> = {}
     for (const e of estilos) {
@@ -59,6 +65,7 @@ export default function EditProductoPage() {
       if (!p) { router.push('/admin/inventario'); return }
 
       setImgPreview(p.imagen_url || null)
+      setFolioPrefijo(p.folio_prefijo ?? null)
       setForm({
         nombre: p.nombre || '', estilo: p.estilo || '',
         abv: p.abv?.toString() || '', ibu: p.ibu?.toString() || '',
@@ -262,6 +269,12 @@ export default function EditProductoPage() {
           </div>
 
           {inp('Descripción corta', 'descripcion', '', 'text', !isSuperAdmin)}
+
+          {/* `key` para que el campo se remonte cuando llega el valor
+              cargado: el formulario se pinta antes de que el efecto resuelva
+              (loading arranca en false), y useState solo lee su inicial la
+              primera vez. */}
+          <CampoPrefijo key={folioPrefijo ?? 'sin-prefijo'} productoId={id} inicial={folioPrefijo} />
           
           {isSuperAdmin && (
             <div>

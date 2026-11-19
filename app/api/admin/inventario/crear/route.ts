@@ -17,6 +17,20 @@ export async function POST(request: Request) {
   if (!body.nombre?.trim()) return NextResponse.json({ error: 'Nombre requerido' }, { status: 400 })
   if (!body.estilo?.trim()) return NextResponse.json({ error: 'Estilo requerido' }, { status: 400 })
 
+  // Prefijo de folio de lote. Opcional: un producto de reventa o una cerveza
+  // de invitado no se cocina en casa y no necesita serie de folios. Si viene,
+  // son exactamente 3 letras y es UNICO entre productos (unique parcial en la
+  // DB); el 23505 de abajo lo traduce.
+  const prefijo = typeof body.folio_prefijo === 'string' && body.folio_prefijo.trim()
+    ? body.folio_prefijo.trim().toUpperCase()
+    : null
+  if (prefijo !== null && !/^[A-Z]{3}$/.test(prefijo)) {
+    return NextResponse.json(
+      { error: 'El prefijo de folio son exactamente 3 letras (A-Z).' },
+      { status: 400 }
+    )
+  }
+
   // Los precios con la misma regla que la lista de precios: mayor que 0 y en
   // pesos enteros. Antes esto era `parseFloat(...) || null`, que aceptaba
   // centavos —y `precioUnitario` redondea la lata suelta pero no la caja, asi
@@ -31,6 +45,7 @@ export async function POST(request: Request) {
   const { data, error } = await service.from('productos').insert({
     nombre: body.nombre.trim(),
     estilo: body.estilo.trim(),
+    folio_prefijo: prefijo,
     abv: body.abv ? parseFloat(body.abv) : null,
     ibu: body.ibu ? parseInt(body.ibu) : null,
     descripcion: body.descripcion || null,
@@ -49,7 +64,18 @@ export async function POST(request: Request) {
 
   if (error) {
     if (error.code === '23505') {
-      return NextResponse.json({ error: 'Ya existe un producto con ese nombre' }, { status: 409 })
+      // Dos unique posibles desde que existe el prefijo de folio. Decir
+      // "ya existe ese nombre" cuando el que choca es el prefijo manda a
+      // corregir el campo equivocado.
+      const esPrefijo = error.message.includes('folio_prefijo')
+      return NextResponse.json(
+        {
+          error: esPrefijo
+            ? `El prefijo de folio ${prefijo} ya lo usa otro producto.`
+            : 'Ya existe un producto con ese nombre',
+        },
+        { status: 409 }
+      )
     }
     return NextResponse.json({ error: error.message }, { status: 400 })
   }
@@ -57,7 +83,7 @@ export async function POST(request: Request) {
   logAction({
     actorId: user.id, actorEmail: user.email!, actorRole: profile!.role,
     accion: 'producto.crear', entidad: 'productos', entidadId: data.id,
-    detalle: { nombre: body.nombre.trim(), estilo: body.estilo.trim() },
+    detalle: { nombre: body.nombre.trim(), estilo: body.estilo.trim(), folio_prefijo: prefijo },
     request,
   })
 

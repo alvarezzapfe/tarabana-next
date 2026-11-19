@@ -40,6 +40,7 @@ export default function NuevoProductoPage() {
   // Step 1: Identity
   const [form, setForm] = useState({
     nombre: '', estilo: '', abv: '', ibu: '', descripcion: '', descripcion_larga: '',
+    folio_prefijo: '',
   })
 
   // Step 2: Presentations
@@ -118,7 +119,11 @@ export default function NuevoProductoPage() {
   }
 
   // Validation
-  const step1Valid = form.nombre.trim().length > 0 && form.estilo.trim().length > 0
+  // El prefijo es opcional (un producto de reventa no se cocina), pero un
+  // prefijo a medias —una o dos letras— no deja avanzar: guardarlo asi lo
+  // rechazaria la ruta despues de tres pasos de formulario.
+  const prefijoOk = form.folio_prefijo === '' || /^[A-Z]{3}$/.test(form.folio_prefijo)
+  const step1Valid = form.nombre.trim().length > 0 && form.estilo.trim().length > 0 && prefijoOk
   const anyPres = Object.values(pres).some(Boolean)
   const step2Valid = anyPres && (!pres.latas || parseFloat(precios.precio_lata_publico) > 0)
   const canSubmit = step1Valid && step2Valid
@@ -265,6 +270,24 @@ export default function NuevoProductoPage() {
               <div>
                 <label style={labelStyle}>Nombre *</label>
                 <input value={form.nombre} onChange={e => set('nombre', e.target.value)} placeholder="Brisa IPA" style={inputStyle} />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Prefijo de folio</label>
+                <input
+                  value={form.folio_prefijo}
+                  // Mayusculas y tope de 3 letras mientras se escribe: el
+                  // campo no deja teclear algo que la ruta va a rechazar.
+                  onChange={e => set('folio_prefijo', e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3))}
+                  placeholder="BRI"
+                  maxLength={3}
+                  style={{ ...inputStyle, width: 110, letterSpacing: '0.12em', fontWeight: 600, textAlign: 'center' }}
+                />
+                <p style={{ color: '#9ca3af', fontSize: 12, marginTop: 6, lineHeight: 1.45 }}>
+                  Tres letras para el folio de sus lotes (BRI-26-014). Único
+                  entre productos. Déjalo vacío si esta cerveza no se cocina
+                  en casa.
+                </p>
               </div>
 
               <div>

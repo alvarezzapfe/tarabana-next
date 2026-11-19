@@ -1,56 +1,79 @@
-import { createServerSupabaseClient } from '../../../src/lib/supabase-server'
-import { isStaffSinVentas } from '../../../src/lib/roles'
+import Link from 'next/link'
+import { contextoAdmin, type SearchParams } from '../../../src/lib/admin-contexto'
+import { tabsParaRol } from '../../../src/lib/admin-nav'
+import { canManageInventory } from '../../../src/lib/roles'
+import Tabs, { resolverTab } from '../Tabs'
+import Icono from './Icono'
+import { ICONOS, botonPrimario } from './produccion-ui'
+import TableroSection from './TableroSection'
+import TanquesSection from './TanquesSection'
+import HistoricoSection from './HistoricoSection'
 
-export default async function ProduccionPage() {
-  const supabase = await createServerSupabaseClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user!.id).single()
+/**
+ * Host de pestanas de Produccion.
+ *
+ * Mismo patron que Pedidos y Configuracion: `tabsParaRol` filtra por rol,
+ * `resolverTab` elige la activa y cada Section carga SOLO lo suyo. El layout
+ * del admin ya valido sesion, panel y AAL2, asi que aqui el gate es el de la
+ * seccion: si el rol no tiene ninguna pestana, no entra.
+ *
+ * Antes esta pagina era una tabla suelta de `lotes` con su propio guard
+ * `isStaffSinVentas`, y su boton "+ Nuevo lote" apuntaba a
+ * /admin/produccion/nuevo, que no existia: un 404 en produccion.
+ *
+ * El alta vive en el encabezado, alineada con el titulo, igual que el
+ * "+ Nuevo pedido" de Pedidos. Es un Link y no un boton para que el modal
+ * se abra desde la URL (`?nuevo=1`): asi la cabecera no necesita JS ni
+ * conocer el estado del tablero, y el boton Atras cierra el modal — el mismo
+ * criterio que `?lote=` para la ficha.
+ */
 
-  // Mismo predicado que usa el sidebar, para que lo que se esconde sea
-  // tambien lo que se niega. Antes la pagina no tenia guard propio.
-  if (!isStaffSinVentas(profile?.role)) {
-    return <p style={{ color: '#6b7280', fontSize: 14 }}>Sin acceso a esta sección.</p>
-  }
+const DESCRIPCIONES: Record<string, string> = {
+  tablero: 'Lotes en proceso por etapa',
+  tanques: 'Ocupación de fermentadores y maduradores',
+  historico: 'Lotes cerrados, merma y export',
+}
 
-  const { data: lotes } = await supabase
-    .from('lotes')
-    .select('*, productos(nombre)')
-    .order('created_at', { ascending: false })
+export default async function ProduccionPage({ searchParams }: { searchParams: SearchParams }) {
+  const [{ role, acento }, params] = await Promise.all([contextoAdmin(), searchParams])
+  const tabs = tabsParaRol('produccion', role)
+  const activa = resolverTab(tabs, params.tab)
+
+  if (!activa) return <p style={{ color: '#6b7280', fontSize: 14 }}>Sin acceso a esta sección.</p>
 
   return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ color: '#1a1a1a', fontSize: 24, fontWeight: 700 }}>Producción</h1>
-        <a href="/admin/produccion/nuevo" style={{
-          background: '#E8531D', color: '#1a1a1a', padding: '10px 20px',
-          borderRadius: 8, textDecoration: 'none', fontSize: 14, fontWeight: 600
-        }}>+ Nuevo lote</a>
-      </div>
-      {!lotes?.length ? (
-        <div style={{ color: '#6b7280', textAlign: 'center', padding: 60 }}>No hay lotes registrados</div>
-      ) : (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['Lote', 'Producto', 'Volumen', 'Latas', 'Barriles', 'Fecha'].map(h => (
-                <th key={h} style={{ color: '#6b7280', fontSize: 13, textAlign: 'left', padding: '8px 12px', textTransform: 'uppercase' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {lotes.map(l => (
-              <tr key={l.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.nombre_lote}</td>
-                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{(l.productos as any)?.nombre || '—'}</td>
-                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.volumen_litros}L</td>
-                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.latas_producidas}</td>
-                <td style={{ color: '#374151', padding: '12px', fontSize: 14 }}>{l.barriles_producidos}</td>
-                <td style={{ color: '#6b7280', padding: '12px', fontSize: 13 }}>{l.fecha_produccion}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </div>
+    <>
+      <Tabs
+        titulo="Producción"
+        descripcion={DESCRIPCIONES[activa]}
+        tabs={tabs}
+        activa={activa}
+        basePath="/admin/produccion"
+        // El acento TEMATICO, que sale de app_config.branding.color_primary.
+        // Es el mismo que usan Pedidos, Clientes y las demas secciones; el
+        // naranja fijo de `botonPrimario` es aparte, a proposito.
+        acento={acento}
+        acciones={
+          activa === 'tablero' && canManageInventory(role) ? (
+            <Link
+              href="/admin/produccion?tab=tablero&nuevo=1"
+              style={{
+                ...botonPrimario(),
+                textDecoration: 'none',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 7,
+              }}
+            >
+              <Icono d={ICONOS.mas} size={15} strokeWidth={2.2} />
+              Nuevo lote
+            </Link>
+          ) : undefined
+        }
+      />
+      {activa === 'tablero' && <TableroSection role={role} />}
+      {activa === 'tanques' && <TanquesSection />}
+      {activa === 'historico' && <HistoricoSection />}
+    </>
   )
 }
