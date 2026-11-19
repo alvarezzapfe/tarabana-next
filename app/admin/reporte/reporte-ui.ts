@@ -51,7 +51,11 @@ export const varTexto = (v: { pct: number; dir: 'up' | 'down' } | null) =>
 export const CSS_REPORTE = `
   /* ── Pantalla: la hoja sobre el escritorio ─────────────── */
 
-  .rep-fondo { background: #f3f4f6; margin: -36px -44px; padding: 28px 0 48px; }
+  /* El margen negativo cancela el padding de <main> para sangrar el "escritorio"
+     gris a todo lo ancho. Sale de las variables del layout y no de numeros a
+     mano: antes decia -36px -44px, asi que cambiar el padding del admin
+     descuadraba este fondo sin que nada lo avisara. */
+  .rep-fondo { background: #f3f4f6; margin: calc(-1 * var(--admin-pad-y)) calc(-1 * var(--admin-pad-x)); padding: 28px 0 48px; }
 
   .rep-hoja {
     width: ${ANCHO_HOJA}px;
@@ -203,7 +207,8 @@ export const CSS_REPORTE = `
   }
 
   @media (max-width: 760px) {
-    .rep-fondo { margin: -36px -16px; padding: 16px 0 32px }
+    /* El margen ya sale de --admin-pad-*, que el layout cambia en celular. */
+    .rep-fondo { padding: 16px 0 32px }
     .rep-hoja { padding: 20px 18px 28px }
     .rep-kpis, .rep-kpis-3, .rep-dos { grid-template-columns: repeat(2, 1fr) }
   }

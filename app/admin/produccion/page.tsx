@@ -6,7 +6,9 @@ import Tabs, { resolverTab } from '../Tabs'
 import Icono from './Icono'
 import { ICONOS, botonPrimario } from './produccion-ui'
 import TableroSection from './TableroSection'
+import CalendarioSection from './CalendarioSection'
 import TanquesSection from './TanquesSection'
+import RecetasSection from './RecetasSection'
 import HistoricoSection from './HistoricoSection'
 
 /**
@@ -30,7 +32,9 @@ import HistoricoSection from './HistoricoSection'
 
 const DESCRIPCIONES: Record<string, string> = {
   tablero: 'Lotes en proceso por etapa',
+  calendario: 'Ocupación de tanques, 30 días atrás y 45 adelante',
   tanques: 'Ocupación de fermentadores y maduradores',
+  recetas: 'Objetivos de proceso por producto',
   historico: 'Lotes cerrados, merma y export',
 }
 
@@ -72,7 +76,9 @@ export default async function ProduccionPage({ searchParams }: { searchParams: S
         }
       />
       {activa === 'tablero' && <TableroSection role={role} />}
+      {activa === 'calendario' && <CalendarioSection role={role} />}
       {activa === 'tanques' && <TanquesSection />}
+      {activa === 'recetas' && <RecetasSection role={role} />}
       {activa === 'historico' && <HistoricoSection />}
     </>
   )

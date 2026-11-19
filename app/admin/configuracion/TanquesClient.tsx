@@ -7,7 +7,7 @@ import Icono from '../produccion/Icono'
 import {
   ICONOS, TANQUE_TIPO_LABEL, botonNeutro, botonPrimario, inputBase, labelBase,
   type TanqueFila, type TanqueTipo,
-} from '../produccion/produccion-ui'
+  soloDecimal,} from '../produccion/produccion-ui'
 
 /**
  * CRUD de tanques.
@@ -133,7 +133,7 @@ export default function TanquesClient({ tanques, usos }: Props) {
           </label>
           <label>
             <span style={labelBase}>Capacidad (L)</span>
-            <input style={inputBase} type="number" step="0.01" min="0.01" value={form.capacidad_litros} onChange={e => set('capacidad_litros', e.target.value)} placeholder="1000" />
+            <input style={inputBase} type="text" inputMode="decimal" min="0.01" value={form.capacidad_litros} onChange={e => set('capacidad_litros', soloDecimal(e.target.value))} placeholder="1000" />
           </label>
         </div>
 

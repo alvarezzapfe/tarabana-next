@@ -14,7 +14,7 @@ import { ACENTO, BORDE, GRIS, GRIS_SUAVE, PISTA, ROJO, TINTA, TINTA_MEDIA } from
 import {
   AMBAR, ICONOS, botonNeutro, botonPrimario, etiquetaEtapa, inputBase, labelBase,
   type EnvasadoFila, type EventoFila, type LecturaFila, type LoteFila,
-} from './produccion-ui'
+  soloDecimal, soloEntero,} from './produccion-ui'
 
 /**
  * Ficha del lote: panel lateral con todo lo del lote y sus capturas.
@@ -294,16 +294,16 @@ function General({
         <div className="fl-grid">
           <label>
             <span style={labelBase}>Litros reales</span>
-            <input style={inputBase} type="number" step="0.01" min="0" value={form.litros_reales} onChange={e => set('litros_reales', e.target.value)} />
+            <input style={inputBase} type="text" inputMode="decimal" min="0" value={form.litros_reales} onChange={e => set('litros_reales', soloDecimal(e.target.value))} />
           </label>
           <div />
           <label>
             <span style={labelBase}>OG</span>
-            <input style={inputBase} type="number" step="0.001" value={form.og} onChange={e => set('og', e.target.value)} placeholder="1.048" />
+            <input style={inputBase} type="text" inputMode="decimal" value={form.og} onChange={e => set('og', soloDecimal(e.target.value))} placeholder="1.048" />
           </label>
           <label>
             <span style={labelBase}>FG</span>
-            <input style={inputBase} type="number" step="0.001" value={form.fg} onChange={e => set('fg', e.target.value)} placeholder="1.010" />
+            <input style={inputBase} type="text" inputMode="decimal" value={form.fg} onChange={e => set('fg', soloDecimal(e.target.value))} placeholder="1.010" />
           </label>
           <label>
             <span style={labelBase}>Cepa</span>
@@ -315,7 +315,7 @@ function General({
           </label>
           <label>
             <span style={labelBase}>Generación</span>
-            <input style={inputBase} type="number" step="1" min="0" value={form.levadura_generacion} onChange={e => set('levadura_generacion', e.target.value)} />
+            <input style={inputBase} type="text" inputMode="numeric" min="0" value={form.levadura_generacion} onChange={e => set('levadura_generacion', soloEntero(e.target.value))} />
           </label>
         </div>
         <label>
@@ -519,9 +519,9 @@ function Lecturas({
             </div>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 10 }}>
-            <input style={inputBase} type="number" step="0.001" placeholder="Gravedad" value={form.gravedad} onChange={e => set('gravedad', e.target.value)} />
-            <input style={inputBase} type="number" step="0.1" placeholder="Temp. °C" value={form.temperatura_c} onChange={e => set('temperatura_c', e.target.value)} />
-            <input style={inputBase} type="number" step="0.01" placeholder="pH" value={form.ph} onChange={e => set('ph', e.target.value)} />
+            <input style={inputBase} type="text" inputMode="decimal" placeholder="Gravedad" value={form.gravedad} onChange={e => set('gravedad', soloDecimal(e.target.value))} />
+            <input style={inputBase} type="text" inputMode="decimal" placeholder="Temp. °C" value={form.temperatura_c} onChange={e => set('temperatura_c', soloDecimal(e.target.value))} />
+            <input style={inputBase} type="text" inputMode="decimal" placeholder="pH" value={form.ph} onChange={e => set('ph', soloDecimal(e.target.value))} />
           </div>
           <input style={{ ...inputBase, marginBottom: 10 }} placeholder="Nota (opcional)" value={form.nota} onChange={e => set('nota', e.target.value)} />
           <button
@@ -651,7 +651,7 @@ function Envasado({
                 <option key={p.columna} value={p.columna}>{p.label}</option>
               ))}
             </select>
-            <input style={inputBase} type="number" step="1" min="1" placeholder="Cantidad" value={cantidad} onChange={e => setCantidad(e.target.value)} />
+            <input style={inputBase} type="text" inputMode="numeric" min="1" placeholder="Cantidad" value={cantidad} onChange={e => setCantidad(soloEntero(e.target.value))} />
           </div>
           <p style={{ margin: '0 0 10px', color: GRIS, fontSize: 12 }}>
             {previo === null ? 'Equivale a —' : `Equivale a ${fmtLitros(previo)}`}

@@ -222,176 +222,181 @@ export default function ComisionesClient(props: Props) {
 
       {/* ── Tabla por vendedor ────────────────────────────── */}
       <div style={{ ...card, padding: '20px 16px', marginBottom: 20 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr>
-              <th style={th}>Vendedor</th>
-              <th style={{ ...th, textAlign: 'right' }}>Cobrado</th>
-              <th style={{ ...th, textAlign: 'right' }}>Base neta</th>
-              <th style={{ ...th, textAlign: 'right' }}>Comisión</th>
-              <th style={{ ...th, textAlign: 'right' }}>Marginal</th>
-              <th style={th}>Estado</th>
-              <th style={th} />
-            </tr>
-          </thead>
-          <tbody>
-            {filas.length === 0 && (
-              <tr><td colSpan={7} style={{ ...td, color: '#9ca3af', textAlign: 'center', padding: 36 }}>No hay fichas de vendedor.</td></tr>
-            )}
-            {filas.map(f => {
-              const { vendedor, calculo, corte } = f
-              // Un mes cerrado manda lo que dice su snapshot.
-              const vista = corte ?? calculo
-              const difiere = corte && Math.abs(corte.comision - calculo.comision) >= 0.01
-              const desglose = corte ? corte.por_tramo : calculo.porTramo
-              const renglones = corte ? corte.detalle : calculo.detalle
-              const expandida = abierta === vendedor.id
-
-              return (
-                <Fragment key={vendedor.id}>
-                  <tr>
-                    <td style={td}>
-                      <span style={{ fontWeight: 600, color: '#1a1a1a' }}>{vendedor.nombre}</span>
-                      {!vendedor.activo && <span style={{ color: '#9ca3af', fontSize: 11.5 }}> · inactiva</span>}
-                      <span style={{ display: 'block', color: '#9ca3af', fontSize: 11 }}>
-                        {calculo.sinEsquema
-                          ? 'sin escalera'
-                          : calculo.global ? 'esquema global' : 'escalera propia'}
-                        {calculo.topado && ' · topado'}
-                      </span>
-                    </td>
-                    <td style={num}>{moneda(calculo.cobrado)}</td>
-                    <td style={num}>{moneda(vista.base)}</td>
-                    <td style={{ ...num, color: acento, fontWeight: 700 }}>
-                      {moneda(vista.comision)}
-                      {difiere && (
-                        <span
-                          title={`El cálculo en vivo da ${moneda(calculo.comision)}: hubo movimientos de pago después del cierre.`}
-                          style={{ display: 'block', color: '#b45309', fontSize: 11, fontWeight: 400 }}
-                        >
-                          en vivo: {moneda(calculo.comision)}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ ...num, color: '#6b7280' }}>
-                      {calculo.tasaMarginal === null ? '—' : pct(calculo.tasaMarginal)}
-                    </td>
-                    <td style={td}>
-                      <span style={{
-                        padding: '3px 10px', borderRadius: 99, fontSize: 11.5, fontWeight: 600,
-                        background: !corte ? '#f3f4f6' : corte.estado === 'pagada' ? '#d1fae5' : '#fef3c7',
-                        color: !corte ? '#6b7280' : corte.estado === 'pagada' ? '#047857' : '#92400e',
-                      }}>
-                        {!corte ? 'Abierto' : corte.estado === 'pagada' ? 'Pagada' : 'Por pagar'}
-                      </span>
-                      {corte?.pagado_at && (
-                        <span style={{ display: 'block', color: '#9ca3af', fontSize: 11, marginTop: 2 }}>
-                          {new Date(corte.pagado_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
-                      <button
-                        onClick={() => setAbierta(expandida ? null : vendedor.id)}
-                        style={{ ...btn('#fff', '#6b7280', '#e5e7eb'), marginRight: 6 }}
-                      >
-                        {expandida ? 'Ocultar' : 'Desglose'}
-                      </button>
-                      {puedeEditar && !corte && (
-                        <button
-                          onClick={() => cerrarMes([vendedor.id])}
-                          disabled={!!ocupado || calculo.sinEsquema}
-                          title={calculo.sinEsquema ? 'Captura su escalera antes de cerrar el mes' : undefined}
-                          style={btn(calculo.sinEsquema ? '#f3f4f6' : acento, calculo.sinEsquema ? '#9ca3af' : '#fff')}
-                        >
-                          Cerrar mes
-                        </button>
-                      )}
-                      {puedeEditar && corte?.estado === 'pendiente' && (
-                        <>
-                          <button onClick={() => moverCorte(corte, 'pagar')} disabled={!!ocupado} style={{ ...btn('#047857', '#fff'), marginRight: 6 }}>
-                            Marcar pagada
-                          </button>
-                          <button onClick={() => reabrir(corte)} disabled={!!ocupado} style={btn('#fff', '#6b7280', '#e5e7eb')}>
-                            Reabrir
-                          </button>
-                        </>
-                      )}
-                      {puedeEditar && corte?.estado === 'pagada' && (
-                        <button onClick={() => moverCorte(corte, 'despagar')} disabled={!!ocupado} style={btn('#fff', '#b91c1c', '#fecaca')}>
-                          Desmarcar pago
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-
-                  {expandida && (
+        {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr>
+                <th style={th}>Vendedor</th>
+                <th style={{ ...th, textAlign: 'right' }}>Cobrado</th>
+                <th style={{ ...th, textAlign: 'right' }}>Base neta</th>
+                <th style={{ ...th, textAlign: 'right' }}>Comisión</th>
+                <th style={{ ...th, textAlign: 'right' }}>Marginal</th>
+                <th style={th}>Estado</th>
+                <th style={th} />
+              </tr>
+            </thead>
+            <tbody>
+              {filas.length === 0 && (
+                <tr><td colSpan={7} style={{ ...td, color: '#9ca3af', textAlign: 'center', padding: 36 }}>No hay fichas de vendedor.</td></tr>
+              )}
+              {filas.map(f => {
+                const { vendedor, calculo, corte } = f
+                // Un mes cerrado manda lo que dice su snapshot.
+                const vista = corte ?? calculo
+                const difiere = corte && Math.abs(corte.comision - calculo.comision) >= 0.01
+                const desglose = corte ? corte.por_tramo : calculo.porTramo
+                const renglones = corte ? corte.detalle : calculo.detalle
+                const expandida = abierta === vendedor.id
+  
+                return (
+                  <Fragment key={vendedor.id}>
                     <tr>
-                      <td colSpan={7} style={{ padding: '4px 12px 20px', background: '#fafafa', borderTop: '1px solid #f3f4f6' }}>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, paddingTop: 14 }}>
-                          <div>
-                            <p style={{ margin: '0 0 10px', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9ca3af', fontWeight: 600 }}>
-                              Por tramo {corte && '· como se cerró'}
-                            </p>
-                            {desglose.length === 0 ? (
-                              <p style={{ color: '#9ca3af', fontSize: 12.5, margin: 0 }}>Sin escalera configurada.</p>
-                            ) : (
-                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <tbody>
-                                  {desglose.map((t, i) => (
-                                    <tr key={i} style={{ opacity: t.porcion > 0 ? 1 : 0.45 }}>
-                                      <td style={{ fontSize: 12.5, color: '#6b7280', padding: '3px 0' }}>
-                                        {moneda0(t.desde)} – {t.hasta === null ? '∞' : moneda0(t.hasta)}
-                                      </td>
-                                      <td style={{ fontSize: 12.5, color: '#9ca3af', padding: '3px 8px', textAlign: 'right' }}>{pct(t.porcentaje)}</td>
-                                      <td style={{ fontSize: 12.5, color: '#6b7280', padding: '3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                        {moneda0(t.porcion)}
-                                      </td>
-                                      <td style={{ fontSize: 12.5, color: '#374151', padding: '3px 0', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
-                                        {moneda(t.comision)}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            )}
-                          </div>
-
-                          <div>
-                            <p style={{ margin: '0 0 10px', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9ca3af', fontWeight: 600 }}>
-                              Pedidos que la componen
-                            </p>
-                            {renglones.length === 0 ? (
-                              <p style={{ color: '#9ca3af', fontSize: 12.5, margin: 0 }}>No cobró nada este mes.</p>
-                            ) : (
-                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <tbody>
-                                  {renglones.map(r => (
-                                    <tr key={r.pedido_id}>
-                                      <td className="font-mono" style={{ fontSize: 12, color: '#6b7280', padding: '3px 0' }}>
-                                        #{r.pedido_id.slice(-6).toUpperCase()}
-                                      </td>
-                                      <td style={{ fontSize: 12.5, color: '#9ca3af', padding: '3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                        cobrado {moneda(r.cobrado)}
-                                      </td>
-                                      <td style={{ fontSize: 12.5, color: '#374151', padding: '3px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                                        base {moneda(r.base)}
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            )}
-                          </div>
-                        </div>
+                      <td style={td}>
+                        <span style={{ fontWeight: 600, color: '#1a1a1a' }}>{vendedor.nombre}</span>
+                        {!vendedor.activo && <span style={{ color: '#9ca3af', fontSize: 11.5 }}> · inactiva</span>}
+                        <span style={{ display: 'block', color: '#9ca3af', fontSize: 11 }}>
+                          {calculo.sinEsquema
+                            ? 'sin escalera'
+                            : calculo.global ? 'esquema global' : 'escalera propia'}
+                          {calculo.topado && ' · topado'}
+                        </span>
+                      </td>
+                      <td style={num}>{moneda(calculo.cobrado)}</td>
+                      <td style={num}>{moneda(vista.base)}</td>
+                      <td style={{ ...num, color: acento, fontWeight: 700 }}>
+                        {moneda(vista.comision)}
+                        {difiere && (
+                          <span
+                            title={`El cálculo en vivo da ${moneda(calculo.comision)}: hubo movimientos de pago después del cierre.`}
+                            style={{ display: 'block', color: '#b45309', fontSize: 11, fontWeight: 400 }}
+                          >
+                            en vivo: {moneda(calculo.comision)}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ ...num, color: '#6b7280' }}>
+                        {calculo.tasaMarginal === null ? '—' : pct(calculo.tasaMarginal)}
+                      </td>
+                      <td style={td}>
+                        <span style={{
+                          padding: '3px 10px', borderRadius: 99, fontSize: 11.5, fontWeight: 600,
+                          background: !corte ? '#f3f4f6' : corte.estado === 'pagada' ? '#d1fae5' : '#fef3c7',
+                          color: !corte ? '#6b7280' : corte.estado === 'pagada' ? '#047857' : '#92400e',
+                        }}>
+                          {!corte ? 'Abierto' : corte.estado === 'pagada' ? 'Pagada' : 'Por pagar'}
+                        </span>
+                        {corte?.pagado_at && (
+                          <span style={{ display: 'block', color: '#9ca3af', fontSize: 11, marginTop: 2 }}>
+                            {new Date(corte.pagado_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button
+                          onClick={() => setAbierta(expandida ? null : vendedor.id)}
+                          style={{ ...btn('#fff', '#6b7280', '#e5e7eb'), marginRight: 6 }}
+                        >
+                          {expandida ? 'Ocultar' : 'Desglose'}
+                        </button>
+                        {puedeEditar && !corte && (
+                          <button
+                            onClick={() => cerrarMes([vendedor.id])}
+                            disabled={!!ocupado || calculo.sinEsquema}
+                            title={calculo.sinEsquema ? 'Captura su escalera antes de cerrar el mes' : undefined}
+                            style={btn(calculo.sinEsquema ? '#f3f4f6' : acento, calculo.sinEsquema ? '#9ca3af' : '#fff')}
+                          >
+                            Cerrar mes
+                          </button>
+                        )}
+                        {puedeEditar && corte?.estado === 'pendiente' && (
+                          <>
+                            <button onClick={() => moverCorte(corte, 'pagar')} disabled={!!ocupado} style={{ ...btn('#047857', '#fff'), marginRight: 6 }}>
+                              Marcar pagada
+                            </button>
+                            <button onClick={() => reabrir(corte)} disabled={!!ocupado} style={btn('#fff', '#6b7280', '#e5e7eb')}>
+                              Reabrir
+                            </button>
+                          </>
+                        )}
+                        {puedeEditar && corte?.estado === 'pagada' && (
+                          <button onClick={() => moverCorte(corte, 'despagar')} disabled={!!ocupado} style={btn('#fff', '#b91c1c', '#fecaca')}>
+                            Desmarcar pago
+                          </button>
+                        )}
                       </td>
                     </tr>
-                  )}
-                </Fragment>
-              )
-            })}
-          </tbody>
-        </table>
+  
+                    {expandida && (
+                      <tr>
+                        <td colSpan={7} style={{ padding: '4px 12px 20px', background: '#fafafa', borderTop: '1px solid #f3f4f6' }}>
+                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24, paddingTop: 14 }}>
+                            <div>
+                              <p style={{ margin: '0 0 10px', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9ca3af', fontWeight: 600 }}>
+                                Por tramo {corte && '· como se cerró'}
+                              </p>
+                              {desglose.length === 0 ? (
+                                <p style={{ color: '#9ca3af', fontSize: 12.5, margin: 0 }}>Sin escalera configurada.</p>
+                              ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                  <tbody>
+                                    {desglose.map((t, i) => (
+                                      <tr key={i} style={{ opacity: t.porcion > 0 ? 1 : 0.45 }}>
+                                        <td style={{ fontSize: 12.5, color: '#6b7280', padding: '3px 0' }}>
+                                          {moneda0(t.desde)} – {t.hasta === null ? '∞' : moneda0(t.hasta)}
+                                        </td>
+                                        <td style={{ fontSize: 12.5, color: '#9ca3af', padding: '3px 8px', textAlign: 'right' }}>{pct(t.porcentaje)}</td>
+                                        <td style={{ fontSize: 12.5, color: '#6b7280', padding: '3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                          {moneda0(t.porcion)}
+                                        </td>
+                                        <td style={{ fontSize: 12.5, color: '#374151', padding: '3px 0', textAlign: 'right', fontWeight: 600, fontVariantNumeric: 'tabular-nums' }}>
+                                          {moneda(t.comision)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+  
+                            <div>
+                              <p style={{ margin: '0 0 10px', fontSize: 11.5, textTransform: 'uppercase', letterSpacing: '0.07em', color: '#9ca3af', fontWeight: 600 }}>
+                                Pedidos que la componen
+                              </p>
+                              {renglones.length === 0 ? (
+                                <p style={{ color: '#9ca3af', fontSize: 12.5, margin: 0 }}>No cobró nada este mes.</p>
+                              ) : (
+                                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                  <tbody>
+                                    {renglones.map(r => (
+                                      <tr key={r.pedido_id}>
+                                        <td className="font-mono" style={{ fontSize: 12, color: '#6b7280', padding: '3px 0' }}>
+                                          #{r.pedido_id.slice(-6).toUpperCase()}
+                                        </td>
+                                        <td style={{ fontSize: 12.5, color: '#9ca3af', padding: '3px 8px', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                          cobrado {moneda(r.cobrado)}
+                                        </td>
+                                        <td style={{ fontSize: 12.5, color: '#374151', padding: '3px 0', textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                                          base {moneda(r.base)}
+                                        </td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ── Escaleras ─────────────────────────────────────── */}

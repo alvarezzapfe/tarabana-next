@@ -120,70 +120,75 @@ export default function TramosEditor({ inicial, etiqueta, acento, guardando, onG
 
   return (
     <div>
-      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-        <thead>
-          <tr>
-            <th style={{ ...th, width: '26%' }}>Desde</th>
-            <th style={{ ...th, width: '26%' }}>Hasta</th>
-            <th style={{ ...th, width: '20%' }}>%</th>
-            <th style={{ ...th, width: '22%' }}>Paga en el tramo</th>
-            <th style={{ ...th, width: 40 }} />
-          </tr>
-        </thead>
-        <tbody>
-          {renglones.map((r, i) => {
-            const t = tramos[i]
-            const esUltimo = i === renglones.length - 1
-            const ancho = t.hasta === null ? null : t.hasta - t.desde
-            return (
-              <tr key={i}>
-                {/* El `desde` es derivado: lo pinta, no lo captura. */}
-                <td style={{ padding: '0 10px 8px' }}>
-                  <div style={celdaFija}>{moneda0(t.desde)}</div>
-                </td>
-                <td style={{ padding: '0 10px 8px' }}>
-                  <input
-                    type="number" min="0" step="1000" inputMode="numeric"
-                    value={r.hasta}
-                    disabled={!puedeEditar}
-                    placeholder={esUltimo ? 'sin límite' : 'requerido'}
-                    onChange={e => set(i, 'hasta', e.target.value)}
-                    style={input}
-                  />
-                </td>
-                <td style={{ padding: '0 10px 8px' }}>
-                  <input
-                    type="number" min="0" max="100" step="0.1" inputMode="decimal"
-                    value={r.porcentaje}
-                    disabled={!puedeEditar}
-                    placeholder="0"
-                    onChange={e => set(i, 'porcentaje', e.target.value)}
-                    style={input}
-                  />
-                </td>
-                <td style={{ padding: '0 10px 8px', color: '#6b7280', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
-                  {ancho !== null && ancho > 0 && Number.isFinite(t.porcentaje)
-                    ? moneda0((ancho * t.porcentaje) / 100)
-                    : ancho === null
-                      ? 'de ahí en adelante'
-                      : '—'}
-                </td>
-                <td style={{ padding: '0 0 8px' }}>
-                  {puedeEditar && (
-                    <button
-                      onClick={() => quitar(i)}
-                      title="Quitar tramo"
-                      style={{ padding: '6px 9px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, color: '#9ca3af', fontSize: 13, cursor: 'pointer', lineHeight: 1 }}
-                    >
-                      ×
-                    </button>
-                  )}
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th style={{ ...th, width: '26%' }}>Desde</th>
+              <th style={{ ...th, width: '26%' }}>Hasta</th>
+              <th style={{ ...th, width: '20%' }}>%</th>
+              <th style={{ ...th, width: '22%' }}>Paga en el tramo</th>
+              <th style={{ ...th, width: 40 }} />
+            </tr>
+          </thead>
+          <tbody>
+            {renglones.map((r, i) => {
+              const t = tramos[i]
+              const esUltimo = i === renglones.length - 1
+              const ancho = t.hasta === null ? null : t.hasta - t.desde
+              return (
+                <tr key={i}>
+                  {/* El `desde` es derivado: lo pinta, no lo captura. */}
+                  <td style={{ padding: '0 10px 8px' }}>
+                    <div style={celdaFija}>{moneda0(t.desde)}</div>
+                  </td>
+                  <td style={{ padding: '0 10px 8px' }}>
+                    <input
+                      type="number" min="0" step="1000" inputMode="numeric"
+                      value={r.hasta}
+                      disabled={!puedeEditar}
+                      placeholder={esUltimo ? 'sin límite' : 'requerido'}
+                      onChange={e => set(i, 'hasta', e.target.value)}
+                      style={input}
+                    />
+                  </td>
+                  <td style={{ padding: '0 10px 8px' }}>
+                    <input
+                      type="number" min="0" max="100" step="0.1" inputMode="decimal"
+                      value={r.porcentaje}
+                      disabled={!puedeEditar}
+                      placeholder="0"
+                      onChange={e => set(i, 'porcentaje', e.target.value)}
+                      style={input}
+                    />
+                  </td>
+                  <td style={{ padding: '0 10px 8px', color: '#6b7280', fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>
+                    {ancho !== null && ancho > 0 && Number.isFinite(t.porcentaje)
+                      ? moneda0((ancho * t.porcentaje) / 100)
+                      : ancho === null
+                        ? 'de ahí en adelante'
+                        : '—'}
+                  </td>
+                  <td style={{ padding: '0 0 8px' }}>
+                    {puedeEditar && (
+                      <button
+                        onClick={() => quitar(i)}
+                        title="Quitar tramo"
+                        style={{ padding: '6px 9px', background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6, color: '#9ca3af', fontSize: 13, cursor: 'pointer', lineHeight: 1 }}
+                      >
+                        ×
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
 
       {errores.length > 0 && (
         <ul style={{ margin: '6px 0 0', padding: '10px 14px 10px 30px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8 }}>

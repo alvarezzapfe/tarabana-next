@@ -636,3 +636,103 @@ se borra ni en suave (la ruta responde 409): ya movió inventario.
 —hasta ahora el código lo seteaba a mano— y cuelga solo de `lotes` y
 `tanques`. Está porque `lotes` se escribe desde varias rutas y desde dos
 funciones SQL, y que una se olvide deja el `updated_at` mintiendo.
+
+## Producción F2 (migración 20261119000000)
+
+### El bug de zona horaria que la F1 reintrodujo
+
+`20261118000000_produccion.sql` usaba `current_date` en tres lugares, cuando
+`20261105000000_pedidos_fechas.sql:49` ya había creado `public.hoy_mx()` justo
+porque `current_date` se evalúa en UTC y después de las 18:00 CDMX ya está en
+el día siguiente. Esa migración incluso dejó un guard que aborta si
+`pedidos_saldo` reincide (`:330-343`), y la F1 lo repitió en otra tabla.
+
+Lo que hacía mal, en concreto:
+
+| Dónde | Efecto |
+|---|---|
+| `avanzar_lote`, `fecha_envasado = current_date` | Envasar a las 19:00 de un martes estampaba el miércoles |
+| `lotes_vista.dias_en_etapa` | Un día de más, seis horas cada noche — y alimenta el "parado" del tablero y las alertas |
+| `lote_asigna_folio`, año del folio | Un lote creado la noche del 31 de diciembre se foliaba con el año siguiente |
+
+**Había un segundo lado del mismo error, más difícil de ver:**
+`etapa_desde::date` castea en la zona de la **sesión** (UTC en Supabase), así
+que restarle `hoy_mx()` mezclaba dos calendarios. Por eso la F2 agrega
+`public.fecha_mx(timestamptz) -> date`, hermana de `hoy_mx()`, y el guard del
+final vigila las dos cosas: que ninguna vista del módulo use `current_date` y
+que no quede un `::date` crudo sobre un timestamptz.
+
+### `recetas`: una por producto, y un null NO es un cero
+
+`unique(producto_id)`. Días objetivo en columnas explícitas por etapa, no en
+jsonb, porque la vista los suma y los compara.
+
+**La distinción que gobierna todo lo demás:** `dias_maduracion = 0` significa
+"no madura" y deja correr la proyección; `dias_maduracion = null` significa
+"no se sabe" y la apaga. `receta_dias_etapa()` y `receta_dias_restantes()`
+devuelven null si falta cualquier etapa, y `dias_objetivo_total` también —
+**un plan a medias no se proyecta a medias**, porque una fecha calculada con
+tres de cuatro etapas se ve igual de legítima que una buena.
+
+### La proyección se ancla en el reloj del lote, no en la cocción
+
+`fecha_fin_estimada` = `etapa_desde + dias_restantes(etapa actual)`, con
+`planeado` como excepción (ahí se ancla en `fecha_coccion`, porque el lote no
+ha empezado) y un `greatest(hoy_mx(), ...)` encima.
+
+La versión anclada en `fecha_coccion + plan completo` tiene un defecto que se
+ve en cuanto un lote se atrasa: con un plan de 39 días y 50 días desde la
+cocción, proyecta el fin **once días en el pasado** — una barra que termina
+antes de hoy con el tanque visiblemente lleno. El `greatest` no esconde el
+atraso: para eso está la alerta `etapa_vencida`.
+
+### Las alertas viven en la vista, el copy en TS
+
+`lotes_vista.alerta_nivel` (`ninguna` | `ambar` | `rojo`) y
+`alerta_motivos text[]`. Umbrales como constantes de la vista: 48 h sin
+lectura (solo en fermentación), FG fuera de ±0.003, merma > 10%, y días en
+etapa por encima del objetivo (ámbar) o del doble (rojo).
+
+Están ahí y no en TS por una razón concreta: así el contador del sidebar es
+un `count(*)` de una query. Con las reglas en TS, `app/admin/layout.tsx`
+tendría que cargar todos los lotes **en cada página del panel** para contar.
+Lo que sí vive en TS es el texto de cada motivo (`MOTIVO_ALERTA` en
+`src/lib/produccion.ts`): un copy para personas no tiene por qué viajar desde
+una vista, y un motivo desconocido se muestra tal cual en vez de desaparecer.
+
+Las reglas que dependen de la receta no disparan sin ella, y eso **se dice**:
+`tiene_receta` es una columna y la tarjeta pinta "Sin receta".
+
+### `lote_tanque_asignaciones`: por qué el pasado se guarda
+
+`lotes.tanque_id` es una columna mutable sin historia: la ruta PATCH la cambia
+sin registrar nada y `lote_eventos` solo guarda cambios de **etapa**. Con eso,
+un calendario dibujado desde `fecha_coccion` afirma que el lote estuvo en su
+tanque **actual** desde el día de la cocción — y mover un lote de fermentador
+a madurador es exactamente lo normal.
+
+La mantiene el trigger `lote_asignacion_trg` y **no la ruta**, a propósito:
+`lotes` lo escriben la ruta PATCH, `avanzar_lote()` y cualquier cosa futura.
+Si la sincronización viviera en la ruta, el primer camino que se olvide de
+llamarla deja la historia incompleta y el calendario vuelve a mentir sin que
+nadie sepa por qué. El trigger cubre: alta, cambio de tanque, liberado,
+descartado y soft-delete.
+
+`hasta is null` = sigue ahí, con un unique parcial que impide dos asignaciones
+abiertas del mismo lote. `tanque_id` es **`on delete restrict`** y no cascade:
+borrar un tanque no puede borrar la historia de lo que se hizo en él. Por eso
+`app/api/admin/produccion/tanques/[id]/route.ts` cuenta **las dos cosas** —
+lotes que lo apuntan hoy y asignaciones históricas—; un lote que se movió a
+otro tanque deja de contar por `lotes.tanque_id` pero su historia sigue ahí, y
+sin mirarla el guard pasaría y el DELETE reventaría con un error crudo de FK.
+
+### `inventario_en_camino` reporta sus propios huecos
+
+Litros proyectados por producto a 14 días. **Por producto y en litros**, no
+por presentación: hasta que un lote se envasa no se sabe en qué presentación
+sale, y repartirlo adivinando inventaría cajas.
+
+`lotes_sin_fecha` cuenta los que no se pueden proyectar y **no están sumados
+en `litros`**. La columna de Inventario lo muestra como un `+?` ámbar, porque
+si no se reportara, "no viene nada" y "no se sabe qué viene" se verían igual.
+Mismo criterio que `sinClasificar` en `src/lib/stock-disponible.ts`.

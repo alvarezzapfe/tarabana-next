@@ -313,3 +313,59 @@ Las **lecturas de la bitácora no escriben `audit_log`** a propósito: una
 medición de gravedad es un dato de proceso, no un cambio de estado del
 sistema, y su rastro es la propia fila con su `created_by`. Una entrada por
 medición diaria ahogaría la bitácora de acciones.
+
+## Producción F2 (migración 20261119000000)
+
+### Policies nuevas
+
+| Tabla | SELECT | INSERT / UPDATE | DELETE |
+|---|---|---|---|
+| `recetas` | `is_staff_sin_ventas()` | `can_manage_inventory()` | ninguna |
+| `lote_tanque_asignaciones` | `is_staff_sin_ventas()` | **ninguna** | ninguna |
+
+`lote_tanque_asignaciones` es el tercer log append-only del módulo, junto con
+`lote_eventos` e `inventario_movimientos`: lo escribe el trigger
+`lote_asignacion_trg` (security definer), nunca el cliente. Una historia que
+el cliente puede insertar deja de ser evidencia de dónde estuvo cada lote.
+
+`recetas` sin policy de DELETE: una receta se edita, no se borra.
+
+### Vistas nuevas
+
+`inventario_en_camino` y `tanque_ocupacion`, las dos con
+`security_invoker = on` y encadenadas sobre `lotes_vista`, así que heredan sus
+policies. A ventas y al vendedor les devuelven 0 filas sin necesidad de un
+guard aparte — por eso las dos queries del contador del sidebar en
+`app/admin/layout.tsx` no llevan chequeo de rol.
+
+### El `returnTo` del QR no es un redirector abierto
+
+`proxy.ts` ahora guarda el destino cuando manda a `/portal` a alguien sin
+sesión, para que escanear el QR de un tanque no pierda a dónde iba.
+
+Sigue yendo a `/portal` y **no** a `/tierra-mojada`: la URL del login admin no
+se expone, que es la razón original de esa rama. El portal reenvía a
+`returnTo` después del login **solo si el perfil puede entrar al panel**; un
+comprador con un `returnTo` de `/admin` va a su catálogo.
+
+El valor pasa por `returnToValido()` en `src/lib/return-to.ts`, que acepta
+únicamente una ruta relativa que empiece con `/admin/`. Sin esa lista blanca,
+un link a `tarabana.mx/portal?returnTo=https://sitio-falso/login` se vería
+legítimo —el dominio es el nuestro— y terminaría en una página de captura de
+credenciales. Los casos rechazados y por qué están en las pruebas de
+`src/lib/return-to.test.ts`: absolutas, `//host` protocol-relative (el bypass
+clásico de un filtro que solo revisa que empiece con `/`), backslashes (varios
+navegadores los normalizan a `/`), y caracteres de control.
+
+**Hueco conocido:** si alguien ya tiene sesión pero sin AAL2 y escanea un QR,
+`proxy.ts` no lo intercepta, `app/admin/layout.tsx` lo manda al verificador
+sin destino y termina en `/admin`. Pasa una vez por dispositivo, hasta que la
+sesión sea AAL2. Cerrarlo pedía meterle headers al middleware, que es el que
+refresca las cookies de sesión, y no pareció un intercambio sensato por un
+caso que se resuelve con dos toques.
+
+### Entradas nuevas de `audit_log`
+
+| Acción | Entidad | Ruta |
+|---|---|---|
+| `receta.crear` / `receta.actualizar` | recetas | `/api/admin/produccion/recetas/[productoId]` (PUT) |

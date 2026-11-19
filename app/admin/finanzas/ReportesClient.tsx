@@ -258,20 +258,22 @@ export default function ReportesClient({ pedidos, saldos, clientes }: Props) {
       <div style={{ ...card, marginBottom: 16 }}>
         <p style={title}>Top clientes</p>
         {topClientes.length === 0 ? <p style={{ color: '#9ca3af', fontSize: 13 }}>Sin pedidos en este periodo</p> : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['Cliente','Pedidos','Cobrable','Cobrado','Saldo'].map(h => <th key={h} style={th}>{h}</th>)}
-            </tr></thead>
-            <tbody>{topClientes.map((c: any, i: number) => (
-              <tr key={i}>
-                <td style={td}><div style={{ color: '#1a1a1a' }}>{c.nombre}</div><div style={{ color: '#9ca3af', fontSize: 10 }}>{c.email}</div></td>
-                <td style={{ ...td, color: '#6b7280' }}>{c.pedidos}</td>
-                <td style={{ ...td, color: '#E8531D', fontWeight: 600 }}>{fmt(c.cobrable)}</td>
-                <td style={{ ...td, color: '#10b981' }}>{fmt(c.cobrado)}</td>
-                <td style={{ ...td, color: '#f59e0b' }}>{fmt(c.saldo)}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                {['Cliente','Pedidos','Cobrable','Cobrado','Saldo'].map(h => <th key={h} style={th}>{h}</th>)}
+              </tr></thead>
+              <tbody>{topClientes.map((c: any, i: number) => (
+                <tr key={i}>
+                  <td style={td}><div style={{ color: '#1a1a1a' }}>{c.nombre}</div><div style={{ color: '#9ca3af', fontSize: 10 }}>{c.email}</div></td>
+                  <td style={{ ...td, color: '#6b7280' }}>{c.pedidos}</td>
+                  <td style={{ ...td, color: '#E8531D', fontWeight: 600 }}>{fmt(c.cobrable)}</td>
+                  <td style={{ ...td, color: '#10b981' }}>{fmt(c.cobrado)}</td>
+                  <td style={{ ...td, color: '#f59e0b' }}>{fmt(c.saldo)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
         )}
       </div>
 
@@ -280,37 +282,41 @@ export default function ReportesClient({ pedidos, saldos, clientes }: Props) {
         <div style={card}>
           <p style={title}>Latas vendidas por estilo</p>
           {latasTable.length === 0 ? <p style={{ color: '#9ca3af', fontSize: 13 }}>Sin datos</p> : (
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                {['Estilo','Latas','Importe'].map(h => <th key={h} style={th}>{h}</th>)}
-              </tr></thead>
-              <tbody>{latasTable.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ ...td, color: '#1a1a1a' }}>{r.nombre}</td>
-                  <td style={{ ...td, color: '#6b7280' }}>{r.latas.toLocaleString('es-MX')}</td>
-                  <td style={{ ...td, color: '#f59e0b', fontWeight: 600 }}>{fmt(Math.round(r.importe))}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  {['Estilo','Latas','Importe'].map(h => <th key={h} style={th}>{h}</th>)}
+                </tr></thead>
+                <tbody>{latasTable.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ ...td, color: '#1a1a1a' }}>{r.nombre}</td>
+                    <td style={{ ...td, color: '#6b7280' }}>{r.latas.toLocaleString('es-MX')}</td>
+                    <td style={{ ...td, color: '#f59e0b', fontWeight: 600 }}>{fmt(Math.round(r.importe))}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
           )}
         </div>
 
         {barrilesTable.length > 0 && (
           <div style={card}>
             <p style={title}>Barriles vendidos</p>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-              <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-                {['Estilo','Tipo','Unidades','Importe'].map(h => <th key={h} style={th}>{h}</th>)}
-              </tr></thead>
-              <tbody>{barrilesTable.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ ...td, color: '#1a1a1a' }}>{r.nombre}</td>
-                  <td style={{ ...td, color: '#6b7280' }}>{r.tipo}</td>
-                  <td style={{ ...td, color: '#6b7280' }}>{r.unidades}</td>
-                  <td style={{ ...td, color: '#f59e0b', fontWeight: 600 }}>{fmt(Math.round(r.importe))}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  {['Estilo','Tipo','Unidades','Importe'].map(h => <th key={h} style={th}>{h}</th>)}
+                </tr></thead>
+                <tbody>{barrilesTable.map((r, i) => (
+                  <tr key={i}>
+                    <td style={{ ...td, color: '#1a1a1a' }}>{r.nombre}</td>
+                    <td style={{ ...td, color: '#6b7280' }}>{r.tipo}</td>
+                    <td style={{ ...td, color: '#6b7280' }}>{r.unidades}</td>
+                    <td style={{ ...td, color: '#f59e0b', fontWeight: 600 }}>{fmt(Math.round(r.importe))}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
@@ -319,19 +325,24 @@ export default function ReportesClient({ pedidos, saldos, clientes }: Props) {
       {clientesInactivos.length > 0 && (
         <div style={{ ...card, marginBottom: 16 }}>
           <p style={title}>Clientes inactivos (45+ días sin comprar)</p>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['Cliente','Ultimo pedido','Dias sin comprar','Total historico'].map(h => <th key={h} style={th}>{h}</th>)}
-            </tr></thead>
-            <tbody>{clientesInactivos.map((c, i) => (
-              <tr key={i}>
-                <td style={td}><div style={{ color: '#1a1a1a' }}>{c.nombre}</div><div style={{ color: '#9ca3af', fontSize: 10 }}>{c.email}</div></td>
-                <td style={{ ...td, color: '#6b7280' }}>{new Date(c.lastOrder).toLocaleDateString('es-MX')}</td>
-                <td style={{ ...td, color: '#ef4444', fontWeight: 600 }}>{c.dias}</td>
-                <td style={{ ...td, color: '#E8531D', fontWeight: 600 }}>{fmt(Math.round(c.cobrable))}</td>
-              </tr>
-            ))}</tbody>
-          </table>
+          {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead><tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                {['Cliente','Ultimo pedido','Dias sin comprar','Total historico'].map(h => <th key={h} style={th}>{h}</th>)}
+              </tr></thead>
+              <tbody>{clientesInactivos.map((c, i) => (
+                <tr key={i}>
+                  <td style={td}><div style={{ color: '#1a1a1a' }}>{c.nombre}</div><div style={{ color: '#9ca3af', fontSize: 10 }}>{c.email}</div></td>
+                  <td style={{ ...td, color: '#6b7280' }}>{new Date(c.lastOrder).toLocaleDateString('es-MX')}</td>
+                  <td style={{ ...td, color: '#ef4444', fontWeight: 600 }}>{c.dias}</td>
+                  <td style={{ ...td, color: '#E8531D', fontWeight: 600 }}>{fmt(Math.round(c.cobrable))}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

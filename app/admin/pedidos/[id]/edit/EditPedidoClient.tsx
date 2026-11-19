@@ -158,28 +158,33 @@ export default function EditPedidoClient({ pedido, vendedores, isSuperAdmin, pue
         />
       </div>
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10, overflow: 'hidden', marginBottom: 4 }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['Producto', 'Estilo', 'Cantidad', 'Precio unit.', 'Subtotal'].map((h, i) => (
-                <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 14px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pedido.pedido_items?.length > 0 ? pedido.pedido_items.map((item: any, i: number) => (
-              <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                <td style={{ padding: '10px 14px', color: '#1a1a1a', fontSize: 13 }}>{item.productos?.nombre || '—'}</td>
-                <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>{item.productos?.estilo || '—'}</td>
-                <td style={{ padding: '10px 14px', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>{item.cantidad}</td>
-                <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</td>
-                <td style={{ padding: '10px 14px', color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>${((item.cantidad || 0) * (item.precio_unitario || 0)).toLocaleString('es-MX')}</td>
+        {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                {['Producto', 'Estilo', 'Cantidad', 'Precio unit.', 'Subtotal'].map((h, i) => (
+                  <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '8px 14px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
+                ))}
               </tr>
-            )) : (
-              <tr><td colSpan={5} style={{ padding: '20px 14px', color: '#9ca3af', fontSize: 13 }}>Sin productos registrados</td></tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {pedido.pedido_items?.length > 0 ? pedido.pedido_items.map((item: any, i: number) => (
+                <tr key={i} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '10px 14px', color: '#1a1a1a', fontSize: 13 }}>{item.productos?.nombre || '—'}</td>
+                  <td style={{ padding: '10px 14px', color: '#6b7280', fontSize: 12 }}>{item.productos?.estilo || '—'}</td>
+                  <td style={{ padding: '10px 14px', color: '#E8531D', fontSize: 13, fontWeight: 700 }}>{item.cantidad}</td>
+                  <td style={{ padding: '10px 14px', color: '#374151', fontSize: 12 }}>${(item.precio_unitario || 0).toLocaleString('es-MX')}</td>
+                  <td style={{ padding: '10px 14px', color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>${((item.cantidad || 0) * (item.precio_unitario || 0)).toLocaleString('es-MX')}</td>
+                </tr>
+              )) : (
+                <tr><td colSpan={5} style={{ padding: '20px 14px', color: '#9ca3af', fontSize: 13 }}>Sin productos registrados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Status y pago */}

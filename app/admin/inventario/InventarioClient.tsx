@@ -6,6 +6,9 @@ import KpiCard from '../KpiCard'
 import { COLUMNAS_STOCK, formatLitros, latasEquivalentes, litrosDeProducto, type ColumnaStock } from '../../../src/lib/unidades'
 import { claveStock, type PartidaSinClasificar } from '../../../src/lib/stock-disponible'
 
+/** Lo que la vista inventario_en_camino devuelve por producto. */
+export type EnCamino = { litros: number; lotes: number; sinFecha: number }
+
 interface Props {
   productos: any[]
   canEdit: boolean
@@ -14,6 +17,8 @@ interface Props {
   comprometido: Record<string, number>
   /** Partidas que no se pudieron mapear a una columna de inventario. */
   sinClasificar: PartidaSinClasificar[]
+  /** Litros proyectados a 14 dias, por producto_id. */
+  enCamino?: Record<string, EnCamino>
 }
 
 /**
@@ -41,7 +46,7 @@ const STOCK_FIELDS = [
   { key: 'stock_barril10_acero', label: '10L Acero', group: 'barriles' },
 ]
 
-export default function InventarioClient({ productos, canEdit, pedidoCounts, comprometido, sinClasificar }: Props) {
+export default function InventarioClient({ productos, canEdit, pedidoCounts, comprometido, sinClasificar , enCamino = {} }: Props) {
   const [data, setData] = useState(productos)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [search, setSearch] = useState('')
@@ -266,7 +271,7 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts, com
               <th rowSpan={2} style={{ padding: '8px 12px', textAlign: 'left', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em', position: 'sticky', left: 36, background: '#f9fafb', zIndex: 3, minWidth: 180 }}>Producto</th>
               <th colSpan={4} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb' }}>Latas</th>
               <th colSpan={2} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb', borderLeft: '1px solid #e5e7eb' }}>Barriles</th>
-              <th colSpan={3} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb', borderLeft: '1px solid #e5e7eb' }}>Litros</th>
+              <th colSpan={4} style={{ padding: '6px 10px', textAlign: 'center', color: '#6b7280', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.08em', borderBottom: '1px solid #e5e7eb', borderLeft: '1px solid #e5e7eb' }}>Litros</th>
               <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'right', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Precio</th>
               <th rowSpan={2} style={{ padding: '8px 10px', textAlign: 'center', color: '#6b7280', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Estado</th>
               <th rowSpan={2} style={{ padding: '8px 10px', width: 60 }}></th>
@@ -281,6 +286,13 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts, com
               <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500, borderLeft: '1px solid #e5e7eb' }}>Físico</th>
               <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>Apartado</th>
               <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }}>Disponible</th>
+              {/* Lo que viene de produccion. En litros como las otras tres, y
+                  por PRODUCTO: hasta que un lote se envasa no se sabe en que
+                  presentacion sale, asi que repartirlo en cajas y barriles
+                  seria adivinar. */}
+              <th style={{ padding: '4px 10px', textAlign: 'right', color: '#9ca3af', fontSize: 10, textTransform: 'uppercase', fontWeight: 500 }} title="Litros de lotes en proceso cuyo fin estimado cae en los próximos 14 días">
+                Próx. 14 d
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -332,6 +344,31 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts, com
                     {litrosApa > 0 ? formatLitros(litrosApa) : '—'}
                   </td>
                   <td style={{ ...NS, color: litrosDis < 0 ? '#dc2626' : '#1a1a1a', fontWeight: 700 }}>{formatLitros(litrosDis)}</td>
+                  {(() => {
+                    const ec = enCamino[p.id]
+                    const hay = ec && ec.litros > 0
+                    return (
+                      <td
+                        style={{ ...NS, color: hay ? '#047857' : '#d1d5db', fontWeight: 500 }}
+                        title={
+                          !ec || (ec.litros === 0 && ec.sinFecha === 0)
+                            ? 'Sin lotes en proceso que lleguen en 14 días'
+                            : [
+                                hay ? `${ec.lotes} lote(s) en proceso` : null,
+                                // El hueco se dice. Un lote sin receta completa
+                                // no se puede proyectar, y si no se reportara
+                                // quedaria indistinguible de "no viene nada".
+                                ec.sinFecha > 0 ? `${ec.sinFecha} lote(s) sin fecha estimada, NO sumados` : null,
+                              ].filter(Boolean).join(' · ')
+                        }
+                      >
+                        {hay ? formatLitros(ec.litros) : '—'}
+                        {ec && ec.sinFecha > 0 && (
+                          <span style={{ color: '#b45309', fontWeight: 600 }} aria-label="hay lotes sin fecha estimada">{' '}+?</span>
+                        )}
+                      </td>
+                    )
+                  })()}
                   <td style={{ padding: '10px 10px', textAlign: 'right', whiteSpace: 'nowrap' }} title={priceTooltip(p)}>
                     {ps === 'none' ? <span style={{ background: '#fee2e2', color: '#dc2626', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Sin precio</span>
                       : ps === 'mayorista' ? <span style={{ background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 99, fontSize: 10, fontWeight: 600 }}>Falta may.</span>
@@ -375,7 +412,7 @@ export default function InventarioClient({ productos, canEdit, pedidoCounts, com
                   </td>
                 </tr>
               )
-            }) : <tr><td colSpan={14} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin productos</td></tr>}
+            }) : <tr><td colSpan={15} style={{ color: '#9ca3af', textAlign: 'center', padding: 60, fontSize: 14 }}>Sin productos</td></tr>}
           </tbody>
         </table>
       </div>

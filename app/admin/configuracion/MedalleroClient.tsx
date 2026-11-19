@@ -114,43 +114,48 @@ export default function MedalleroClient({ medallas: init, canEdit }: { medallas:
 
       {/* Lista */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Medalla', 'Cerveza', 'Estilo', 'ABV / IBU', 'Competencia', 'Año', ...(canEdit ? ['Acciones'] : [])].map((h, i) => (
-                <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 16px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.length === 0 ? (
-              <tr><td colSpan={7} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>Sin medallas aún — agrega la primera</td></tr>
-            ) : data.map(m => (
-              <tr key={m.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                <td style={{ padding: '12px 16px' }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: 13, padding: '3px 10px', background: `${medallaColors[m.medalla]}20`, color: medallaColors[m.medalla], border: `1px solid ${medallaColors[m.medalla]}40`, borderRadius: 4, textTransform: 'uppercase', fontWeight: 600 }}>
-                    {m.medalla === 'oro' ? '🥇' : m.medalla === 'plata' ? '🥈' : '🥉'} {m.medalla}
-                  </span>
-                </td>
-                <td style={{ padding: '12px 16px', color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>{m.cerveza}</td>
-                <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>{m.estilo || '—'}</td>
-                <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{m.abv ? `${m.abv}%` : '—'} / {m.ibu ? `${m.ibu} IBU` : '—'}</td>
-                <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>{m.competencia}</td>
-                <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{m.año}</td>
-                {canEdit && (
-                <td style={{ padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => handleEdit(m)} style={{ padding: '5px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Editar</button>
-                    <button onClick={() => handleDelete(m.id)} disabled={deletingId === m.id} style={{ padding: '5px 12px', background: '#1a0a0a', border: '1px solid #ef444430', borderRadius: 6, color: '#ef4444', fontSize: 13, cursor: 'pointer', opacity: deletingId === m.id ? 0.5 : 1 }}>
-                      {deletingId === m.id ? '...' : '🗑'}
-                    </button>
-                  </div>
-                </td>
-                )}
+        {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                {['Medalla', 'Cerveza', 'Estilo', 'ABV / IBU', 'Competencia', 'Año', ...(canEdit ? ['Acciones'] : [])].map((h, i) => (
+                  <th key={i} style={{ color: '#9ca3af', fontSize: 13, textAlign: 'left', padding: '10px 16px', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{h}</th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {data.length === 0 ? (
+                <tr><td colSpan={7} style={{ color: '#9ca3af', textAlign: 'center', padding: '60px 20px', fontSize: 14 }}>Sin medallas aún — agrega la primera</td></tr>
+              ) : data.map(m => (
+                <tr key={m.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  <td style={{ padding: '12px 16px' }}>
+                    <span style={{ fontFamily: 'monospace', fontSize: 13, padding: '3px 10px', background: `${medallaColors[m.medalla]}20`, color: medallaColors[m.medalla], border: `1px solid ${medallaColors[m.medalla]}40`, borderRadius: 4, textTransform: 'uppercase', fontWeight: 600 }}>
+                      {m.medalla === 'oro' ? '🥇' : m.medalla === 'plata' ? '🥈' : '🥉'} {m.medalla}
+                    </span>
+                  </td>
+                  <td style={{ padding: '12px 16px', color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>{m.cerveza}</td>
+                  <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>{m.estilo || '—'}</td>
+                  <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{m.abv ? `${m.abv}%` : '—'} / {m.ibu ? `${m.ibu} IBU` : '—'}</td>
+                  <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 12 }}>{m.competencia}</td>
+                  <td style={{ padding: '12px 16px', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{m.año}</td>
+                  {canEdit && (
+                  <td style={{ padding: '12px 16px' }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => handleEdit(m)} style={{ padding: '5px 12px', background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: 6, color: '#6b7280', fontSize: 13, cursor: 'pointer' }}>Editar</button>
+                      <button onClick={() => handleDelete(m.id)} disabled={deletingId === m.id} style={{ padding: '5px 12px', background: '#1a0a0a', border: '1px solid #ef444430', borderRadius: 6, color: '#ef4444', fontSize: 13, cursor: 'pointer', opacity: deletingId === m.id ? 0.5 : 1 }}>
+                        {deletingId === m.id ? '...' : '🗑'}
+                      </button>
+                    </div>
+                  </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   )

@@ -2,6 +2,8 @@
 import { useState } from 'react'
 import { createClient } from '../../src/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { canEnterPanel } from '../../src/lib/roles'
+import { conReturnTo, returnToDeURL } from '../../src/lib/return-to'
 
 export default function PortalLogin() {
   const [mode, setMode] = useState<'login' | 'register' | 'forgot'>('login')
@@ -17,12 +19,55 @@ export default function PortalLogin() {
   const router = useRouter()
   const supabase = createClient()
 
+  /**
+   * A donde ir despues del login.
+   *
+   * `returnTo` lo pone proxy.ts cuando alguien sin sesion pide una ruta de
+   * /admin — tipicamente al escanear el QR de un tanque. Solo se obedece si
+   * el perfil puede entrar al panel: un comprador con un returnTo de /admin
+   * no tiene nada que hacer ahi, y mandarlo lo dejaria en una pantalla de
+   * "sin acceso" en vez de en su catalogo.
+   *
+   * La validacion de `returnTo` ya la hizo proxy.ts, pero se repite aqui
+   * porque este valor llega de la URL y nada garantiza que paso por ahi.
+   */
+  const irDespuesDelLogin = async () => {
+    const destino = returnToDeURL()
+    if (!destino) { router.push('/portal/catalogo'); return }
+
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) { router.push('/portal/catalogo'); return }
+
+    const { data: perfil } = await supabase
+      .from('profiles').select('role').eq('id', user.id).single()
+
+    if (!canEnterPanel(perfil?.role)) { router.push('/portal/catalogo'); return }
+
+    /**
+     * El salto por el MFA.
+     *
+     * El panel exige AAL2 y `app/admin/layout.tsx` redirige al verificador
+     * SIN conservar a donde iba, porque un layout de Next no recibe el
+     * pathname. En vez de meterle headers al middleware —que es el que
+     * refresca las cookies de sesion y no es codigo donde convenga
+     * improvisar—, el salto se decide aqui, que es donde si se sabe el
+     * destino.
+     *
+     * Hueco conocido: si alguien YA tiene sesion sin AAL2 y escanea un QR, el
+     * proxy no lo intercepta, el layout lo manda al verificador sin destino y
+     * termina en /admin. Pasa una vez por dispositivo, hasta que la sesion
+     * sea AAL2.
+     */
+    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+    router.push(aal?.currentLevel === 'aal2' ? destino : conReturnTo('/tierra-mojada/verificar', destino))
+  }
+
   const handleLogin = async () => {
     if (!email || !password) { setError('Completa todos los campos'); return }
     setLoading(true); setError('')
     const { error } = await supabase.auth.signInWithPassword({ email, password })
     if (error) { setError('Email o contraseña incorrectos'); setLoading(false); return }
-    router.push('/portal/catalogo')
+    await irDespuesDelLogin()
     router.refresh()
   }
 

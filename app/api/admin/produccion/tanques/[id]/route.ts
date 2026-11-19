@@ -85,10 +85,17 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     .from('tanques').select('nombre').eq('id', id).single()
   if (!tanque) return NextResponse.json({ error: 'Tanque no encontrado' }, { status: 404 })
 
-  const { count } = await g.service
-    .from('lotes')
-    .select('id', { count: 'exact', head: true })
-    .eq('tanque_id', id)
+  // Se cuentan las dos cosas. `lotes.tanque_id` solo apunta al tanque ACTUAL,
+  // asi que un lote que se movio a otro tanque deja de contar ahi — pero su
+  // historia sigue en lote_tanque_asignaciones, que tiene `on delete
+  // restrict`. Sin mirar las dos, este guard pasaria y el DELETE reventaria
+  // con un error crudo de llave foranea.
+  const [{ count: enLotes }, { count: enHistoria }] = await Promise.all([
+    g.service.from('lotes').select('id', { count: 'exact', head: true }).eq('tanque_id', id),
+    g.service.from('lote_tanque_asignaciones').select('id', { count: 'exact', head: true }).eq('tanque_id', id),
+  ])
+
+  const count = Math.max(enLotes || 0, enHistoria || 0)
 
   if (count && count > 0) {
     return NextResponse.json(

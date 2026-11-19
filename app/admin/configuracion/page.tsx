@@ -6,12 +6,14 @@ import NegocioClient from './NegocioClient'
 import TaproomSection from './TaproomSection'
 import MedalleroSection from './MedalleroSection'
 import TanquesSection from './TanquesSection'
+import TanquesQR from './TanquesQR'
 import ActividadClient from './ActividadClient'
 
 const DESCRIPCIONES: Record<string, string> = {
   marca: 'Acento del panel',
   negocio: 'Condiciones de pago, alertas y moneda',
   tanques: 'Fermentadores, maduradores y brites',
+  'tanques-qr': 'Hoja para imprimir y pegar en cada tanque',
   taproom: 'Horarios y datos del taproom',
   medallero: 'Reconocimientos y competencias',
   actividad: 'Bitácora de acciones del equipo',
@@ -37,6 +39,7 @@ export default async function ConfiguracionPage({ searchParams }: { searchParams
       {activa === 'marca' && <MarcaClient />}
       {activa === 'negocio' && <NegocioClient />}
       {activa === 'tanques' && <TanquesSection />}
+      {activa === 'tanques-qr' && <TanquesQR />}
       {activa === 'taproom' && <TaproomSection />}
       {activa === 'medallero' && <MedalleroSection />}
       {activa === 'actividad' && <ActividadClient />}

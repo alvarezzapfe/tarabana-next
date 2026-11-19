@@ -176,42 +176,47 @@ export default function CobranzaClient() {
 
       {/* Aging table */}
       <div style={{ background: '#fff', border: '1px solid #e5e7eb', borderRadius: 12, overflow: 'hidden' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
-              {['Cliente', 'Corriente', '1-30 días', '31-60 días', '+60 días', 'Total adeudado'].map(h => (
-                <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: h === 'Cliente' ? 'left' : 'right', padding: '12px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
+        {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                {['Cliente', 'Corriente', '1-30 días', '31-60 días', '+60 días', 'Total adeudado'].map(h => (
+                  <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: h === 'Cliente' ? 'left' : 'right', padding: '12px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {clienteData.length === 0 ? (
+                <tr><td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Sin saldos pendientes</td></tr>
+              ) : clienteData.map(c => (
+                <tr key={c.cliente.id} onClick={() => openPanel(c.cliente.id)} style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}>
+                  <td style={{ padding: '14px 18px' }}>
+                    <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>{c.cliente.full_name}</p>
+                    <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 11 }}>{c.cliente.email}</p>
+                  </td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{c.corriente > 0 ? fmt(c.corriente) : '—'}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', color: '#f59e0b', fontSize: 13, fontFamily: 'monospace', fontWeight: c.d1_30 > 0 ? 600 : 400 }}>{c.d1_30 > 0 ? fmt(c.d1_30) : '—'}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', color: '#E8531D', fontSize: 13, fontFamily: 'monospace', fontWeight: c.d31_60 > 0 ? 600 : 400 }}>{c.d31_60 > 0 ? fmt(c.d31_60) : '—'}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', color: '#ef4444', fontSize: 13, fontFamily: 'monospace', fontWeight: c.d60plus > 0 ? 700 : 400 }}>{c.d60plus > 0 ? fmt(c.d60plus) : '—'}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(c.total)}</td>
+                </tr>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {clienteData.length === 0 ? (
-              <tr><td colSpan={6} style={{ padding: '48px 20px', textAlign: 'center', color: '#9ca3af', fontSize: 14 }}>Sin saldos pendientes</td></tr>
-            ) : clienteData.map(c => (
-              <tr key={c.cliente.id} onClick={() => openPanel(c.cliente.id)} style={{ borderBottom: '1px solid #f3f4f6', cursor: 'pointer' }}>
-                <td style={{ padding: '14px 18px' }}>
-                  <p style={{ margin: 0, color: '#1a1a1a', fontSize: 13, fontWeight: 600 }}>{c.cliente.full_name}</p>
-                  <p style={{ margin: '1px 0 0', color: '#9ca3af', fontSize: 11 }}>{c.cliente.email}</p>
-                </td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{c.corriente > 0 ? fmt(c.corriente) : '—'}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', color: '#f59e0b', fontSize: 13, fontFamily: 'monospace', fontWeight: c.d1_30 > 0 ? 600 : 400 }}>{c.d1_30 > 0 ? fmt(c.d1_30) : '—'}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', color: '#E8531D', fontSize: 13, fontFamily: 'monospace', fontWeight: c.d31_60 > 0 ? 600 : 400 }}>{c.d31_60 > 0 ? fmt(c.d31_60) : '—'}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', color: '#ef4444', fontSize: 13, fontFamily: 'monospace', fontWeight: c.d60plus > 0 ? 700 : 400 }}>{c.d60plus > 0 ? fmt(c.d60plus) : '—'}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', color: '#1a1a1a', fontSize: 14, fontWeight: 700, fontFamily: 'monospace' }}>{fmt(c.total)}</td>
-              </tr>
-            ))}
-            {clienteData.length > 0 && (
-              <tr style={{ background: '#f9fafb' }}>
-                <td style={{ padding: '14px 18px', fontWeight: 700, color: '#1a1a1a', fontSize: 13 }}>TOTALES</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.corriente, 0))}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#f59e0b', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.d1_30, 0))}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#E8531D', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.d31_60, 0))}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#ef4444', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.d60plus, 0))}</td>
-                <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 800, color: '#1a1a1a', fontSize: 14, fontFamily: 'monospace' }}>{fmt(totalPorCobrar)}</td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              {clienteData.length > 0 && (
+                <tr style={{ background: '#f9fafb' }}>
+                  <td style={{ padding: '14px 18px', fontWeight: 700, color: '#1a1a1a', fontSize: 13 }}>TOTALES</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#6b7280', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.corriente, 0))}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#f59e0b', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.d1_30, 0))}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#E8531D', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.d31_60, 0))}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 700, color: '#ef4444', fontSize: 13, fontFamily: 'monospace' }}>{fmt(clienteData.reduce((s, c) => s + c.d60plus, 0))}</td>
+                  <td style={{ padding: '14px 18px', textAlign: 'right', fontWeight: 800, color: '#1a1a1a', fontSize: 14, fontFamily: 'monospace' }}>{fmt(totalPorCobrar)}</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* ══════ DETAIL PANEL ══════ */}

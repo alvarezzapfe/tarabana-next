@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { usePathname } from 'next/navigation'
 import type { NavItem } from '../../src/lib/admin-nav'
+import { ALTO_BARRA_MOVIL, MOVIL_MAX } from './dash-ui'
 
 /**
  * Chrome del admin. Los colores estan fijos a proposito: antes venian de
@@ -21,7 +22,87 @@ const CHROME = {
 
 const ANCHO_ABIERTO = 240
 const ANCHO_CERRADO = 64
+/** Ancho del cajon en celular: no se colapsa, ahi siempre va completo. */
+const ANCHO_MOVIL = 264
 const LS_KEY = 'tarabana.admin.sidebar.colapsado'
+
+/**
+ * El cajon de celular y sus piezas.
+ *
+ * Va en CSS y no en estilos inline porque necesita media queries, que un
+ * objeto de estilo no puede expresar. Mismo motivo por el que PedidosClient
+ * mete su swap tabla/tarjetas en una clase.
+ *
+ * `!important` en los anchos: el <aside> trae su width inline (240 o 64 segun
+ * el colapso de escritorio), y sin !important el cajon heredaria los 64px de
+ * alguien que colapso en su computadora.
+ */
+const CSS_MOVIL = `
+  .admin-barra-movil { display: none; }
+  .admin-backdrop { display: none; }
+
+  /*
+   * "screen and" NO es decorativo: el viewport de impresion de una carta con
+   * margenes de 12 mm mide ~725 px, asi que un "max-width" suelto tambien
+   * aplicaria al imprimir y pelearia con el @media print de
+   * /admin/reporte, que apaga el chrome.
+   */
+  @media screen and (max-width: ${MOVIL_MAX}px) {
+    .admin-barra-movil {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      height: ${ALTO_BARRA_MOVIL}px;
+      padding: 0 14px;
+      background: ${CHROME.bg};
+      border-bottom: 1px solid ${CHROME.borde};
+      z-index: 48;
+    }
+
+    .admin-sidebar {
+      /* Ancho fijo: el <aside> trae el suyo inline (240 o 64 segun el
+         colapso de ESCRITORIO) y sin esto el cajon heredaria 64 px de
+         alguien que colapso en su computadora. */
+      width: ${ANCHO_MOVIL}px !important;
+
+      /* dvh y no vh: en iOS Safari 100vh es el viewport GRANDE, asi que el
+         bloque de usuario y "Cerrar sesion" quedan debajo del chrome del
+         navegador y no hay forma de alcanzarlos. */
+      height: 100dvh !important;
+
+      /* Arriba de TODAS las hojas laterales del panel, que llegan a 120
+         (FichaLote 60, NuevoLote 70, PanelPedido 70/71, DrawerPago 90/91,
+         modales 95-120). Con el cajon mas abajo, el backdrop no las tapaba y
+         se podian tocar a traves de el. Debajo del command palette (200), que
+         si debe poder abrirse encima. */
+      z-index: 150 !important;
+
+      transform: translateX(-100%);
+
+      /* visibility y no solo transform: un cajon cerrado con puro translate
+         deja sus diez links en el orden de tabulacion, fuera de pantalla. */
+      visibility: hidden;
+
+      /* !important porque el <aside> trae "transition: width" inline, que
+         de otro modo reemplaza esta y el cajon aparece de golpe. */
+      transition: transform 180ms ease, visibility 180ms ease !important;
+    }
+    .admin-sidebar.abierta { transform: translateX(0); visibility: visible; }
+
+    .admin-backdrop.abierta {
+      display: block;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.5);
+      z-index: 149;
+    }
+
+    /* El chevron de colapsar no aplica en el cajon: ahi va completo. */
+    .admin-colapsar { display: none !important; }
+  }
+`
 
 const ROLE_LABEL: Record<string, string> = {
   super_admin: 'Super Admin',
@@ -34,6 +115,10 @@ const ROLE_LABEL: Record<string, string> = {
 export type Badges = {
   pedidosPendientes: number
   saldosVencidos: boolean
+  /** Lotes con alerta de cualquier nivel. */
+  alertasProduccion: number
+  /** Alguna de esas alertas es roja. */
+  alertasProduccionRojas: boolean
 }
 
 type Props = {
@@ -77,6 +162,26 @@ function snapshotServidor(): boolean {
   return false
 }
 
+/**
+ * Si estamos en ancho de celular, por matchMedia.
+ *
+ * Mismo patron que el store de arriba, y por la misma razon: con
+ * useSyncExternalStore el render del servidor y el primer render del cliente
+ * usan el MISMO snapshot, asi que no hay desajuste de hidratacion. Leerlo con
+ * `useState(() => window.innerWidth < 860)` o con un `typeof window` dentro
+ * del render si lo provocaria, y en React 19 eso es un error, no un warning.
+ */
+const MQ_MOVIL = `(max-width: ${MOVIL_MAX}px)`
+
+function suscribirMovil(onCambio: () => void) {
+  const mq = window.matchMedia(MQ_MOVIL)
+  mq.addEventListener('change', onCambio)
+  return () => mq.removeEventListener('change', onCambio)
+}
+
+const snapshotMovil = (): boolean => window.matchMedia(MQ_MOVIL).matches
+const snapshotMovilServidor = (): boolean => false
+
 function guardarColapsado(v: boolean) {
   try {
     window.localStorage.setItem(LS_KEY, v ? '1' : '0')
@@ -91,28 +196,124 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
   const colapsado = useSyncExternalStore(suscribir, snapshot, snapshotServidor)
   const [hover, setHover] = useState<string | null>(null)
 
+  // El cajon de celular NO se persiste en localStorage, a diferencia del
+  // colapso de escritorio: si viniera de ahi, el servidor renderizaria
+  // "cerrado" y el cliente podria renderizar "abierto", que es un desajuste
+  // de hidratacion. Y un cajon que recuerda que estaba abierto tampoco es lo
+  // que alguien espera al volver a entrar.
+  const [cajon, setCajon] = useState(false)
+
+  const esMovil = useSyncExternalStore(suscribirMovil, snapshotMovil, snapshotMovilServidor)
+
+  /**
+   * En celular el cajon va SIEMPRE completo. Sin esto, alguien que colapso el
+   * sidebar en su computadora abre el cajon en el telefono y recibe 264 px de
+   * iconos sin etiqueta, con los tooltips posicionados contra el borde de un
+   * sidebar de 64 px que ahi no existe.
+   */
+  const colapsadoEfectivo = colapsado && !esMovil
+
+  /**
+   * El cajon abierto se DERIVA, no se apaga con un efecto.
+   *
+   * Si la pantalla crece —rotar una tablet, arrastrar una ventana de 700 a
+   * 1200 px— la hamburguesa se va a `display: none` y un cajon que siguiera
+   * "abierto" en estado dejaria un backdrop huerfano tapando todo sin forma
+   * de quitarlo. Derivarlo de `esMovil` lo cierra solo, y evita un
+   * `setState` dentro de un efecto, que provoca renders en cascada
+   * (react-hooks/set-state-in-effect).
+   */
+  const cajonAbierto = cajon && esMovil
+
+  /**
+   * Navegar cierra el cajon.
+   *
+   * Es el patron de "ajustar estado cuando cambia una entrada": se compara
+   * con el valor previo DURANTE el render en vez de en un efecto. React lo
+   * documenta para este caso exacto y no dispara el render en cascada que si
+   * provocaria un useEffect.
+   *
+   * Hace falta aunque los items sean `<a href>` —que recargan el documento y
+   * se llevarian el estado— porque el command palette navega con
+   * `router.push`, y un salto con Cmd+K dejaria el cajon abierto encima.
+   */
+  const [rutaPrevia, setRutaPrevia] = useState(pathname)
+  if (rutaPrevia !== pathname) {
+    setRutaPrevia(pathname)
+    setCajon(false)
+  }
+
   // El <main> del layout usa esta variable como margen, asi no hace falta
   // subir el estado a un server component.
   useEffect(() => {
-    const ancho = colapsado ? ANCHO_CERRADO : ANCHO_ABIERTO
+    const ancho = colapsadoEfectivo ? ANCHO_CERRADO : ANCHO_ABIERTO
     document.documentElement.style.setProperty('--admin-sidebar-w', `${ancho}px`)
-  }, [colapsado])
+  }, [colapsadoEfectivo])
 
   const toggle = useCallback(() => {
     guardarColapsado(!snapshot())
   }, [])
+
+  // Esc cierra y, mientras esta abierto, el fondo no hace scroll. Las dos
+  // cosas copiadas de PanelPedido, que ya resuelve este patron aqui.
+  useEffect(() => {
+    if (!cajonAbierto) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setCajon(false) }
+    window.addEventListener('keydown', onKey)
+    // Se guarda el valor previo en vez de limpiarlo: si hay una ficha abierta
+    // (que tambien bloquea el scroll) y el cajon se abre encima, al cerrar el
+    // cajon no hay que soltar el bloqueo de la ficha.
+    const previo = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previo
+    }
+  }, [cajonAbierto])
 
   // Gana el href mas largo que haga match, si no "/admin" se activaria siempre.
   const activoKey = items
     .filter(i => pathname === i.href || pathname.startsWith(i.href + '/'))
     .sort((a, b) => b.href.length - a.href.length)[0]?.key
 
-  const ancho = colapsado ? ANCHO_CERRADO : ANCHO_ABIERTO
+  const ancho = colapsadoEfectivo ? ANCHO_CERRADO : ANCHO_ABIERTO
   const principales = items.filter(i => i.bloque !== 'inferior')
   const inferiores = items.filter(i => i.bloque === 'inferior')
 
+  const titulo = items.find(i => i.key === activoKey)?.label ?? 'Tarabaña OS'
+
   return (
+    <>
+      <style>{CSS_MOVIL}</style>
+
+      {/* Barra de celular. `.no-print` porque el @media print de
+          /admin/reporte apaga `aside` y `.no-print`, y sin la clase esta
+          barra se imprimiria encima del reporte. */}
+      <div className="admin-barra-movil no-print">
+        <button
+          onClick={() => setCajon(true)}
+          aria-label="Abrir navegación"
+          aria-expanded={cajonAbierto}
+          style={{
+            background: 'transparent', border: 'none', color: '#C9D1D9',
+            cursor: 'pointer', padding: 6, borderRadius: 6, display: 'flex',
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
+        <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>{titulo}</span>
+      </div>
+
+      <div
+        className={`admin-backdrop no-print${cajonAbierto ? ' abierta' : ''}`}
+        onClick={() => setCajon(false)}
+        aria-hidden
+      />
+
     <aside
+      className={`admin-sidebar${cajonAbierto ? ' abierta' : ''}`}
       style={{
         width: ancho,
         background: CHROME.bg,
@@ -133,13 +334,13 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
           height: 60,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: colapsado ? 'center' : 'space-between',
-          padding: colapsado ? 0 : '0 14px',
+          justifyContent: colapsadoEfectivo ? 'center' : 'space-between',
+          padding: colapsadoEfectivo ? 0 : '0 14px',
           borderBottom: `1px solid ${CHROME.borde}`,
           flexShrink: 0,
         }}
       >
-        {!colapsado && (
+        {!colapsadoEfectivo && (
           <span
             className="font-mono"
             style={{
@@ -155,9 +356,10 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
           </span>
         )}
         <button
+          className="admin-colapsar"
           onClick={toggle}
-          aria-label={colapsado ? 'Expandir navegación' : 'Colapsar navegación'}
-          aria-expanded={!colapsado}
+          aria-label={colapsadoEfectivo ? 'Expandir navegación' : 'Colapsar navegación'}
+          aria-expanded={!colapsadoEfectivo}
           style={{
             background: 'transparent',
             border: 'none',
@@ -170,7 +372,7 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
           }}
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            {colapsado ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
+            {colapsadoEfectivo ? <path d="M9 18l6-6-6-6" /> : <path d="M15 18l-6-6 6-6" />}
           </svg>
         </button>
       </div>
@@ -178,15 +380,15 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
       {/* Buscador — abre el command palette */}
       <button
         onClick={() => window.dispatchEvent(new Event('admin-palette-open'))}
-        title={colapsado ? 'Buscar (⌘K)' : undefined}
+        title={colapsadoEfectivo ? 'Buscar (⌘K)' : undefined}
         style={{
-          margin: colapsado ? '10px auto' : '10px 12px',
-          width: colapsado ? 36 : 'auto',
+          margin: colapsadoEfectivo ? '10px auto' : '10px 12px',
+          width: colapsadoEfectivo ? 36 : 'auto',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: colapsado ? 'center' : 'space-between',
+          justifyContent: colapsadoEfectivo ? 'center' : 'space-between',
           gap: 8,
-          padding: colapsado ? 8 : '8px 10px',
+          padding: colapsadoEfectivo ? 8 : '8px 10px',
           background: CHROME.hoverBg,
           border: `1px solid ${CHROME.borde}`,
           borderRadius: 8,
@@ -201,9 +403,9 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
             <circle cx="11" cy="11" r="7" />
             <path d="M21 21l-4.35-4.35" />
           </svg>
-          {!colapsado && 'Buscar'}
+          {!colapsadoEfectivo && 'Buscar'}
         </span>
-        {!colapsado && (
+        {!colapsadoEfectivo && (
           <kbd className="font-mono" style={{ fontSize: 10, color: CHROME.textoInactivo, border: `1px solid ${CHROME.borde}`, borderRadius: 4, padding: '1px 5px' }}>
             ⌘K
           </kbd>
@@ -217,7 +419,7 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
             key={item.key}
             item={item}
             activo={item.key === activoKey}
-            colapsado={colapsado}
+            colapsadoEfectivo={colapsadoEfectivo}
             acento={acento}
             badges={badges}
             hover={hover}
@@ -235,7 +437,7 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
               key={item.key}
               item={item}
               activo={item.key === activoKey}
-              colapsado={colapsado}
+              colapsadoEfectivo={colapsadoEfectivo}
               acento={acento}
               badges={badges}
               hover={hover}
@@ -246,8 +448,8 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
       )}
 
       {/* Usuario + logout */}
-      <div style={{ borderTop: `1px solid ${CHROME.borde}`, padding: colapsado ? '10px 0' : '12px 12px', flexShrink: 0 }}>
-        {!colapsado && (
+      <div style={{ borderTop: `1px solid ${CHROME.borde}`, padding: colapsadoEfectivo ? '10px 0' : '12px 12px', flexShrink: 0 }}>
+        {!colapsadoEfectivo && (
           <div style={{ padding: '0 10px', marginBottom: 10 }}>
             <p style={{ margin: 0, color: '#C9D1D9', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
               {usuario.nombre}
@@ -265,12 +467,12 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
         )}
         <a
           href="/api/auth/logout"
-          title={colapsado ? 'Cerrar sesión' : undefined}
+          title={colapsadoEfectivo ? 'Cerrar sesión' : undefined}
           onMouseEnter={() => setHover('__logout')}
           onMouseLeave={() => setHover(null)}
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: colapsado ? 'center' : 'flex-start', gap: 10,
-            padding: colapsado ? '9px 0' : '8px 10px', borderRadius: 8, textDecoration: 'none', fontSize: 13,
+            display: 'flex', alignItems: 'center', justifyContent: colapsadoEfectivo ? 'center' : 'flex-start', gap: 10,
+            padding: colapsadoEfectivo ? '9px 0' : '8px 10px', borderRadius: 8, textDecoration: 'none', fontSize: 13,
             color: CHROME.textoInactivo,
             background: hover === '__logout' ? CHROME.hoverBg : 'transparent',
           }}
@@ -278,10 +480,11 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
             <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
           </svg>
-          {!colapsado && 'Cerrar sesión'}
+          {!colapsadoEfectivo && 'Cerrar sesión'}
         </a>
       </div>
     </aside>
+    </>
   )
 }
 
@@ -289,7 +492,7 @@ export default function Sidebar({ items, usuario, badges, acento }: Props) {
 function ItemNav({
   item,
   activo,
-  colapsado,
+  colapsadoEfectivo,
   acento,
   badges,
   hover,
@@ -297,14 +500,29 @@ function ItemNav({
 }: {
   item: NavItem
   activo: boolean
-  colapsado: boolean
+  colapsadoEfectivo: boolean
   acento: string
   badges: Badges
   hover: string | null
   setHover: (k: string | null) => void
 }) {
-  const pendientes = item.badge === 'pedidosPendientes' ? badges.pedidosPendientes : 0
-  const alerta = item.alerta === 'saldosVencidos' && badges.saldosVencidos
+  const pendientes =
+    item.badge === 'pedidosPendientes' ? badges.pedidosPendientes :
+    item.badge === 'alertasProduccion' ? badges.alertasProduccion : 0
+
+  const alerta =
+    (item.alerta === 'saldosVencidos' && badges.saldosVencidos) ||
+    (item.alerta === 'alertasProduccionRojas' && badges.alertasProduccionRojas)
+
+  // El titulo del badge cambia segun que cuenta, porque "3" sin contexto no
+  // dice nada en un tooltip.
+  const tituloBadge = item.badge === 'alertasProduccion'
+    ? `${pendientes} lote(s) con alerta`
+    : `${pendientes} pedido(s) pendiente(s)`
+
+  const tituloAlerta = item.alerta === 'alertasProduccionRojas'
+    ? 'Hay lotes con alerta roja'
+    : 'Hay saldos vencidos'
 
   return (
     <a
@@ -316,9 +534,9 @@ function ItemNav({
         position: 'relative',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: colapsado ? 'center' : 'flex-start',
+        justifyContent: colapsadoEfectivo ? 'center' : 'flex-start',
         gap: 10,
-        padding: colapsado ? '10px 0' : '9px 10px',
+        padding: colapsadoEfectivo ? '10px 0' : '9px 10px',
         marginBottom: 2,
         borderRadius: 8,
         textDecoration: 'none',
@@ -341,7 +559,7 @@ function ItemNav({
           <path d={item.icon} />
         </svg>
         {/* Colapsado no hay lugar para el conteo: queda el punto. */}
-        {colapsado && (pendientes > 0 || alerta) && (
+        {colapsadoEfectivo && (pendientes > 0 || alerta) && (
           <span
             aria-hidden
             style={{
@@ -353,14 +571,14 @@ function ItemNav({
         )}
       </span>
 
-      {!colapsado && (
+      {!colapsadoEfectivo && (
         <>
           <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
           <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
             {pendientes > 0 && (
               <span
                 className="font-mono"
-                title={`${pendientes} pedido(s) pendiente(s)`}
+                title={tituloBadge}
                 style={{
                   fontSize: 10, lineHeight: 1, padding: '3px 6px', borderRadius: 999,
                   background: CHROME.borde, color: '#C9D1D9', fontVariantNumeric: 'tabular-nums',
@@ -371,7 +589,7 @@ function ItemNav({
             )}
             {alerta && (
               <span
-                title="Hay saldos vencidos"
+                title={tituloAlerta}
                 style={{ width: 7, height: 7, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }}
               />
             )}
@@ -379,8 +597,8 @@ function ItemNav({
         </>
       )}
 
-      {/* Tooltip cuando esta colapsado */}
-      {colapsado && hover === item.key && (
+      {/* Tooltip cuando esta colapsadoEfectivo */}
+      {colapsadoEfectivo && hover === item.key && (
         <span
           role="tooltip"
           style={{
@@ -392,7 +610,7 @@ function ItemNav({
         >
           {item.label}
           {pendientes > 0 && ` · ${pendientes}`}
-          {alerta && ' · vencidos'}
+          {alerta && (item.alerta === 'alertasProduccionRojas' ? ' · alerta' : ' · vencidos')}
         </span>
       )}
     </a>

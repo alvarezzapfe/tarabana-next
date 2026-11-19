@@ -267,188 +267,190 @@ export default function EquipoClient() {
         <div style={{ padding: '16px 20px', borderBottom: '1px solid #e5e7eb' }}>
           <p style={{ color: '#6b7280', fontSize: 13, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.08em', margin: 0 }}>Equipo</p>
         </div>
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-              {['Usuario', 'Rol', '2FA', 'Último acceso', 'Status', 'Acciones'].map(h => (
-                <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {usuarios.map(u => {
-              const rc = roleConfig[u.role] || { label: u.role, color: '#6b7280', bg: '#f3f4f6' }
-              const hasMfa = mfaStatus[u.id] || false
-              const lastSeen = timeAgo(u.last_seen_at)
-              return (
-                <tr key={u.id} style={{ borderBottom: '1px solid #f3f4f6', opacity: u.active ? 1 : 0.5 }}>
-                  {/* Avatar + Name + Email */}
-                  <td style={{ padding: '14px 18px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{
-                        width: 34, height: 34, borderRadius: '50%', background: rc.bg,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        color: rc.color, fontSize: 13, fontWeight: 700, flexShrink: 0,
-                      }}>
-                        {(u.full_name || u.email || '?')[0].toUpperCase()}
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                {['Usuario', 'Rol', '2FA', 'Último acceso', 'Status', 'Acciones'].map(h => (
+                  <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {usuarios.map(u => {
+                const rc = roleConfig[u.role] || { label: u.role, color: '#6b7280', bg: '#f3f4f6' }
+                const hasMfa = mfaStatus[u.id] || false
+                const lastSeen = timeAgo(u.last_seen_at)
+                return (
+                  <tr key={u.id} style={{ borderBottom: '1px solid #f3f4f6', opacity: u.active ? 1 : 0.5 }}>
+                    {/* Avatar + Name + Email */}
+                    <td style={{ padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <div style={{
+                          width: 34, height: 34, borderRadius: '50%', background: rc.bg,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          color: rc.color, fontSize: 13, fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {(u.full_name || u.email || '?')[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13.5, fontWeight: 600 }}>{u.full_name || '--'}</p>
+                          <p style={{ color: '#9ca3af', margin: '1px 0 0', fontSize: 12 }}>{u.email}</p>
+                        </div>
                       </div>
-                      <div>
-                        <p style={{ color: '#1a1a1a', margin: 0, fontSize: 13.5, fontWeight: 600 }}>{u.full_name || '--'}</p>
-                        <p style={{ color: '#9ca3af', margin: '1px 0 0', fontSize: 12 }}>{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  {/* Role badge */}
-                  <td style={{ padding: '14px 18px' }}>
-                    <span style={{ background: rc.bg, color: rc.color, padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{rc.label}</span>
-                    {u.role === 'vendedor' && (
-                      <div style={{ marginTop: 8 }}>
-                        <select
-                          value={fichas.find(f => f.profile_id === u.id)?.id || ''}
-                          disabled={ligando === u.id}
-                          onChange={e => ligarFicha(u.id, e.target.value)}
-                          style={{ fontSize: 11.5, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', maxWidth: 190 }}
-                        >
-                          <option value="">— sin ficha ligada —</option>
-                          {fichas
-                            .filter(f => !f.profile_id || f.profile_id === u.id)
-                            .map(f => (
-                              <option key={f.id} value={f.id}>
-                                {f.nombre}{f.activo ? '' : ' (inactiva)'}
-                              </option>
-                            ))}
-                        </select>
-                        {!fichas.some(f => f.profile_id === u.id) && (
-                          <p style={{ margin: '4px 0 0', color: '#b45309', fontSize: 10.5, maxWidth: 190, lineHeight: 1.4 }}>
-                            Sin ficha no puede crear pedidos ni ver nada.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                  </td>
-                  {/* 2FA */}
-                  <td style={{ padding: '14px 18px' }}>
-                    <span style={{
-                      background: hasMfa ? '#d1fae5' : '#f3f4f6',
-                      color: hasMfa ? '#10b981' : '#9ca3af',
-                      padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600,
-                    }}>
-                      {hasMfa ? 'Activo' : 'Sin 2FA'}
-                    </span>
-                  </td>
-                  {/* Last seen */}
-                  <td style={{ padding: '14px 18px' }}>
-                    <span style={{ color: lastSeen.stale ? '#f59e0b' : '#6b7280', fontSize: 12 }}>
-                      {lastSeen.text}
-                    </span>
-                  </td>
-                  {/* Status */}
-                  <td style={{ padding: '14px 18px' }}>
-                    <span style={{
-                      background: u.active ? '#d1fae5' : '#f3f4f6',
-                      color: u.active ? '#10b981' : '#6b7280',
-                      padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 500,
-                    }}>
-                      {u.active ? 'Activo' : 'Pausado'}
-                    </span>
-                  </td>
-                  {/* Actions */}
-                  <td style={{ padding: '14px 18px' }}>
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {/* Toggle active */}
-                      {u.role !== 'super_admin' && (
-                        <button
-                          onClick={() => handleToggle(u.id)}
-                          disabled={toggleLoading === u.id}
-                          title="Los usuarios con historial se desactivan, no se borran."
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                            border: 'none', cursor: 'pointer',
-                            background: u.active ? '#fef2f2' : '#f0fdf4',
-                            color: u.active ? '#ef4444' : '#10b981',
-                            opacity: toggleLoading === u.id ? 0.5 : 1,
-                          }}
-                        >
-                          {toggleLoading === u.id ? '...' : u.active ? 'Desactivar' : 'Activar'}
-                        </button>
+                    </td>
+                    {/* Role badge */}
+                    <td style={{ padding: '14px 18px' }}>
+                      <span style={{ background: rc.bg, color: rc.color, padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 600 }}>{rc.label}</span>
+                      {u.role === 'vendedor' && (
+                        <div style={{ marginTop: 8 }}>
+                          <select
+                            value={fichas.find(f => f.profile_id === u.id)?.id || ''}
+                            disabled={ligando === u.id}
+                            onChange={e => ligarFicha(u.id, e.target.value)}
+                            style={{ fontSize: 11.5, padding: '4px 8px', borderRadius: 6, border: '1px solid #d1d5db', background: '#f9fafb', color: '#374151', maxWidth: 190 }}
+                          >
+                            <option value="">— sin ficha ligada —</option>
+                            {fichas
+                              .filter(f => !f.profile_id || f.profile_id === u.id)
+                              .map(f => (
+                                <option key={f.id} value={f.id}>
+                                  {f.nombre}{f.activo ? '' : ' (inactiva)'}
+                                </option>
+                              ))}
+                          </select>
+                          {!fichas.some(f => f.profile_id === u.id) && (
+                            <p style={{ margin: '4px 0 0', color: '#b45309', fontSize: 10.5, maxWidth: 190, lineHeight: 1.4 }}>
+                              Sin ficha no puede crear pedidos ni ver nada.
+                            </p>
+                          )}
+                        </div>
                       )}
-                      {/* View activity */}
-                      <button
-                        onClick={() => handleViewActivity(u)}
-                        style={{
-                          display: 'inline-flex', alignItems: 'center', gap: 4,
-                          padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                          border: 'none', cursor: 'pointer',
-                          background: '#f3f4f6', color: '#6b7280',
-                        }}
-                      >
-                        Ver actividad
-                      </button>
-                      {/* Reset 2FA */}
-                      {u.role !== 'super_admin' && hasMfa && (
-                        resetConfirmId === u.id ? (
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <button
-                              onClick={() => handleResetMfa(u.id)}
-                              disabled={resetLoading}
-                              style={{
-                                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                                border: 'none', cursor: 'pointer',
-                                background: '#fef2f2', color: '#ef4444',
-                                opacity: resetLoading ? 0.5 : 1,
-                              }}
-                            >
-                              {resetLoading ? '...' : 'Confirmar'}
-                            </button>
-                            <button
-                              onClick={() => setResetConfirmId(null)}
-                              style={{
-                                padding: '5px 8px', borderRadius: 6, fontSize: 11,
-                                border: 'none', cursor: 'pointer',
-                                background: '#f3f4f6', color: '#6b7280',
-                              }}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
+                    </td>
+                    {/* 2FA */}
+                    <td style={{ padding: '14px 18px' }}>
+                      <span style={{
+                        background: hasMfa ? '#d1fae5' : '#f3f4f6',
+                        color: hasMfa ? '#10b981' : '#9ca3af',
+                        padding: '4px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600,
+                      }}>
+                        {hasMfa ? 'Activo' : 'Sin 2FA'}
+                      </span>
+                    </td>
+                    {/* Last seen */}
+                    <td style={{ padding: '14px 18px' }}>
+                      <span style={{ color: lastSeen.stale ? '#f59e0b' : '#6b7280', fontSize: 12 }}>
+                        {lastSeen.text}
+                      </span>
+                    </td>
+                    {/* Status */}
+                    <td style={{ padding: '14px 18px' }}>
+                      <span style={{
+                        background: u.active ? '#d1fae5' : '#f3f4f6',
+                        color: u.active ? '#10b981' : '#6b7280',
+                        padding: '4px 12px', borderRadius: 99, fontSize: 12, fontWeight: 500,
+                      }}>
+                        {u.active ? 'Activo' : 'Pausado'}
+                      </span>
+                    </td>
+                    {/* Actions */}
+                    <td style={{ padding: '14px 18px' }}>
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                        {/* Toggle active */}
+                        {u.role !== 'super_admin' && (
                           <button
-                            onClick={() => setResetConfirmId(u.id)}
+                            onClick={() => handleToggle(u.id)}
+                            disabled={toggleLoading === u.id}
+                            title="Los usuarios con historial se desactivan, no se borran."
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 4,
                               padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
                               border: 'none', cursor: 'pointer',
-                              background: '#fef3c7', color: '#f59e0b',
+                              background: u.active ? '#fef2f2' : '#f0fdf4',
+                              color: u.active ? '#ef4444' : '#10b981',
+                              opacity: toggleLoading === u.id ? 0.5 : 1,
                             }}
                           >
-                            Resetear 2FA
+                            {toggleLoading === u.id ? '...' : u.active ? 'Desactivar' : 'Activar'}
                           </button>
-                        )
-                      )}
-                      {/* Delete user */}
-                      {u.role !== 'super_admin' && (
+                        )}
+                        {/* View activity */}
                         <button
-                          onClick={() => { setUserDeleteId(u.id); setUserDeleteEmail(''); setUserDeleteError(''); setUserDeleteSuggestDeactivate(false) }}
+                          onClick={() => handleViewActivity(u)}
                           style={{
                             display: 'inline-flex', alignItems: 'center', gap: 4,
                             padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
                             border: 'none', cursor: 'pointer',
-                            background: 'transparent', color: '#d1d5db',
+                            background: '#f3f4f6', color: '#6b7280',
                           }}
-                          title="Eliminar usuario permanentemente"
                         >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                          Eliminar
+                          Ver actividad
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                        {/* Reset 2FA */}
+                        {u.role !== 'super_admin' && hasMfa && (
+                          resetConfirmId === u.id ? (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <button
+                                onClick={() => handleResetMfa(u.id)}
+                                disabled={resetLoading}
+                                style={{
+                                  padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                                  border: 'none', cursor: 'pointer',
+                                  background: '#fef2f2', color: '#ef4444',
+                                  opacity: resetLoading ? 0.5 : 1,
+                                }}
+                              >
+                                {resetLoading ? '...' : 'Confirmar'}
+                              </button>
+                              <button
+                                onClick={() => setResetConfirmId(null)}
+                                style={{
+                                  padding: '5px 8px', borderRadius: 6, fontSize: 11,
+                                  border: 'none', cursor: 'pointer',
+                                  background: '#f3f4f6', color: '#6b7280',
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setResetConfirmId(u.id)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                                border: 'none', cursor: 'pointer',
+                                background: '#fef3c7', color: '#f59e0b',
+                              }}
+                            >
+                              Resetear 2FA
+                            </button>
+                          )
+                        )}
+                        {/* Delete user */}
+                        {u.role !== 'super_admin' && (
+                          <button
+                            onClick={() => { setUserDeleteId(u.id); setUserDeleteEmail(''); setUserDeleteError(''); setUserDeleteSuggestDeactivate(false) }}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 4,
+                              padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                              border: 'none', cursor: 'pointer',
+                              background: 'transparent', color: '#d1d5db',
+                            }}
+                            title="Eliminar usuario permanentemente"
+                          >
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            Eliminar
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Reset 2FA confirmation dialog */}
@@ -578,92 +580,97 @@ export default function EquipoClient() {
               Invitaciones pendientes · {invitaciones.length}
             </p>
           </div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
-                {['Nombre', 'Email', 'Rol', 'Enviada', 'Expira', 'Acciones'].map(h => (
-                  <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {invitaciones.map(inv => {
-                const rc = roleConfig[inv.role] || { label: inv.role, color: '#6b7280', bg: '#f3f4f6' }
-                const sentAgo = timeAgo(inv.created_at)
-                const expiresIn = timeUntil(inv.expires_at)
-                const isExpired = expiresIn === 'Expirada'
-                return (
-                  <tr key={inv.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                    <td style={{ padding: '12px 18px', color: '#374151', fontSize: 13 }}>{inv.full_name}</td>
-                    <td style={{ padding: '12px 18px', color: '#6b7280', fontSize: 13 }}>{inv.email}</td>
-                    <td style={{ padding: '12px 18px' }}>
-                      <span style={{ background: rc.bg, color: rc.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{rc.label}</span>
-                    </td>
-                    <td style={{ padding: '12px 18px', color: '#6b7280', fontSize: 12 }}>
-                      {sentAgo.text}
-                    </td>
-                    <td style={{ padding: '12px 18px' }}>
-                      <span style={{ color: isExpired ? '#ef4444' : '#f59e0b', fontSize: 12, fontWeight: isExpired ? 600 : 400 }}>
-                        {isExpired ? 'Expirada' : `en ${expiresIn}`}
-                      </span>
-                    </td>
-                    <td style={{ padding: '12px 18px' }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <a href={`/api/admin/invitaciones/${inv.id}/reenviar`}
-                          style={{
-                            display: 'inline-flex', alignItems: 'center', gap: 4,
-                            padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                            textDecoration: 'none', background: '#f3f4f6', color: '#6b7280',
-                          }}
-                        >
-                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13 M22 2L15 22l-4-9-9-4 20-7z"/></svg>
-                          Reenviar
-                        </a>
-                        {deleteConfirmId === inv.id ? (
-                          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                            <button
-                              onClick={() => handleDeleteInvitation(inv.id)}
-                              disabled={deleteLoading}
-                              style={{
-                                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
-                                border: 'none', cursor: 'pointer',
-                                background: '#fef2f2', color: '#ef4444',
-                                opacity: deleteLoading ? 0.5 : 1,
-                              }}
-                            >
-                              {deleteLoading ? '...' : 'Confirmar'}
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirmId(null)}
-                              style={{
-                                padding: '5px 8px', borderRadius: 6, fontSize: 11,
-                                border: 'none', cursor: 'pointer',
-                                background: '#f3f4f6', color: '#6b7280',
-                              }}
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setDeleteConfirmId(inv.id)}
+          {/* Scroll horizontal: con <main> a ancho completo en celular, una tabla mas
+              ancha que la pantalla se CORTA en silencio, porque globals.css le pone
+              `overflow-x: hidden` al body. Mismo patron que TablaPedidos. */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #f3f4f6' }}>
+                  {['Nombre', 'Email', 'Rol', 'Enviada', 'Expira', 'Acciones'].map(h => (
+                    <th key={h} style={{ color: '#9ca3af', fontSize: 11, textAlign: 'left', padding: '10px 18px', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 600 }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {invitaciones.map(inv => {
+                  const rc = roleConfig[inv.role] || { label: inv.role, color: '#6b7280', bg: '#f3f4f6' }
+                  const sentAgo = timeAgo(inv.created_at)
+                  const expiresIn = timeUntil(inv.expires_at)
+                  const isExpired = expiresIn === 'Expirada'
+                  return (
+                    <tr key={inv.id} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                      <td style={{ padding: '12px 18px', color: '#374151', fontSize: 13 }}>{inv.full_name}</td>
+                      <td style={{ padding: '12px 18px', color: '#6b7280', fontSize: 13 }}>{inv.email}</td>
+                      <td style={{ padding: '12px 18px' }}>
+                        <span style={{ background: rc.bg, color: rc.color, padding: '3px 10px', borderRadius: 99, fontSize: 11, fontWeight: 600 }}>{rc.label}</span>
+                      </td>
+                      <td style={{ padding: '12px 18px', color: '#6b7280', fontSize: 12 }}>
+                        {sentAgo.text}
+                      </td>
+                      <td style={{ padding: '12px 18px' }}>
+                        <span style={{ color: isExpired ? '#ef4444' : '#f59e0b', fontSize: 12, fontWeight: isExpired ? 600 : 400 }}>
+                          {isExpired ? 'Expirada' : `en ${expiresIn}`}
+                        </span>
+                      </td>
+                      <td style={{ padding: '12px 18px' }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <a href={`/api/admin/invitaciones/${inv.id}/reenviar`}
                             style={{
                               display: 'inline-flex', alignItems: 'center', gap: 4,
                               padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
-                              border: 'none', cursor: 'pointer',
-                              background: '#fef2f2', color: '#ef4444',
+                              textDecoration: 'none', background: '#f3f4f6', color: '#6b7280',
                             }}
                           >
-                            Eliminar
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13 M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+                            Reenviar
+                          </a>
+                          {deleteConfirmId === inv.id ? (
+                            <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
+                              <button
+                                onClick={() => handleDeleteInvitation(inv.id)}
+                                disabled={deleteLoading}
+                                style={{
+                                  padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 600,
+                                  border: 'none', cursor: 'pointer',
+                                  background: '#fef2f2', color: '#ef4444',
+                                  opacity: deleteLoading ? 0.5 : 1,
+                                }}
+                              >
+                                {deleteLoading ? '...' : 'Confirmar'}
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmId(null)}
+                                style={{
+                                  padding: '5px 8px', borderRadius: 6, fontSize: 11,
+                                  border: 'none', cursor: 'pointer',
+                                  background: '#f3f4f6', color: '#6b7280',
+                                }}
+                              >
+                                Cancelar
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => setDeleteConfirmId(inv.id)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: 4,
+                                padding: '5px 10px', borderRadius: 6, fontSize: 11, fontWeight: 500,
+                                border: 'none', cursor: 'pointer',
+                                background: '#fef2f2', color: '#ef4444',
+                              }}
+                            >
+                              Eliminar
+                            </button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
