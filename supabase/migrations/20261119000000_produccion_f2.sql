@@ -30,6 +30,20 @@
 -- Los tres pasan a `public.hoy_mx()`, y al final va el mismo guard para la
 -- vista nueva.
 --
+-- ── Una regla sobre los comentarios ──
+--
+-- Dentro del cuerpo de una funcion NO se puede escribir la palabra que nombra
+-- a la fecha del servidor en UTC. No es mania: el guard del bloque 8 revisa
+-- las funciones con `pg_get_functiondef`, que reconstruye el CREATE FUNCTION
+-- con el cuerpo VERBATIM —comentarios incluidos—, asi que un comentario que
+-- diga "usamos hoy_mx() y no <esa palabra>" hace que el guard se dispare
+-- contra si mismo y aborte la migracion completa. Ya paso una vez.
+--
+-- Las vistas no tienen el problema: `pg_get_viewdef` imprime la definicion
+-- reconstruida desde el arbol de parseo, y ahi los comentarios no sobreviven.
+--
+-- Aqui arriba, fuera de todo cuerpo de funcion, se puede nombrar sin riesgo.
+--
 -- ── Por que todo va en bloques `do` con su guard dentro ──
 --
 -- El SQL Editor de Supabase confirma statement por statement, asi que un
@@ -136,8 +150,11 @@ begin
       using errcode = 'check_violation';
   end if;
 
-  -- hoy_mx() y no current_date: un lote capturado la noche del 31 de
-  -- diciembre se folaria con el año siguiente.
+  -- hoy_mx() y no la fecha del servidor, que se evalua en UTC: un lote
+  -- capturado la noche del 31 de diciembre se foliaria con el año siguiente.
+  --
+  -- Esta nota NO nombra la funcion de UTC a proposito. Ver "Una regla sobre
+  -- los comentarios" en el encabezado.
   v_anio := (extract(year from coalesce(new.fecha_coccion, public.hoy_mx()))::int % 100)::smallint;
 
   insert into public.lote_folios (prefijo, anio, ultimo)
@@ -211,9 +228,13 @@ begin
   -- ── Mover ──
   v_etapa_de := l.etapa;
 
-  -- hoy_mx() y no current_date: envasar a las 19:00 CDMX estampaba la fecha
-  -- de mañana. `fecha_liberado` es timestamptz y se queda con now(), que no
-  -- tiene el problema (guarda el instante, no el dia).
+  -- hoy_mx() y no la fecha del servidor, que se evalua en UTC: envasar a las
+  -- 19:00 CDMX estampaba la fecha de mañana. `fecha_liberado` es timestamptz
+  -- y se queda con now(), que no tiene el problema (guarda el instante, no
+  -- el dia).
+  --
+  -- Esta nota NO nombra la funcion de UTC a proposito. Ver "Una regla sobre
+  -- los comentarios" en el encabezado.
   update public.lotes set
     etapa          = p_etapa,
     etapa_desde    = now(),
@@ -819,6 +840,12 @@ create policy "lta_select" on public.lote_tanque_asignaciones
 -- pedidos_saldo, ahora para las dos vistas de produccion. Si alguien vuelve
 -- a colar un current_date, esto aborta en vez de dejar un "hoy" en UTC que
 -- se equivoca seis horas cada noche.
+--
+-- OJO al revisar esto: `pg_get_functiondef` devuelve el cuerpo con sus
+-- COMENTARIOS, asi que el guard no distingue codigo de comentario. Por eso
+-- ningun cuerpo de funcion de este archivo puede nombrar la palabra; ver la
+-- regla del encabezado. Este bloque es un `do`, no una funcion, asi que
+-- `pg_get_functiondef` nunca lo mira y aqui la palabra es inofensiva.
 
 do $guard_fecha$
 declare
@@ -832,17 +859,24 @@ begin
     end if;
   end loop;
 
-  if pg_get_functiondef('public.avanzar_lote(uuid, public.lote_etapa, uuid, text)'::regprocedure) ilike '%current_date%' then
-    raise exception using
-      message = 'avanzar_lote quedo usando current_date (UTC) en vez de hoy_mx().',
-      hint    = 'Abortando: fecha_envasado se estamparia con el dia de mañana despues de las 18:00 CDMX.';
-  end if;
-
-  if pg_get_functiondef('public.lote_asigna_folio()'::regprocedure) ilike '%current_date%' then
-    raise exception using
-      message = 'lote_asigna_folio quedo usando current_date (UTC) en vez de hoy_mx().',
-      hint    = 'Abortando: el año del folio se adelantaria la noche del 31 de diciembre.';
-  end if;
+  -- TODAS las funciones del modulo, no solo las dos que la F1 tenia mal.
+  -- Antes esto no se podia: con la palabra en los comentarios de dos cuerpos,
+  -- ampliar el guard habria disparado mas falsos positivos. Ahora que ningun
+  -- cuerpo la nombra, cubrirlas todas sale gratis y protege a la siguiente.
+  foreach v in array array[
+    'public.avanzar_lote(uuid, public.lote_etapa, uuid, text)',
+    'public.lote_asigna_folio()',
+    'public.lote_sincroniza_asignacion()',
+    'public.aplicar_envasado_a_inventario(uuid, uuid)',
+    'public.fecha_mx(timestamptz)',
+    'public.hoy_mx()'
+  ] loop
+    if pg_get_functiondef(v::regprocedure) ilike '%current_date%' then
+      raise exception using
+        message = format('%s quedo usando current_date (UTC) en vez de hoy_mx().', v),
+        hint    = 'Abortando: el "hoy" se adelanta un dia entre las 18:00 y la medianoche de CDMX. Si esto salta por un COMENTARIO que nombra la palabra, el arreglo es quitarla del comentario: ver la regla del encabezado.';
+    end if;
+  end loop;
 
   -- El otro lado del mismo error: un `::date` crudo sobre un timestamptz
   -- castea en la zona de la sesion. En la vista tiene que ir fecha_mx().
