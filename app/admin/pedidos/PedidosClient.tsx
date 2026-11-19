@@ -39,7 +39,7 @@ import {
 const CSS = `
   .pd-tabla { display: block; }
   .pd-movil { display: none; }
-  .pd-herramientas { display: flex; }
+  .pd-herramientas { display: flex; flex-wrap: wrap; gap: 8px; }
   @media (max-width: 767px) {
     .pd-tabla { display: none; }
     .pd-movil { display: flex; flex-direction: column; gap: 10px; }
@@ -448,15 +448,20 @@ export default function PedidosClient(props: Props) {
     <div style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
       <style>{CSS}</style>
 
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
-        <div>
-          <h1 style={{ margin: '0 0 3px', color: TINTA, fontSize: 21, fontWeight: 700, letterSpacing: '-0.01em' }}>
-            Pedidos
-          </h1>
-          <p style={{ margin: 0, color: GRIS, fontSize: 12.5 }}>
-            {todas.length} en total · {moneda(totales.saldo)} por cobrar en el filtro
-          </p>
-        </div>
+      {/*
+        Sin <h1>: el host de pestañas (app/admin/pedidos/page.tsx) ya pinta
+        "Pedidos" con <Tabs titulo=...>, asi que este era un segundo titulo
+        identico tres pixeles abajo. Queda solo el subtitulo, alineado con los
+        botones.
+
+        `alignItems: center` en vez de flex-start porque ya no hay un titulo
+        que alinear por arriba: ahora son una linea de texto y una fila de
+        botones, y se leen mejor a la misma altura.
+      */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16, flexWrap: 'wrap' }}>
+        <p style={{ margin: 0, color: GRIS, fontSize: 12.5 }}>
+          {todas.length} en total · {moneda(totales.saldo)} por cobrar en el filtro
+        </p>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button type="button" onClick={exportar} disabled={!!trabajando} style={btn('#fff', TINTA_MEDIA, BORDE)}>
@@ -559,7 +564,23 @@ export default function PedidosClient(props: Props) {
         </div>
       </div>
 
-      <div className="pd-tabla" style={{ ...card, padding: '6px 14px 0', maxHeight: '72vh', overflowY: 'auto' }}>
+      {/*
+        `minWidth: 0` es lo que impide que esta tarjeta empuje el ancho de la
+        pagina. Sin el, un hijo ancho le da a la tarjeta un min-content
+        grande, la tarjeta se lo pasa a <main> —que es un item flex y por
+        defecto no encoge por debajo de su contenido— y el documento acaba
+        mas ancho que la ventana. En una ventana de 1200 px el area util son
+        872, y la tabla pide 1068.
+
+        `overflowX: 'auto'` explicito y no heredado: con solo `overflowY`, el
+        eje X computa a `auto` por la regla de CSS, pero dejarlo implicito
+        hace que el siguiente que lea esto crea que no hay scroll horizontal
+        aqui y lo agregue en otro lado.
+      */}
+      <div
+        className="pd-tabla"
+        style={{ ...card, padding: '6px 14px 0', maxHeight: '72vh', overflowY: 'auto', overflowX: 'auto', minWidth: 0 }}
+      >
         <TablaPedidos
           filas={filtradas}
           orden={orden}
