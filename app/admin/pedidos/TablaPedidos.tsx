@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import AccionEditarProductos from './AccionEditarProductos'
 import { etiquetaFecha } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
@@ -23,8 +23,17 @@ import {
  */
 
 type Columna = {
-  key: ColumnaOrden
+  /** Identidad visual de la columna. Ya no coincide con la de orden. */
+  key: string
   label: string
+  /**
+   * Por cual campo ordena al hacer click.
+   *
+   * Existe porque hay columnas FUSIONADAS: "Pedido" muestra folio y fecha, y
+   * "Saldo" muestra saldo, total y porcentaje. Una celda con dos datos no
+   * puede ordenar por los dos, asi que cada una declara cual manda.
+   */
+  ordenPor?: ColumnaOrden
   num?: boolean
   /** Ancho fijo. El cliente no lo lleva: es la columna que crece. */
   ancho?: number
@@ -32,9 +41,38 @@ type Columna = {
 }
 
 /** Lo que la columna de cliente nunca baja, aunque la ventana apriete. */
-const ANCHO_CLIENTE = 220
-const ANCHO_ACCIONES = 160
-const ANCHO_CHECK = 30
+const ANCHO_CLIENTE = 200
+const ANCHO_ACCIONES = 104
+const ANCHO_CHECK = 28
+
+/**
+ * Debajo de este ancho DE CONTENEDOR se esconden vendedor, litros y OC.
+ *
+ * Del contenedor y no de la ventana: la tabla no sabe —ni deberia— cuanto
+ * mide la pantalla. Lo que le importa es el hueco que le toca, y ese cambia
+ * tambien cuando alguien colapsa el sidebar o cuando la tabla se reusa en
+ * otro lado. Un media query de viewport acertaria hoy y mentiria mañana.
+ *
+ * El numero sale de medir, no de redondear a ojo:
+ *
+ *   completo  = 28 check + 104 pedido + 200 cliente + 104 vendedor
+ *             + 72 litros + 152 saldo + 124 estado + 88 OC + 104 acciones
+ *             = 976 px
+ *
+ *   contenedor a 1440 de ventana = 1440 - 240 sidebar - 88 padding del main
+ *             - 28 padding de la tarjeta - 2 de borde = 1082 px
+ *
+ * Asi que el umbral tiene que caer entre 976 y 1082. 1040 deja 64 px de
+ * respiro antes de apretar y 106 de sobra para que el cliente crezca.
+ *
+ * Un umbral de 1150 —el primer intento— quedaba POR ENCIMA de los 1082 que
+ * da una pantalla de 1440, asi que las tres columnas no habrian vuelto a
+ * aparecer nunca.
+ */
+export const ANCHO_COMPACTO = 1040
+
+/** Las que se esconden por ancho. Las demas opcionales solo miran si hay dato. */
+const OCULTA_POR_ANCHO: ReadonlySet<ColumnaOpcional> = new Set(['vendedor', 'litros', 'orden_compra'])
 
 /**
  * Los anchos.
@@ -45,17 +83,21 @@ const ANCHO_CHECK = 30
  * tres opcionales prendidas no entra, y para eso esta el boton de Columnas.
  */
 const COLUMNAS: Columna[] = [
-  { key: 'folio', label: 'Folio', ancho: 74 },
-  { key: 'fecha_pedido', label: 'Fecha', ancho: 92 },
-  { key: 'cliente', label: 'Cliente' },
-  { key: 'vendedor', label: 'Vendedor', ancho: 110, opcional: 'vendedor' },
-  { key: 'litros', label: 'Litros', num: true, ancho: 78 },
-  { key: 'total', label: 'Total', num: true, ancho: 92 },
-  { key: 'cobrado', label: 'Cobrado', num: true, ancho: 92 },
-  { key: 'saldo', label: 'Saldo', num: true, ancho: 112 },
-  { key: 'estado', label: 'Estado', ancho: 118 },
-  { key: 'entrega', label: 'Entrega', ancho: 96, opcional: 'entrega' },
-  { key: 'orden_compra', label: 'OC', ancho: 92, opcional: 'orden_compra' },
+  // Folio y fecha en una celda: son la identidad del pedido y nadie lee una
+  // sin la otra. Ordena por fecha, que es el orden que se busca; el folio es
+  // correlativo, asi que ordenar por folio daba casi lo mismo.
+  { key: 'pedido', label: 'Pedido', ordenPor: 'fecha_pedido', ancho: 104 },
+  { key: 'cliente', label: 'Cliente', ordenPor: 'cliente' },
+  { key: 'vendedor', label: 'Vendedor', ordenPor: 'vendedor', ancho: 104, opcional: 'vendedor' },
+  { key: 'litros', label: 'Litros', ordenPor: 'litros', num: true, ancho: 72, opcional: 'litros' },
+  // Total, cobrado y saldo eran tres columnas con el mismo dinero contado de
+  // tres formas. Lo que se decide con esta tabla es a quien hay que cobrarle,
+  // asi que manda el saldo y los otros dos bajan a la linea de contexto.
+  { key: 'saldo', label: 'Saldo', ordenPor: 'saldo', num: true, ancho: 152 },
+  // Estado y entrega juntos: la fecha de entrega solo se lee para saber en
+  // que punto va el pedido, que es lo que dice el badge.
+  { key: 'estado', label: 'Estado', ordenPor: 'estado', ancho: 124 },
+  { key: 'oc', label: 'OC', ordenPor: 'orden_compra', ancho: 88, opcional: 'orden_compra' },
 ]
 
 /** Primera vez: lo grande y lo reciente primero, que es lo que se busca. */
@@ -80,8 +122,17 @@ type Props = {
   filas: FilaPedido[]
   orden: Orden
   onOrden: (o: Orden) => void
-  /** Que opcionales se pintan. Lo decide el padre: dato + preferencia. */
+  /** Que opcionales se pintan. Lo decide el padre: dato + preferencia + ancho. */
   columnas: Record<ColumnaOpcional, boolean>
+  /**
+   * El ancho del contenedor, hacia arriba.
+   *
+   * La medicion ocurre aqui —es este div el que se estira— pero la DECISION
+   * vive en el padre, junto al menu de Columnas. Si cada uno resolviera por
+   * su cuenta, el menu diria que Vendedor esta prendida y la tabla no la
+   * pintaria.
+   */
+  onAncho: (px: number) => void
   /** El pedido con el panel abierto, para marcar su fila. */
   abierta: string | null
   onAbrir: (id: string) => void
@@ -96,8 +147,30 @@ type Props = {
 export default function TablaPedidos(props: Props) {
   const {
     filas, orden, onOrden, columnas, abierta, onAbrir,
-    seleccion, onSeleccion, canEdit, onPago, onStatus, onEditarPartidas,
+    seleccion, onSeleccion, canEdit, onPago, onStatus, onEditarPartidas, onAncho,
   } = props
+
+  /**
+   * Mide el contenedor con ResizeObserver, no con un media query.
+   *
+   * Un media query solo sabe de la ventana, y el hueco de la tabla cambia
+   * tambien al colapsar el sidebar. Observar el propio contenedor es lo
+   * unico que acierta en los dos casos.
+   *
+   * No hay bucle: este div es 100% de la tarjeta, asi que su ancho no
+   * depende de cuantas columnas se pinten dentro.
+   */
+  const contenedor = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = contenedor.current
+    if (!el) return
+    onAncho(el.clientWidth)
+    const ro = new ResizeObserver(entradas => {
+      for (const e of entradas) onAncho(Math.round(e.contentRect.width))
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [onAncho])
 
   /** El menu de la fila, anclado al boton en coordenadas de ventana. */
   const [menu, setMenu] = useState<{ fila: FilaPedido; x: number; y: number } | null>(null)
@@ -135,14 +208,18 @@ export default function TablaPedidos(props: Props) {
     onSeleccion(s)
   }
 
-  const clickHeader = (c: ColumnaOrden) => {
+  const clickHeader = (c?: ColumnaOrden) => {
+    if (!c) return
     if (orden.columna === c) onOrden({ columna: c, asc: !orden.asc })
     else onOrden({ columna: c, asc: !DESC_PRIMERO.includes(c) })
   }
 
   const th: React.CSSProperties = {
     position: 'sticky', top: 0, zIndex: 2, background: '#fff',
-    padding: '9px 8px', fontSize: 10, fontWeight: 600, color: GRIS_SUAVE,
+    // 5 px por lado y no 8: son 10 px de ancho horizontal por celda en vez
+    // de 16, y con siete columnas eso son 42 px que se le devuelven al
+    // cliente, que es la unica que de verdad los necesita.
+    padding: '9px 5px', fontSize: 10, fontWeight: 600, color: GRIS_SUAVE,
     textTransform: 'uppercase', letterSpacing: '0.06em',
     borderBottom: `1px solid ${BORDE}`, whiteSpace: 'nowrap', cursor: 'pointer',
     userSelect: 'none', overflow: 'hidden',
@@ -150,7 +227,7 @@ export default function TablaPedidos(props: Props) {
   // `overflow: hidden` porque con table-layout fixed lo que no cabe se
   // derrama sobre la celda de al lado en vez de ensanchar la columna.
   const td: React.CSSProperties = {
-    padding: '6px 8px', fontSize: 12.5, borderBottom: `1px solid ${PISTA}`,
+    padding: '6px 5px', fontSize: 12.5, borderBottom: `1px solid ${PISTA}`,
     color: TINTA_MEDIA, whiteSpace: 'nowrap', overflow: 'hidden',
   }
 
@@ -168,12 +245,12 @@ export default function TablaPedidos(props: Props) {
    * equivocada. Solo se juntan las de la izquierda del primer numero, que es
    * donde va el conteo.
    */
-  const iLitros = visibles.findIndex(c => c.key === 'litros')
-  const corte = iLitros < 0 ? visibles.length : iLitros
-  const pieNumero: Partial<Record<ColumnaOrden, { texto: string; color: string }>> = {
+  const iPrimerNumero = visibles.findIndex(c => c.key === 'litros' || c.key === 'saldo')
+  const corte = iPrimerNumero < 0 ? visibles.length : iPrimerNumero
+  // Indexado por la clave VISUAL de la columna, que desde la fusion ya no
+  // coincide con la de orden: el total y lo cobrado viven bajo "saldo".
+  const pieNumero: Record<string, { texto: string; color: string }> = {
     litros: { texto: formatLitros(totales.litros), color: GRIS },
-    total: { texto: moneda(totales.total), color: TINTA },
-    cobrado: { texto: moneda(totales.cobrado), color: '#047857' },
     saldo: { texto: moneda(totales.saldo), color: totales.saldo > 0 ? ACENTO : GRIS_SUAVE },
   }
   const pie: React.CSSProperties = {
@@ -189,7 +266,10 @@ export default function TablaPedidos(props: Props) {
     // `minWidth: 0`: un contenedor de scroll sigue reportando el min-content
     // de su contenido a un padre flex, y con la tabla en 1068 px eso hacia
     // que <main> se negara a encoger en una ventana de 1200.
-    <div style={{ overflowX: 'auto', minWidth: 0 }}>
+    // El scroll horizontal se queda de red de seguridad: con las columnas
+    // fusionadas la tabla cabe desde ~1100 px de ventana, y por debajo de eso
+    // scrollea aqui adentro en vez de empujar la pagina.
+    <div ref={contenedor} style={{ overflowX: 'auto', minWidth: 0 }}>
       <style>{CSS}</style>
       {/*
         `table-layout: fixed` y no auto: es lo que le da ancho DEFINIDO a la
@@ -213,12 +293,12 @@ export default function TablaPedidos(props: Props) {
               </th>
             )}
             {visibles.map(c => {
-              const activa = orden.columna === c.key
+              const activa = !!c.ordenPor && orden.columna === c.ordenPor
               return (
                 <th
                   key={c.key}
-                  onClick={() => clickHeader(c.key)}
-                  title={`Ordenar por ${c.label.toLowerCase()}`}
+                  onClick={() => clickHeader(c.ordenPor)}
+                  title={c.ordenPor ? `Ordenar por ${c.label.toLowerCase()}` : undefined}
                   style={{
                     ...th,
                     // El cliente se queda con todo el sobrante: es el dato
@@ -276,11 +356,15 @@ export default function TablaPedidos(props: Props) {
                   </td>
                 )}
 
+                {/* Pedido: folio arriba, fecha abajo. */}
                 <td style={td}>
-                  <span className="font-mono" style={{ color: TINTA, fontWeight: 600 }}>{f.folio}</span>
+                  <span className="font-mono" style={{ display: 'block', color: TINTA, fontWeight: 600 }}>
+                    {f.folio}
+                  </span>
+                  <span style={{ ...tabular, display: 'block', marginTop: 1, color: GRIS_SUAVE, fontSize: 10.5 }}>
+                    {etiquetaFecha(f.fecha_pedido)}
+                  </span>
                 </td>
-
-                <td style={{ ...td, ...tabular }}>{etiquetaFecha(f.fecha_pedido)}</td>
 
                 <td style={{ ...td, width: '100%', minWidth: ANCHO_CLIENTE, overflow: 'hidden' }}>
                   <span
@@ -305,19 +389,48 @@ export default function TablaPedidos(props: Props) {
                   </td>
                 )}
 
-                <td style={{ ...td, ...tabular, textAlign: 'right', color: GRIS }}>
-                  {f.litros > 0 ? formatLitros(f.litros) : '—'}
-                </td>
+                {columnas.litros && (
+                  <td style={{ ...td, ...tabular, textAlign: 'right', color: GRIS }}>
+                    {f.litros > 0 ? formatLitros(f.litros) : '—'}
+                  </td>
+                )}
 
-                <td style={{ ...td, ...tabular, textAlign: 'right', color: TINTA, fontWeight: 600 }}>
-                  {moneda(f.total)}
+                {/*
+                  Saldo, con total y avance debajo.
+                  Eran tres columnas —Total, Cobrado, Saldo— con el mismo
+                  dinero contado de tres maneras. Lo que se decide mirando
+                  esta tabla es a quien cobrarle, asi que manda el saldo y el
+                  resto baja a una linea de contexto que se lee de corrido:
+                  "de $12,000 · 40% cobrado".
+                */}
+                <td style={{ ...td, textAlign: 'right' }}>
+                  <span
+                    style={{
+                      ...tabular, display: 'block', fontSize: 13.5,
+                      color: f.saldo > 0 ? (f.dias_vencido > 0 ? ROJO : TINTA) : GRIS_SUAVE,
+                      fontWeight: f.saldo > 0 ? 700 : 400,
+                    }}
+                    title={f.dias_vencido > 0 ? `Vencido hace ${f.dias_vencido} dia(s)` : undefined}
+                  >
+                    {f.saldo > 0 ? moneda(f.saldo) : 'Pagado'}
+                  </span>
+
+                  {f.total > 0 && (
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end', marginTop: 2 }}>
+                      <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 10 }}>
+                        de {moneda(f.total)} · {Math.round(f.pctCobrado)}%
+                      </span>
+                      <span style={{ width: 34, height: 3, background: PISTA, borderRadius: 2, overflow: 'hidden', flexShrink: 0 }}>
+                        <span style={{ display: 'block', width: `${f.pctCobrado}%`, height: '100%', background: f.pctCobrado >= 100 ? '#047857' : ACENTO, borderRadius: 2 }} />
+                      </span>
+                    </span>
+                  )}
+
                   {/* El total es con IVA. Sin esta linea, dos pedidos de la
-                      misma mercancia se ven como precios distintos. Y dice
-                      "parcial" cuando solo algunas partidas van gravadas,
-                      porque "IVA incl." a secas se leeria como todo. */}
+                      misma mercancia se ven como precios distintos. */}
                   {f.iva > 0 && (
                     <span
-                      style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}
+                      style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5 }}
                       title={`Incluye ${monedaExacta(f.iva)} de IVA sobre una base de ${monedaExacta(f.base_gravable)}`}
                     >
                       {f.incluye_iva ? 'IVA incl.' : `IVA en ${f.partidas_con_iva}/${f.items.length}`}
@@ -335,30 +448,12 @@ export default function TablaPedidos(props: Props) {
                   )}
                 </td>
 
-                <td style={{ ...td, ...tabular, textAlign: 'right', color: f.cobrado > 0 ? '#047857' : GRIS_SUAVE }}>
-                  {f.cobrado > 0 ? moneda(f.cobrado) : '—'}
-                </td>
-
-                {/* Saldo con barrita de avance: el numero dice cuanto falta,
-                    la barra dice que tan lejos esta de cerrarse. */}
-                <td style={{ ...td, textAlign: 'right' }}>
-                  <span style={{ ...tabular, display: 'block', color: f.saldo > 0 ? (f.dias_vencido > 0 ? ROJO : TINTA_MEDIA) : GRIS_SUAVE, fontWeight: f.saldo > 0 ? 600 : 400 }}>
-                    {f.saldo > 0 ? moneda(f.saldo) : '—'}
-                  </span>
-                  {f.total > 0 && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, justifyContent: 'flex-end', marginTop: 3 }}>
-                      <span style={{ width: 54, height: 3, background: PISTA, borderRadius: 2, overflow: 'hidden' }}>
-                        <span style={{ display: 'block', width: `${f.pctCobrado}%`, height: '100%', background: f.pctCobrado >= 100 ? '#047857' : ACENTO, borderRadius: 2 }} />
-                      </span>
-                      <span style={{ ...tabular, color: GRIS_SUAVE, fontSize: 9.5, minWidth: 26, textAlign: 'right' }}>
-                        {Math.round(f.pctCobrado)}%
-                      </span>
-                    </span>
-                  )}
-                </td>
-
-                {/* Un solo chip: gana el estado que pide accion, el otro
-                    dato baja en gris. */}
+                {/*
+                  Estado con la entrega debajo.
+                  La fecha de entrega casi nunca se lee sola: se lee para
+                  saber en que punto va el pedido, que es lo que dice el
+                  badge. Juntas ocupan una columna en vez de dos.
+                */}
                 <td style={td}>
                   <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 99, background: es.fondo, color: es.color, fontSize: 10.5, fontWeight: 600, whiteSpace: 'nowrap' }}>
                     {es.label}
@@ -368,17 +463,17 @@ export default function TablaPedidos(props: Props) {
                       {es.sub}
                     </span>
                   )}
+                  {(f.fecha_entrega_real || f.fecha_entrega) && (
+                    <span
+                      style={{ ...tabular, display: 'block', marginTop: 1, fontSize: 10, color: f.fecha_entrega_real ? '#047857' : GRIS_SUAVE }}
+                      title={f.fecha_entrega_real ? 'Entregado' : 'Entrega programada'}
+                    >
+                      {f.fecha_entrega_real
+                        ? `entregado ${etiquetaFecha(f.fecha_entrega_real)}`
+                        : `entrega ${etiquetaFecha(f.fecha_entrega)}`}
+                    </span>
+                  )}
                 </td>
-
-                {columnas.entrega && (
-                  <td style={{ ...td, ...tabular, color: f.fecha_entrega_real ? '#047857' : GRIS }}>
-                    {f.fecha_entrega_real
-                      ? etiquetaFecha(f.fecha_entrega_real)
-                      : f.fecha_entrega
-                        ? <span title="Programada">{etiquetaFecha(f.fecha_entrega)}</span>
-                        : '—'}
-                  </td>
-                )}
 
                 {columnas.orden_compra && (
                   <td style={{ ...td, color: f.orden_compra ? TINTA_MEDIA : GRIS_SUAVE, maxWidth: 92, overflow: 'hidden', textOverflow: 'ellipsis' }} title={f.orden_compra || ''}>
@@ -394,13 +489,17 @@ export default function TablaPedidos(props: Props) {
                       <button
                         type="button"
                         onClick={() => onPago(f)}
+                        // "Pagar" y no "Registrar pago": el texto largo pedia
+                        // 160 px de columna. El title conserva la frase
+                        // completa para que no se pierda el significado.
+                        title={`Registrar pago de ${f.folio}`}
                         style={{
-                          padding: '5px 10px', background: '#fff', border: `1px solid ${ACENTO}`,
+                          padding: '4px 9px', background: '#fff', border: `1px solid ${ACENTO}`,
                           borderRadius: 6, color: ACENTO, fontSize: 11, fontWeight: 600,
                           cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >
-                        Registrar pago
+                        Pagar
                       </button>
                     )}
                     <button
@@ -448,13 +547,19 @@ export default function TablaPedidos(props: Props) {
                   }}
                 >
                   {v?.texto}
-                  {/* Cuanto del total del filtro es IVA, cuando hay. */}
-                  {c.key === 'total' && totales.iva > 0 && (
+                  {/* Bajo el saldo va el mismo contexto que en cada fila:
+                      de cuanto es el total del filtro y cuanto se cobro. */}
+                  {c.key === 'saldo' && (
+                    <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}>
+                      de {moneda(totales.total)} · {moneda(totales.cobrado)} cobrado
+                    </span>
+                  )}
+                  {c.key === 'saldo' && totales.iva > 0 && (
                     <span style={{ display: 'block', color: GRIS_SUAVE, fontSize: 9.5, fontWeight: 400 }}>
                       {moneda(totales.iva)} de IVA
                     </span>
                   )}
-                  {c.key === 'total' && totales.ajuste !== 0 && (
+                  {c.key === 'saldo' && totales.ajuste !== 0 && (
                     <span style={{ display: 'block', color: ACENTO, fontSize: 9.5, fontWeight: 600 }}>
                       {monedaFirmada(totales.ajuste)} de ajuste
                     </span>

@@ -5,7 +5,7 @@ import { etiquetaFecha } from '../../../src/lib/fechas'
 import { formatLitros } from '../../../src/lib/unidades'
 import ImportarExcel from './ImportarExcel'
 import FiltrosPedidos from './FiltrosPedidos'
-import TablaPedidos from './TablaPedidos'
+import TablaPedidos, { ANCHO_COMPACTO } from './TablaPedidos'
 import DrawerPago from './DrawerPago'
 import PanelPedido from './PanelPedido'
 import EditarPartidas from './EditarPartidas'
@@ -49,7 +49,7 @@ const CSS = `
 
 const ETIQUETA_COLUMNA: Record<ColumnaOpcional, string> = {
   vendedor: 'Vendedor',
-  entrega: 'Entrega',
+  litros: 'Litros',
   orden_compra: 'OC',
 }
 
@@ -169,11 +169,32 @@ export default function PedidosClient(props: Props) {
    * prenderla cada vez que se entra.
    */
   const conDato = useMemo(() => columnasConDato(filtradas), [filtradas])
+
+  /**
+   * El ancho del contenedor de la tabla, que reporta TablaPedidos.
+   *
+   * La decision de que columnas se pintan vive aqui y no alla porque el menu
+   * de Columnas esta aqui: con la regla duplicada, el menu podria decir que
+   * Vendedor esta prendida mientras la tabla no la pinta.
+   *
+   * Arranca en 0 = "todavia no se midio", y en ese estado NO se esconde
+   * nada: esconder columnas en el primer render y devolverlas un frame
+   * despues es un parpadeo gratis.
+   */
+  const [anchoTabla, setAnchoTabla] = useState(0)
+  const apretado = anchoTabla > 0 && anchoTabla < ANCHO_COMPACTO
+
   const columnas = useMemo(
     () => Object.fromEntries(
-      COLUMNAS_OPCIONALES.map(k => [k, colsPref[k] ?? conDato[k]])
+      COLUMNAS_OPCIONALES.map(k => [
+        k,
+        // La preferencia explicita gana SIEMPRE, sobre el dato y sobre el
+        // ancho: si alguien prendio Vendedor es porque la quiere ver, y que
+        // se la escondamos por 30 px de ventana seria pelearle al usuario.
+        colsPref[k] ?? (conDato[k] && !apretado),
+      ])
     ) as Record<ColumnaOpcional, boolean>,
-    [colsPref, conDato]
+    [colsPref, conDato, apretado]
   )
 
   const alternarColumna = (k: ColumnaOpcional) =>
@@ -582,6 +603,7 @@ export default function PedidosClient(props: Props) {
         style={{ ...card, padding: '6px 14px 0', maxHeight: '72vh', overflowY: 'auto', overflowX: 'auto', minWidth: 0 }}
       >
         <TablaPedidos
+          onAncho={setAnchoTabla}
           filas={filtradas}
           orden={orden}
           onOrden={setOrden}
