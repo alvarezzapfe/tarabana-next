@@ -475,18 +475,28 @@ export type ColumnaOrden =
 /**
  * Las columnas que se esconden solas.
  *
- * Vendedor, entrega y OC vienen vacias en la mayoria de los filtros, y una
- * columna de guiones no informa: solo le quita ancho al cliente. Se ocultan
- * cuando NINGUNA fila del filtro las trae, y el boton de Columnas las
- * fuerza.
+ * Vendedor, litros y OC vienen vacias o son secundarias en la mayoria de los
+ * filtros, y una columna de guiones no informa: solo le quita ancho al
+ * cliente. Se ocultan por dos razones distintas, y las dos las pisa el boton
+ * de Columnas:
+ *
+ *   1. Cuando NINGUNA fila del filtro trae el dato.
+ *   2. Cuando el contenedor de la tabla no da el ancho (ver
+ *      ANCHO_COMPACTO en TablaPedidos).
+ *
+ * `entrega` ya no esta: ahora vive dentro de la celda de Estado, asi que no
+ * es una columna que se pueda prender o apagar. Una preferencia guardada con
+ * esa llave simplemente se ignora.
  */
-export const COLUMNAS_OPCIONALES = ['vendedor', 'entrega', 'orden_compra'] as const
+export const COLUMNAS_OPCIONALES = ['vendedor', 'litros', 'orden_compra'] as const
 
 export type ColumnaOpcional = (typeof COLUMNAS_OPCIONALES)[number]
 
 const TRAE_DATO: Record<ColumnaOpcional, (f: FilaPedido) => boolean> = {
   vendedor: f => !!f.vendedor,
-  entrega: f => !!(f.fecha_entrega_real || f.fecha_entrega),
+  // Litros SIEMPRE trae dato en un pedido con partidas, asi que por "dato"
+  // nunca se esconde: la que la esconde es la regla de ancho.
+  litros: f => f.litros > 0,
   orden_compra: f => !!f.orden_compra,
 }
 

@@ -13,7 +13,6 @@
  */
 import { chromium } from 'playwright'
 import { writeFileSync } from 'node:fs'
-import { createInterface } from 'node:readline'
 
 const DESTINO = '.playwright-session.json'
 const BASE = process.env.SHOTS_BASE || 'http://localhost:3000'
@@ -25,28 +24,47 @@ const pagina = await contexto.newPage()
 await pagina.goto(`${BASE}/tierra-mojada`)
 
 console.log('')
-console.log('  Se abrio un Chromium. Inicia sesion ahi (incluido el codigo MFA)')
-console.log(`  hasta que veas el panel en ${BASE}/admin`)
+console.log('  Se abrio un Chromium. Inicia sesion ahi, con tu MFA, hasta')
+console.log(`  que veas el panel en ${BASE}/admin`)
 console.log('')
-console.log('  Cuando ya estes dentro, vuelve aqui y aprieta Enter.')
+console.log('  No hay que apretar nada: en cuanto detecte que estas dentro,')
+console.log('  guarda la sesion y cierra el navegador solo.')
 console.log('')
 
-await new Promise(resolve => {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-  rl.question('  Enter cuando estes dentro del panel: ', () => { rl.close(); resolve() })
-})
+/*
+ * Se detecta por la URL y no con un Enter en la terminal.
+ *
+ * La version anterior pedia Enter, y eso la volvia inservible en cuanto el
+ * proceso pasaba a segundo plano: ahi ya no hay teclado conectado, el script
+ * se quedaba esperando para siempre y la sesion nunca se guardaba.
+ */
+const LIMITE_MS = 10 * 60 * 1000
+const inicio = Date.now()
+let dentro = false
+
+while (Date.now() - inicio < LIMITE_MS) {
+  const url = pagina.url()
+  // /admin, pero no el portal ni el verificador de MFA: esos son escalas.
+  if (/\/admin(\/|$|\?)/.test(url) && !url.includes('/verificar')) {
+    // Un respiro para que terminen de asentarse las cookies de la sesion.
+    await pagina.waitForTimeout(1500)
+    dentro = true
+    break
+  }
+  await pagina.waitForTimeout(1000)
+}
+
+if (!dentro) {
+  console.log('  Se acabo el tiempo sin detectar /admin. No se guardo nada.')
+  await navegador.close()
+  process.exit(1)
+}
 
 const estado = await contexto.storageState()
 writeFileSync(DESTINO, JSON.stringify(estado, null, 2))
 
-const url = pagina.url()
 console.log('')
-console.log(`  Sesion guardada en ${DESTINO}`)
-console.log(`  Ultima URL del navegador: ${url}`)
-if (!url.includes('/admin')) {
-  console.log('')
-  console.log('  OJO: la URL no es de /admin, asi que puede que la sesion no haya')
-  console.log('  quedado completa. Si los screenshots salen del portal, vuelve a correr esto.')
-}
+console.log(`  Sesion guardada en ${DESTINO}  (detectado en ${pagina.url()})`)
+console.log(`  ${estado.cookies.length} cookies`)
 
 await navegador.close()
