@@ -228,12 +228,36 @@ export const TEXTO_ALERTA: Record<NivelAlerta, string> = {
   rojo: '#b91c1c',
 }
 
+/** Fondo de un chip de alerta. El tinte mas claro de cada nivel. */
+export const FONDO_ALERTA: Record<NivelAlerta, string> = {
+  ninguna: '#f9fafb',
+  ambar: '#fffbeb',
+  rojo: '#fef2f2',
+}
+
 /** Fondo de la columna del kanban. Neutro: la senal va en las tarjetas. */
 export const COLUMNA_FONDO = PISTA
 
 export const etiquetaEtapa = (e: Etapa): string => ETAPA_LABEL[e] ?? e
 
 // ── Estilos compartidos ─────────────────────────────────────
+
+/**
+ * Texto que se recorta en vez de ensanchar a su contenedor.
+ *
+ * El `minWidth: 0` no es decorativo: sin el, un item de flex o de grid se
+ * niega a encoger por debajo del `min-content` de su contenido, y entonces un
+ * nombre de producto largo empuja la columna entera. Es la misma causa raiz
+ * del desborde de Pedidos, que se arreglo con el `minWidth: 0` de <main>
+ * (app/admin/layout.tsx:130, con la explicacion larga). El `overflow: hidden`
+ * es lo que habilita la elipsis.
+ */
+export const ELIPSIS = {
+  minWidth: 0,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap',
+} as const
 
 export const inputBase = {
   width: '100%',
