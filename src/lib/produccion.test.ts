@@ -5,8 +5,8 @@ import {
   mermaDelPeriodo, ventanaDias, litrosDeEnvasado, historicoCsv,
   filtrarHistorico, fmtDias, fmtGravedad, FILTRO_VACIO,
   type FilaHistorico, type LoteParaAvance,
-  textoMotivo, textosMotivos, pesoAlerta, hayAlerta,
-  diasObjetivoEtapa, diasObjetivoTotal, diasRestantes, litrosEnCamino, barraEnVentana,
+  textoMotivo, textosMotivos, pesoAlerta, hayAlerta, motivosChip, progresoEtapa,
+  MOTIVO_ALERTA, diasObjetivoEtapa, diasObjetivoTotal, diasRestantes, litrosEnCamino, barraEnVentana,
   type DiasReceta, type LoteEnCamino,
 } from './produccion.ts'
 import { LITROS_POR_LATA } from './unidades.ts'
@@ -546,4 +546,75 @@ test('una receta incompleta no da restantes parciales', () => {
 
 test('sin receta no hay restantes', () => {
   assert.equal(diasRestantes('fermentacion', null), null)
+})
+
+// ── F2: chips de alerta ─────────────────────────────────────
+
+test('el chip trae el texto corto y la frase completa', () => {
+  const [c] = motivosChip(['etapa_vencida'])
+  assert.equal(c.clave, 'etapa_vencida')
+  assert.equal(c.corto, 'Etapa vencida')
+  assert.equal(c.largo, 'Lleva más días de los planeados en esta etapa')
+})
+
+test('un motivo sin texto corto cae al largo y no desaparece', () => {
+  // Misma regla que textoMotivo: una clave nueva se tiene que ver en
+  // pantalla, aunque se vea fea, para que alguien la traduzca.
+  const [c] = motivosChip(['clave_que_no_existe'])
+  assert.equal(c.corto, 'clave_que_no_existe')
+  assert.equal(c.largo, 'clave_que_no_existe')
+})
+
+test('todos los motivos que traduce MOTIVO_ALERTA tienen chip corto', () => {
+  // Si se agrega un motivo a la vista y a MOTIVO_ALERTA pero no a
+  // MOTIVO_CHIP, el chip queda con la frase larga y rompe la tarjeta.
+  for (const clave of Object.keys(MOTIVO_ALERTA)) {
+    const [c] = motivosChip([clave])
+    assert.notEqual(c.corto, c.largo, `falta el chip corto de ${clave}`)
+    // 16 es lo que cabe en una columna del tablero con las cinco etapas
+    // ocupadas a 1100 px de ventana. Mas largo y el chip sale recortado.
+    assert.ok(c.corto.length <= 16, `el chip de ${clave} es muy largo: ${c.corto}`)
+  }
+})
+
+test('los chips conservan el orden de la vista y un null da lista vacia', () => {
+  assert.deepEqual(
+    motivosChip(['sin_lectura_48h', 'merma_alta']).map(c => c.corto),
+    ['Sin lectura 48 h', 'Merma > 10%']
+  )
+  assert.deepEqual(motivosChip(null), [])
+  assert.deepEqual(motivosChip(undefined), [])
+})
+
+// ── F2: progreso de la etapa ────────────────────────────────
+
+test('el dia se cuenta desde 1: el dia de entrada es el primero, no el cero', () => {
+  const p = progresoEtapa(0, 7)
+  assert.equal(p!.dia, 1)
+  assert.equal(p!.objetivo, 7)
+})
+
+test('la barra se llena en proporcion y se topa en 1', () => {
+  assert.equal(progresoEtapa(0, 4)!.fraccion, 0.25)   // dia 1 de 4
+  assert.equal(progresoEtapa(3, 4)!.fraccion, 1)      // dia 4 de 4
+  assert.equal(progresoEtapa(40, 4)!.fraccion, 1)     // dia 41 de 4, no 10.25
+})
+
+test('los umbrales de color espejan etapa_vencida y etapa_muy_vencida de SQL', () => {
+  // La regla de la vista es sobre dias_en_etapa, no sobre el dia que se
+  // muestra: ambar cuando dias > objetivo, rojo cuando dias > objetivo * 2.
+  assert.equal(progresoEtapa(7, 7)!.nivel, 'ninguna')  // dia 8 de 7, todavia no
+  assert.equal(progresoEtapa(8, 7)!.nivel, 'ambar')
+  assert.equal(progresoEtapa(14, 7)!.nivel, 'ambar')
+  assert.equal(progresoEtapa(15, 7)!.nivel, 'rojo')
+})
+
+test('sin objetivo no hay barra: planeado y los lotes sin receta', () => {
+  assert.equal(progresoEtapa(3, null), null)
+})
+
+test('un objetivo de 0 no divide entre cero', () => {
+  // La receta lo permite: `coalesce(dias_envasado, 0) >= 0` en la migracion.
+  assert.equal(progresoEtapa(0, 0), null)
+  assert.equal(progresoEtapa(5, 0), null)
 })

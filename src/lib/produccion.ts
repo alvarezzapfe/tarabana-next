@@ -353,6 +353,30 @@ export const MOTIVO_ALERTA: Record<string, string> = {
 }
 
 /**
+ * El mismo motivo, en corto, para el chip de una tarjeta del kanban.
+ *
+ * Existe aparte y no como un `slice()` del texto largo porque una frase
+ * recortada a la mitad no es una etiqueta: "Lleva mas dias de los pla..." no
+ * dice nada que "Etapa vencida" no diga mejor en un tercio del ancho. La
+ * frase completa sigue viajando en el `title` del chip, y el contexto la
+ * respalda — al lado del chip esta la barra de progreso en "Dia 12 de 7".
+ *
+ * Las claves son las MISMAS que MOTIVO_ALERTA; si se agrega una alla sin
+ * agregarla aqui, el chip cae al texto largo y se nota.
+ *
+ * Tope practico: 16 caracteres. Es lo que cabe en una columna del kanban con
+ * las cinco etapas ocupadas en una ventana de 1100 px (145 px de columna, 107
+ * de contenido). Arriba de eso el chip se recorta solo. Lo cuida una prueba.
+ */
+export const MOTIVO_CHIP: Record<string, string> = {
+  sin_lectura_48h: 'Sin lectura 48 h',
+  etapa_vencida: 'Etapa vencida',
+  etapa_muy_vencida: 'Muy vencida',
+  fg_fuera_rango: 'FG fuera',
+  merma_alta: 'Merma > 10%',
+}
+
+/**
  * Texto de un motivo. Un motivo desconocido se devuelve tal cual y no se
  * esconde: si la vista empieza a emitir una clave nueva, se tiene que ver en
  * la pantalla para que alguien la traduzca, no desaparecer en silencio.
@@ -361,6 +385,24 @@ export const textoMotivo = (clave: string): string => MOTIVO_ALERTA[clave] ?? cl
 
 export function textosMotivos(motivos: string[] | null | undefined): string[] {
   return (motivos ?? []).map(textoMotivo)
+}
+
+/** Un motivo listo para pintar como chip: el corto y la frase completa. */
+export type MotivoChip = { clave: string; corto: string; largo: string }
+
+/**
+ * Los motivos de un lote, en corto y en largo.
+ *
+ * Una clave sin texto corto cae al largo en LOS DOS campos, por la misma
+ * razon que `textoMotivo`: un motivo nuevo tiene que verse feo en pantalla,
+ * no desaparecer.
+ */
+export function motivosChip(motivos: string[] | null | undefined): MotivoChip[] {
+  return (motivos ?? []).map(clave => ({
+    clave,
+    corto: MOTIVO_CHIP[clave] ?? textoMotivo(clave),
+    largo: textoMotivo(clave),
+  }))
 }
 
 /** Orden de severidad, para ordenar una lista por "lo que urge primero". */
@@ -412,6 +454,53 @@ export function diasObjetivoTotal(r: DiasReceta | null): number | null {
   const { dias_coccion: c, dias_fermentacion: f, dias_maduracion: m, dias_envasado: e } = r
   if (c === null || f === null || m === null || e === null) return null
   return c + f + m + e
+}
+
+// ── F2: progreso de la etapa ────────────────────────────────
+
+export type Progreso = {
+  /** El dia en que va, contando el de entrada como 1. */
+  dia: number
+  objetivo: number
+  /** Fraccion de la etapa consumida, topada en 1. */
+  fraccion: number
+  nivel: NivelAlerta
+}
+
+/**
+ * En que dia de su etapa va el lote, y si eso ya es tarde.
+ *
+ * El `nivel` es un ESPEJO de las reglas `etapa_vencida` y `etapa_muy_vencida`
+ * de `lotes_vista` (migracion 20261119000000, bloque `alertas`): ambar cuando
+ * los dias pasan del objetivo, rojo cuando pasan del doble. Se recalcula aqui
+ * en vez de leer `alerta_nivel` porque la barra habla de UNA etapa, mientras
+ * que `alerta_nivel` es el maximo de los cuatro motivos: un lote al dia en su
+ * etapa pero con la FG fuera de rango llega en rojo, y pintar la barra de
+ * rojo diria que va tarde cuando no va tarde. Si las reglas de SQL cambian,
+ * este espejo se mueve con ellas.
+ *
+ * El dia se cuenta desde 1 y no desde 0: el dia en que el lote entro a la
+ * etapa es su primer dia, no su dia cero. Por eso un lote con
+ * `dias_en_etapa = 0` lee "Dia 1 de 7", y uno con 7 lee "Dia 8 de 7", que es
+ * justo el umbral en que la regla de SQL lo marca vencido.
+ *
+ * Devuelve null cuando no hay objetivo contra el que medir — sin receta, o en
+ * una etapa que no tiene duracion (`planeado`). Un objetivo de 0 tambien da
+ * null: la receta lo permite (`coalesce(dias_x, 0) >= 0` en la migracion), y
+ * "dia 1 de 0" no es una barra, es una division entre cero.
+ */
+export function progresoEtapa(diasEnEtapa: number, objetivo: number | null): Progreso | null {
+  if (objetivo === null || objetivo <= 0) return null
+
+  const dia = diasEnEtapa + 1
+  return {
+    dia,
+    objetivo,
+    fraccion: Math.min(1, dia / objetivo),
+    nivel:
+      diasEnEtapa > objetivo * 2 ? 'rojo' :
+      diasEnEtapa > objetivo ? 'ambar' : 'ninguna',
+  }
 }
 
 // ── F2: litros en camino ────────────────────────────────────
