@@ -1,4 +1,4 @@
-# Handoff — estado del proyecto al 2026-11-20
+# Handoff — estado del proyecto al 2026-11-23
 
 Qué está vivo en producción, cómo se llegó ahí, y qué falta. Este documento es
 el **mapa**; el detalle vive en otro lado y se enlaza desde aquí:
@@ -18,10 +18,11 @@ el **mapa**; el detalle vive en otro lado y se enlaza desde aquí:
 
 ## 1. Qué hay en producción
 
-`main` está en **`0388610`**, desplegado y verificado (Vercel `Ready`, rutas en
-200). Next **16.4.6**, con `eslint-config-next` a la par.
+`main` está en **`92eff41`**, desplegado y verificado (Vercel `Ready`, alias a
+`www.tarabana.mx`, `/` en 200 y `/admin` en 307 al portal sin sesión). Next
+**16.4.6**, con `eslint-config-next` a la par.
 
-Los cuatro merges que componen el estado actual, en orden:
+Los merges que componen el estado actual, en orden:
 
 | Commit | Qué entró |
 |---|---|
@@ -30,6 +31,7 @@ Los cuatro merges que componen el estado actual, en orden:
 | `dd14285` | **Next 16.4.6** — upgrade de seguridad |
 | `da9929c` | **fix/pedidos-ancho** — la página no desborda en ventanas sin maximizar |
 | `0388610` | **fix/pedidos-tabla-compacta** — la tabla de Pedidos cabe sin scroll desde 1100 px |
+| `92eff41` | **fix/tablero-kanban-ancho** — el kanban de Producción cabe sin scroll, con progreso por etapa |
 
 ### F1 — el módulo (`34f7bbb`)
 
@@ -86,6 +88,54 @@ ventana   main    contenedor     tabla   scroll tabla   doc
 1440      1200    1082 / 1082    1082    no             no
 ```
 
+### Tablero de Producción — el kanban cabe (`92eff41`)
+
+El kanban era un flex de **5 columnas de 260 px fijos**: pedía 1340 px, y a
+1100 el contenedor mide 772, así que PLANEADO salía cortado.
+
+Ahora es un **grid**. Las pistas son `minmax(0, 1fr)` y no `1fr` a secas: el
+mínimo por defecto de una pista es `auto`, o sea el min-content de su
+contenido — la misma causa raíz del desborde de Pedidos. Con el `0` explícito
+la pista nunca crece y el contenido se recorta.
+
+- **Las etapas vacías se colapsan** a un riel de 44 px con el título girado y
+  su contador. Se fue la caja gris con *"Vacío"*, que gastaba una quinta parte
+  del tablero para decir que no había nada.
+- **Las etapas con lotes se reparten el resto, con tope de 300 px.** Sin tope,
+  con cuatro etapas vacías la quinta llegaba a 888 px y la tarjeta dejaba la
+  etiqueta *Tanque* y su valor `FV3` separados por 800 px de nada. El tope va
+  en el `max` del `minmax`, así que la columna sigue encogiendo cuando no hay
+  espacio: cinco etapas ocupadas a 1100 px dan 145 px cada una.
+- **La tarjeta usa las recetas**: barra *"Día 3 de 7"* (gris en tiempo, ámbar
+  pasando el objetivo, rojo pasando el doble), *"Fin estimado: 27 nov"* y los
+  motivos de alerta como chips cortos con la frase completa en el `title`.
+- Fuera el renglón *"N lotes en proceso"*: el KPI **Lotes activos** ya lo dice.
+- En celular las columnas se siguen apilando, y una etapa vacía es un renglón
+  con su título y su cuenta.
+
+Los umbrales de la barra son un **espejo** de `etapa_vencida` y
+`etapa_muy_vencida` de `lotes_vista`; el espejo vive en `progresoEtapa()` y lo
+fijan pruebas. Se recalcula en vez de leer `alerta_nivel` porque la barra habla
+de UNA etapa y `alerta_nivel` es el máximo de los cuatro motivos: un lote al día
+pero con la FG fuera de rango llega en rojo, y pintar la barra de rojo diría que
+va tarde cuando no va tarde.
+
+Medido con Playwright — `scrollWidth == clientWidth` en el contenedor del kanban
+y en el documento:
+
+```
+ventana   main    kanban          scroll kanban   doc
+1100      860     772 / 772       no              no
+1200      960     872 / 872       no              no
+1440      1200    1112 / 1112     no              no
+```
+
+El peor caso —las cinco etapas ocupadas, columnas de 145 px— se midió con lotes
+**sintéticos inyectados en el cliente en local**, sin escribir nada en
+producción. Ahí salieron los dos recortes que se arreglaron: el chip de FG
+(quedó `FG fuera`, con tope de 16 caracteres que cuida una prueba) y el `title`
+de *"sin lecturas"*.
+
 ---
 
 ## 2. Migraciones aplicadas
@@ -140,6 +190,7 @@ npm run dev                        # tiene que estar corriendo
 node scripts/shots-login.mjs       # UNA vez: abre Chromium visible, entras a mano
 node scripts/shots-pedidos.mjs     # Pedidos a 1100, 1200, 1440
 node scripts/shots-produccion.mjs  # las 5 pestañas + ficha + modal + móvil
+node scripts/shots-tablero.mjs     # el kanban a 1100, 1200, 1440
 open shots/pedidos shots/produccion
 ```
 
@@ -148,9 +199,10 @@ open shots/pedidos shots/produccion
 | `shots-login.mjs` | Abre Chromium **visible** para que inicies sesión a mano y vuelca las cookies a disco. Existe porque el panel exige MFA (AAL2): no hay forma de autenticarse desde un script sin tu segundo factor. Detecta solo cuándo llegaste a `/admin`. |
 | `shots-pedidos.mjs` | Mide el **contenedor** de la tabla a 1100/1200/1440 y falla si `scrollWidth != clientWidth`. Deja `medidas.json`. |
 | `shots-produccion.mjs` | 8 vistas: las 5 pestañas, la ficha de `CAR-26-001`, el modal de Nuevo lote y el tablero a 390 px. Reporta desborde, filas, diálogos y errores de consola. |
+| `shots-tablero.mjs` | Mide el **contenedor del kanban** (`.tb-cols`) a 1100/1200/1440 y falla si desborda, si desborda el documento, o si una tarjeta desborda su columna (eso último delata una elipsis que falta). Imprime el ancho de cada pista, que es lo que prueba que las columnas vacías se colapsaron. Deja `medidas-tablero.json`. |
 | `shots.mjs <etiqueta>` | Genérico, a 1440 y 390. La etiqueta va en el nombre del archivo, para **comparar dos versiones del código** con `git checkout <sha> -- app/admin`. |
 
-Los tres de medición salen con código ≠ 0 si algo desborda o si la sesión cayó
+Los cuatro de medición salen con código ≠ 0 si algo desborda o si la sesión cayó
 al portal — o sea, sirven en CI y no solo a ojo.
 
 ---
@@ -240,26 +292,17 @@ Tres trampas que hay que respetar al tocar esto:
 
 ## 5. Pendientes
 
-### Bloqueante para que Producción sirva de verdad
+> **Las recetas ya están capturadas: 11 de 11 productos activos** (verificado
+> en la pestaña Recetas, que lo dice en su propio encabezado). Con eso se cayó
+> el único bloqueante que tenía este documento: el Calendario y *"Próximos 14
+> días"* ya proyectan, las cuatro reglas de alerta pueden disparar, y el
+> tablero pinta progreso y fecha de fin. `lotes` = 2, `tanques` = 10.
 
-**No hay ni una receta capturada.** Verificado contra producción hoy
-(`recetas` = **0 filas**; `lotes` = 2, `tanques` = 10). Consecuencias, todas
-esperadas y ninguna un bug:
-
-- **Calendario** y **"Próximos 14 días"** se ven vacíos: sin receta no hay de
-  dónde proyectar una fecha de fin.
-- Dos de las cuatro reglas de alerta (días por etapa, FG fuera de rango) **no
-  pueden disparar**, porque dependen de objetivos que no existen.
-- La prueba de **negación por rol sobre `recetas` es inconclusa**: una tabla
-  vacía devuelve 0 filas tanto si la policy funciona como si no.
-
-El camino es capturar las recetas de los productos que se producen hoy. Hasta
-entonces, media F2 está apagada por falta de datos, no por código.
-
-### Lo demás
-
-- `vercel ls --prod` **avisa que `--prod` está deprecado** a favor de
-  `--environment production`. Cambiarlo cuando se vuelva a usar.
+- **Falta la prueba de negación por rol sobre `recetas`.** Antes era
+  inconclusa por construcción: una tabla vacía devuelve 0 filas tanto si la
+  policy funciona como si no. Ahora que tiene 11 filas, por fin se puede hacer
+  de verdad — un rol sin permiso tiene que recibir 401/403 o 0 filas contra una
+  tabla que **sí** tiene contenido.
 - El panel arrastra **11 breakpoints distintos**. Consolidarlos es trabajo real
   y se dejó fuera de alcance a propósito.
 - `productos.updated_at` **no se mantiene** y no sirve para saber cuándo cambió
