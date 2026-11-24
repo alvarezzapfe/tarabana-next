@@ -298,11 +298,25 @@ Tres trampas que hay que respetar al tocar esto:
 > días"* ya proyectan, las cuatro reglas de alerta pueden disparar, y el
 > tablero pinta progreso y fecha de fin. `lotes` = 2, `tanques` = 10.
 
-- **Falta la prueba de negación por rol sobre `recetas`.** Antes era
-  inconclusa por construcción: una tabla vacía devuelve 0 filas tanto si la
-  policy funciona como si no. Ahora que tiene 11 filas, por fin se puede hacer
-  de verdad — un rol sin permiso tiene que recibir 401/403 o 0 filas contra una
-  tabla que **sí** tiene contenido.
+- **Negación sobre `recetas`: el lado `anon` ya está probado y pasa**
+  (2026-11-23). Con la anon key y sin sesión, `GET /rest/v1/recetas` devuelve
+  **HTTP 200 con `[]` — 0 de 11 filas**. Las policies de la tabla son las tres
+  `to authenticated`, así que el rol `anon` no tiene ninguna y RLS no le deja
+  ver nada.
+
+  Lo que hace que este 0 signifique algo es el **control**: la misma lectura
+  con la service role key devuelve **11 filas**, así que la tabla no está
+  vacía. Ese control SALTA RLS por diseño y no prueba ninguna policy — solo
+  descarta que el 0 sea falta de datos, que es justo lo que volvía inconclusa
+  esta prueba cuando `recetas` tenía 0 filas. El 200 (y no 401) confirma de
+  paso que la anon key sí se aceptó: lo que la detiene es la policy, no una
+  credencial inválida. Las dos lecturas son `GET`; no se escribió nada.
+
+  **Lo que NO cubre:** el lado de un usuario *autenticado pero sin permiso*.
+  La policy es `for select to authenticated using (is_staff_sin_ventas())`, o
+  sea que un `vendedor` o un rol de ventas con sesión también debería ver 0, y
+  eso sigue sin probarse porque pide una sesión de prueba. Es el pendiente que
+  queda de este punto.
 - El panel arrastra **11 breakpoints distintos**. Consolidarlos es trabajo real
   y se dejó fuera de alcance a propósito.
 - `productos.updated_at` **no se mantiene** y no sirve para saber cuándo cambió
