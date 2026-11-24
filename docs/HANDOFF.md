@@ -299,18 +299,35 @@ Tres trampas que hay que respetar al tocar esto:
 > tablero pinta progreso y fecha de fin. `lotes` = 2, `tanques` = 10.
 
 - **Negación sobre `recetas`: el lado `anon` ya está probado y pasa**
-  (2026-11-23). Con la anon key y sin sesión, `GET /rest/v1/recetas` devuelve
-  **HTTP 200 con `[]` — 0 de 11 filas**. Las policies de la tabla son las tres
-  `to authenticated`, así que el rol `anon` no tiene ninguna y RLS no le deja
-  ver nada.
+  (2026-11-23). Repetible con **`node scripts/negacion-recetas.mjs`**, que es
+  solo lectura —tres `GET` y nada más— y sale con código ≠ 0 si falla o si
+  queda inconclusa, así que sirve en CI.
 
-  Lo que hace que este 0 signifique algo es el **control**: la misma lectura
-  con la service role key devuelve **11 filas**, así que la tabla no está
-  vacía. Ese control SALTA RLS por diseño y no prueba ninguna policy — solo
-  descarta que el 0 sea falta de datos, que es justo lo que volvía inconclusa
-  esta prueba cuando `recetas` tenía 0 filas. El 200 (y no 401) confirma de
-  paso que la anon key sí se aceptó: lo que la detiene es la policy, no una
-  credencial inválida. Las dos lecturas son `GET`; no se escribió nada.
+  ```
+  service role / recetas (SALTA RLS) HTTP 206   filas visibles: 11
+  anon / recetas                     HTTP 200   filas visibles: 0
+  anon / productos (control+)        HTTP 206   filas visibles: 11
+  ```
+
+  Las tres policies de `recetas` son `to authenticated`, así que el rol `anon`
+  no tiene ninguna y RLS no le deja ver nada. Lo que hace que ese **0**
+  signifique algo son los otros dos renglones:
+
+  - El **control de datos** (service role) dice que hay 11 filas, o sea que la
+    tabla no está vacía. Salta RLS por diseño y no prueba ninguna policy; solo
+    descarta que el 0 sea falta de datos, que es justo lo que volvía
+    inconclusa esta prueba cuando `recetas` tenía 0 filas.
+  - El **control positivo** usa la MISMA anon key contra `productos`, que sí
+    tiene policy para anon (`productos_read_anon`, por el sitio público), y ve
+    11 filas. Sin él, un 0 podría ser plomería —URL mal, llave ignorada, red
+    caída— y se leería como seguridad. Con él, la misma llave en la misma
+    corrida ve 0 en una tabla y 11 en la otra: lo único que cambia entre las
+    dos es la policy.
+
+  El 200 (y no 401) confirma de paso que la anon key se aceptó: lo que detiene
+  la lectura es la policy, no una credencial inválida. Que el script **puede**
+  fallar está comprobado: apuntado a `productos` reporta `FALLA: anon ve 11 de
+  11` y sale con 1.
 
   **Lo que NO cubre:** el lado de un usuario *autenticado pero sin permiso*.
   La policy es `for select to authenticated using (is_staff_sin_ventas())`, o
